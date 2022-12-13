@@ -1,3 +1,4 @@
+import ee as earthengine
 import folium
 
 from folium import plugins as _FoliumPlugins
@@ -26,6 +27,19 @@ class FoliumMap(object):
         return self._map
 
     def __initMap(self) -> None:
+
+        def addGoogleEarthEngineLayer(self_map, obj_image, vis_params, name):
+            map_id_dict = earthengine.Image(obj_image).getMapId(vis_params)
+
+            folium.raster_layers.TileLayer(
+                tiles=map_id_dict['tile_fetcher'].url_format,
+                attr='Map Data © Google Earth Engine',
+                name=name,
+                overlay=True,
+                control=True
+            ).add_to(self_map)
+
+        folium.Map.addGoogleEarthEngineLayer = addGoogleEarthEngineLayer
 
         self._map = folium.Map(location=self._location,
                                zoom_start=self._zoom_start,
@@ -57,9 +71,11 @@ class FoliumMap(object):
                                                       lng_formatter=roundnum)
         self._map.add_child(mouse_position)
 
+    def addGoogleEarthEngineLayer(self, obj, params, name) -> None:
+
+        self._map.addGoogleEarthEngineLayer(obj, params, name)
+
     def show(self) -> None:
 
         map = self.map
         display_html(map)
-
-
