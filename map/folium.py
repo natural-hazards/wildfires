@@ -28,7 +28,7 @@ class FoliumMap(object):
 
     def __initMap(self) -> None:
 
-        def addGoogleEarthEngineLayer(self_map, obj_image, vis_params, name):
+        def addGoogleEarthEngineLayer(self_map, obj_image, vis_params, name, show: bool = False) -> None:
             map_id_dict = earthengine.Image(obj_image).getMapId(vis_params)
 
             folium.raster_layers.TileLayer(
@@ -36,7 +36,8 @@ class FoliumMap(object):
                 attr='Map Data © Google Earth Engine',
                 name=name,
                 overlay=True,
-                control=True
+                control=True,
+                show=show
             ).add_to(self_map)
 
         folium.Map.addGoogleEarthEngineLayer = addGoogleEarthEngineLayer
@@ -71,9 +72,9 @@ class FoliumMap(object):
                                                       lng_formatter=roundnum)
         self._map.add_child(mouse_position)
 
-    def addGoogleEarthEngineLayer(self, obj, params, name) -> None:
+    def addGoogleEarthEngineLayer(self, obj, params, name, show: bool = False) -> None:
 
-        self._map.addGoogleEarthEngineLayer(obj, params, name)
+        self._map.addGoogleEarthEngineLayer(obj, params, name, show)
 
     def show(self) -> None:
 

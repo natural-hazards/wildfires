@@ -11,7 +11,7 @@ class EarthEngineFireDatasets(object):
     class FireCII:
 
         @staticmethod
-        def getBurnArea(confidence_level):
+        def getBurnArea(confidence_level, start_date='2001-01-01', end_date='2020-01-01'):
 
             def filter_confidence(value: float):
                 def fn_filter(image):
@@ -23,7 +23,7 @@ class EarthEngineFireDatasets(object):
             CONFIDENCE_LEVEL = confidence_level
 
             ds_fire_cci = earthengine.ImageCollection('ESA/CCI/FireCCI/5_1')
-            date_filter = earthengine.Filter.date('2001-01-01', '2020-01-01')
+            date_filter = earthengine.Filter.date(start_date, end_date)
 
             ds_fire_cci = ds_fire_cci.filter(date_filter).map(filter_confidence(CONFIDENCE_LEVEL))
             ds_fire_cci = ds_fire_cci.select('ConfidenceLevel')

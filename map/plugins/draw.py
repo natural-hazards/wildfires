@@ -155,7 +155,7 @@ class Draw(JSCSSMixin, MacroElement):
                 }
             </style>
         """
-        export_button = """<a href='#' id='export'>Export JSON</a>"""
+        export_button = """<a href='#' id='export'>Export GeoJSON</a>"""
         if self.export:
             figure.header.add_child(Element(export_style), name="export")
             figure.html.add_child(Element(export_button), name="export_button")

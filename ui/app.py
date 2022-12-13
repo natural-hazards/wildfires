@@ -4,10 +4,11 @@ import sys
 import ee as earthengine
 import folium
 
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QApplication
+from PyQt5.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 from map.folium import FoliumMap
+from utils.timer import elapsed_timer
 
 
 class UIApp(QWidget):
@@ -31,6 +32,11 @@ class UIApp(QWidget):
         vbox = QVBoxLayout(self)
 
         self._web_view = QWebEngineView()
+
+        # download request listener
+        self._web_view.page().profile().downloadRequested.connect(
+            self.__handleDownloadRequest
+        )
 
         self.__loadMap()
         self.__loadFireCollections()
@@ -66,16 +72,36 @@ class UIApp(QWidget):
 
         # load FireCII v5.1 collection
         CONFIDENCE_LEVEL = 70
+        OPACITY = .7
 
         visualisation_params = {
             'min': CONFIDENCE_LEVEL,
             'max': 100,
-            'opacity': .7,
+            'opacity': OPACITY,
             'palette': ['red', 'orange', 'yellow']
         }
 
-        burn_area = ds.EarthEngineFireDataset.FireCII.getBurnArea(CONFIDENCE_LEVEL)
-        self._folium_map.map.addGoogleEarthEngineLayer(burn_area, visualisation_params, 'FireCCI v5.1')
+        ds_name = 'FireCCI v5.1 (all)'
+        with elapsed_timer('Loading {}'.format(ds_name)):
+            burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL)
+            self._folium_map.map.addGoogleEarthEngineLayer(burn_area,
+                                                           visualisation_params,
+                                                           ds_name,
+                                                           show=False)
+
+        for year in range(2001, 2021):
+            start_date = '{}-01-01'.format(year)
+            end_date = '{}-01-01'.format(year + 1)
+            ds_name = 'FireCII v5.1 ({})'.format(year)
+
+            # loading fire collection
+            with elapsed_timer('Loading {}'.format(ds_name)):
+                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL, start_date, end_date)
+
+                self._folium_map.map.addGoogleEarthEngineLayer(burn_area,
+                                                               visualisation_params,
+                                                               ds_name,
+                                                               show=False)
 
         self.__renderMap()
 
@@ -85,6 +111,14 @@ class UIApp(QWidget):
         self._folium_map.map.save(io_bytes, close_file=False)
 
         self._web_view.setHtml(io_bytes.getvalue().decode())
+
+    def __handleDownloadRequest(self, request) -> None:
+
+        path, _ = QFileDialog.getSaveFileName(self, "Save GeoJSON File", request.suggestedFileName())
+
+        if path:
+            request.setPath(path)
+            request.accept()
 
 
 if __name__ == "__main__":
