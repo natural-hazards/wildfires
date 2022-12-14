@@ -4,8 +4,10 @@ import sys
 import ee as earthengine
 import folium
 
-from PyQt5.QtWidgets import QApplication, QFileDialog, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton, QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+
+from ui.dialog import QAreaDialog
 
 from map.folium import FoliumMap
 from utils.timer import elapsed_timer
@@ -30,22 +32,34 @@ class UIApp(QWidget):
         WINDOW_HEIGHT = 800
 
         vbox = QVBoxLayout(self)
+        hbox = QHBoxLayout(self)
 
         self._web_view = QWebEngineView()
 
-        # download request listener
+        # download request slot
         self._web_view.page().profile().downloadRequested.connect(
             self.__handleDownloadRequest
         )
 
         self.__loadMap()
-        self.__loadFireCollections()
+        # self.__loadFireCollections()
 
         # add layer control
         layer_control = folium.LayerControl(autoZIndex=False)
         self._folium_map.map.add_child(layer_control)
 
+        #
+        button_add_area = QPushButton('Add rectangle area')
+        button_add_area.clicked.connect(self.__addRectangleArea)
+
+        button_export_map = QPushButton('Export map')
+        button_export_map.clicked.connect(self.__exportMap)
+
+        hbox.addWidget(button_add_area)
+        hbox.addWidget(button_export_map)
+
         # add widgets
+        vbox.addLayout(hbox)
         vbox.addWidget(self._web_view)
 
         self.setLayout(vbox)
@@ -111,6 +125,20 @@ class UIApp(QWidget):
         self._folium_map.map.save(io_bytes, close_file=False)
 
         self._web_view.setHtml(io_bytes.getvalue().decode())
+
+    def __exportMap(self) -> None:
+
+        print('Export map')
+
+    def __addRectangleArea(self) -> None:
+
+        print('Add rectangle area')
+
+        dialog = QAreaDialog(self)
+        if dialog.exec():
+            area_inputs = dialog.getAreaGeometry()
+
+            print(area_inputs)
 
     def __handleDownloadRequest(self, request) -> None:
 
