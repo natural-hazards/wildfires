@@ -79,6 +79,22 @@ class Draw(JSCSSMixin, MacroElement):
             {{ this._parent.get_name() }}.on('draw:created', function(e) {
                 drawnItems.addLayer(e.layer);
             });
+            {{ this._parent.get_name() }}.on('draw:edited', function(e) {
+                var layers = e.layers;
+                layers.eachLayer(function (layer) {
+                   if (layer instanceof L.Marker) {
+                        var geojson = layer.toGeoJSON();
+                        var coords = geojson.geometry.coordinates;
+                        var newContent = '<strong>Marker position:</strong><br />' + coords[1] + ', ' + coords[0];
+                        if (!layer._popup) {
+                            layer.bindPopup(newContent);
+                        } else {
+                            layer.unbindPopup();
+                            layer.bindPopup(newContent);
+                        }
+                   }
+                });
+            });
             {% if this.export %}
             document.getElementById('export').onclick = function(e) {
                 var data = drawnItems.toGeoJSON();
