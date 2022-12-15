@@ -1,6 +1,8 @@
 import io
 import sys
 
+from jinja2 import Template
+
 import ee as earthengine
 import folium
 
@@ -9,6 +11,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 from ui.dialog import QAreaDialog
 
+from procs.geom import RectangleArea
 from map.folium import FoliumMap
 from utils.timer import elapsed_timer
 
@@ -49,7 +52,7 @@ class UIApp(QWidget):
         self._folium_map.map.add_child(layer_control)
 
         #
-        button_add_area = QPushButton('Add rectangle area')
+        button_add_area = QPushButton('Add area')
         button_add_area.clicked.connect(self.__addRectangleArea)
 
         button_export_map = QPushButton('Export map')
@@ -132,13 +135,41 @@ class UIApp(QWidget):
 
     def __addRectangleArea(self) -> None:
 
-        print('Add rectangle area')
+        def convert_distance(v, unit) -> float:
 
+            if unit == 0:  # m
+                return v
+            elif unit == 1:  # km
+                return v * 1000.
+            elif unit == 2:  # px
+                return v * 250.
+
+        def draw_rectangle(bounds) -> None:
+            # injection to folium
+            js = Template(
+                """
+                var map = {{map}}
+                
+                var params = {{bounds}}; 
+                var polygon = new L.Polygon(params);
+                
+                drawnItems.addLayer(polygon)
+                """
+            ).render(map=self._folium_map.map.get_name(), bounds=bounds)
+            # run rendering
+            self._web_view.page().runJavaScript(js)
+
+        # run dialog
         dialog = QAreaDialog(self)
         if dialog.exec():
-            area_inputs = dialog.getAreaGeometry()
+            parms_area = dialog.getAreaGeometry()
 
-            print(area_inputs)
+            rectangle_area = RectangleArea()
+            rectangle_area.center = (parms_area['center_lat'], parms_area['center_lon'])
+            rectangle_area.width = convert_distance(parms_area['area_width'], parms_area['unit'])
+            rectangle_area.height = convert_distance(parms_area['area_height'], parms_area['unit'])
+
+            draw_rectangle(rectangle_area.bounds)
 
     def __handleDownloadRequest(self, request) -> None:
 
@@ -152,5 +183,6 @@ class UIApp(QWidget):
 if __name__ == "__main__":
 
     app = QApplication(sys.argv)
-    okno = UIApp()
+    app.aboutQt()
+    ui = UIApp()
     sys.exit(app.exec_())

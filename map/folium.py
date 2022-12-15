@@ -28,17 +28,21 @@ class FoliumMap(object):
 
     def __initMap(self) -> None:
 
-        def addGoogleEarthEngineLayer(self_map, obj_image, vis_params, name, show: bool = False) -> None:
-            map_id_dict = earthengine.Image(obj_image).getMapId(vis_params)
+        def addGoogleEarthEngineLayer(self_map, obj_earthengine, vis_params, name, show: bool = False) -> None:
 
-            folium.raster_layers.TileLayer(
-                tiles=map_id_dict['tile_fetcher'].url_format,
-                attr='Map Data © Google Earth Engine',
-                name=name,
-                overlay=True,
-                control=True,
-                show=show
-            ).add_to(self_map)
+            if isinstance(obj_earthengine, earthengine.Image):
+                map_id_dict = earthengine.Image(obj_earthengine).getMapId(vis_params)
+
+                folium.raster_layers.TileLayer(
+                    tiles=map_id_dict['tile_fetcher'].url_format,
+                    attr='Map Data © Google Earth Engine',
+                    name=name,
+                    overlay=True,
+                    control=True,
+                    show=show
+                ).add_to(self_map)
+            else:
+                raise RuntimeError('')
 
         folium.Map.addGoogleEarthEngineLayer = addGoogleEarthEngineLayer
 

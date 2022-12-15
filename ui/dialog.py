@@ -69,7 +69,7 @@ class QAreaDialog(QDialog):
         layout.addRow(button_box)
 
         self.setLayout(layout)
-        self.setWindowTitle('Add rectangle area')
+        self.setWindowTitle('Add area')
 
         button_box.accepted.connect(self.accept)
         button_box.rejected.connect(self.reject)
@@ -131,7 +131,7 @@ class QAreaDialog(QDialog):
 
         center_lon = float(self._center_lon.text())
         print('Center longitude: {}'.format(center_lon))
-        geometry['center_lon'] = self._center_lon.text()
+        geometry['center_lon'] = center_lon
 
         area_width = float(self._area_width.text())
         print('Area width: {}'.format(area_width))
