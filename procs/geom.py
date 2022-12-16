@@ -59,7 +59,7 @@ class RectangleArea(object):
 
         a = self.width / 2.
         b = self.height / 2.
-        r = np.sqrt(a * a + b * b)
+        r = np.sqrt(a**2 + b**2)
 
         lat = self.center[0]
         lon = self.center[1]

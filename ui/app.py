@@ -79,9 +79,7 @@ class UIApp(QWidget):
         MAP_SHAPE = (800, 500)
         ZOOM_START = 4
 
-        self._folium_map = FoliumMap(location=AK_COORDINATES,
-                                     shape=MAP_SHAPE,
-                                     zoom_start=ZOOM_START)
+        self._folium_map = FoliumMap(location=AK_COORDINATES, shape=MAP_SHAPE, zoom_start=ZOOM_START)
 
     def __loadFireCollections(self) -> None:
 
@@ -101,10 +99,8 @@ class UIApp(QWidget):
         ds_name = 'FireCCI v5.1 (all)'
         with elapsed_timer('Loading {}'.format(ds_name)):
             burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL)
-            self._folium_map.map.addGoogleEarthEngineLayer(burn_area,
-                                                           visualisation_params,
-                                                           ds_name,
-                                                           show=False)
+            map = self._folium_map.map
+            map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
         for year in range(2001, 2021):
             start_date = '{}-01-01'.format(year)
@@ -114,19 +110,16 @@ class UIApp(QWidget):
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
                 burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL, start_date, end_date)
-
-                self._folium_map.map.addGoogleEarthEngineLayer(burn_area,
-                                                               visualisation_params,
-                                                               ds_name,
-                                                               show=False)
+                map = self._folium_map.map
+                map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
         self.__renderMap()
 
     def __renderMap(self) -> None:
 
         io_bytes = io.BytesIO()
-        self._folium_map.map.save(io_bytes, close_file=False)
 
+        self._folium_map.map.save(io_bytes, close_file=False)
         self._web_view.setHtml(io_bytes.getvalue().decode())
 
     def __exportMap(self) -> None:
@@ -145,7 +138,9 @@ class UIApp(QWidget):
                 return v * 250.
 
         def draw_rectangle(bounds) -> None:
-            # injection to folium
+
+            # js injection to folium map
+            map = self._folium_map.map
             js = Template(
                 """
                 var map = {{map}}
@@ -155,11 +150,12 @@ class UIApp(QWidget):
                 
                 drawnItems.addLayer(polygon)
                 """
-            ).render(map=self._folium_map.map.get_name(), bounds=bounds)
-            # run rendering
+            ).render(map=map.get_name(), bounds=bounds)
+
+            # run rendering page
             self._web_view.page().runJavaScript(js)
 
-        # run dialog
+        # open dialog to specify area size
         dialog = QAreaDialog(self)
         if dialog.exec():
             parms_area = dialog.getAreaGeometry()
@@ -173,7 +169,8 @@ class UIApp(QWidget):
 
     def __handleDownloadRequest(self, request) -> None:
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save GeoJSON File", request.suggestedFileName())
+        dialog_title = 'Save GeoJSON File'
+        path, _ = QFileDialog.getSaveFileName(self, dialog_title, request.suggestedFileName())
 
         if path:
             request.setPath(path)
@@ -183,6 +180,6 @@ class UIApp(QWidget):
 if __name__ == "__main__":
 
     app = QApplication(sys.argv)
-    app.aboutQt()
     ui = UIApp()
+
     sys.exit(app.exec_())

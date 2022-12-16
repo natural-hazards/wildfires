@@ -47,7 +47,7 @@ class QAreaDialog(QDialog):
         self._area_height = QLineEdit(self)
         self._area_height.setValidator(QDoubleValidator(0.25, 4e5, 2))
 
-        # combo box units
+        # combo box (distance)
         self._cb_unit = QComboBox()
         self._cb_unit.addItem('m')
         self._cb_unit.addItem('km')
@@ -126,19 +126,15 @@ class QAreaDialog(QDialog):
         geometry = {}
 
         center_lat = float(self._center_lat.text())
-        print('Center latitude: {}'.format(center_lat))
         geometry['center_lat'] = center_lat
 
         center_lon = float(self._center_lon.text())
-        print('Center longitude: {}'.format(center_lon))
         geometry['center_lon'] = center_lon
 
         area_width = float(self._area_width.text())
-        print('Area width: {}'.format(area_width))
         geometry['area_width'] = area_width
 
         area_height = float(self._area_height.text())
-        print('Area height: {}'.format(area_height))
         geometry['area_height'] = area_height
 
         id_unit = self._cb_unit.currentIndex()
