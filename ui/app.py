@@ -34,8 +34,8 @@ class UIApp(QWidget):
         WINDOW_WIDTH = 1000
         WINDOW_HEIGHT = 800
 
-        vbox = QVBoxLayout(self)
-        hbox = QHBoxLayout(self)
+        vbox = QVBoxLayout()
+        hbox = QHBoxLayout()
 
         self._web_view = QWebEngineView()
 
@@ -184,10 +184,8 @@ class UIApp(QWidget):
             rectangle_area.width = convert_distance(parms_area['area_width'], parms_area['unit'])
             rectangle_area.height = convert_distance(parms_area['area_height'], parms_area['unit'])
             rectangle_area.projectToEarth = parms_area['project']
-            print(rectangle_area.projectToEarth)
 
             if parms_area['project']:
-                print(rectangle_area.bounds)
                 draw_polygon(rectangle_area.bounds)
             else:
                 draw_rectangle(rectangle_area.bounds)
