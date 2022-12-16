@@ -6,6 +6,7 @@ from jinja2 import Template
 import ee as earthengine
 import folium
 
+from PyQt5.QtGui import QImage
 from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton, QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
@@ -45,21 +46,21 @@ class UIApp(QWidget):
         )
 
         self.__loadMap()
-        # self.__loadFireCollections()
+        self.__loadFireCollections()
 
         # add layer control
         layer_control = folium.LayerControl(autoZIndex=False)
         self._folium_map.map.add_child(layer_control)
 
         #
-        button_add_area = QPushButton('Add area')
-        button_add_area.clicked.connect(self.__addRectangleArea)
+        self._button_add_area = QPushButton('Add area')
+        self._button_add_area.clicked.connect(self.__addRectangleArea)
 
-        button_export_map = QPushButton('Export map')
-        button_export_map.clicked.connect(self.__exportMap)
+        self._button_export_map = QPushButton('Export map')
+        self._button_export_map.clicked.connect(self.__exportMap)
 
-        hbox.addWidget(button_add_area)
-        hbox.addWidget(button_export_map)
+        hbox.addWidget(self._button_add_area)
+        hbox.addWidget(self._button_export_map)
 
         # add widgets
         vbox.addLayout(hbox)
@@ -124,7 +125,19 @@ class UIApp(QWidget):
 
     def __exportMap(self) -> None:
 
-        print('Export map')
+        def captureImage(fn: str) -> None:
+
+            size = self._web_view.contentsRect()
+            img = QImage(size.width(), size.height(), QImage.Format_ARGB32)
+
+            self._web_view.render(img)
+            img.save(fn)
+
+        dialog_title = 'Save map as image'
+        path, _ = QFileDialog.getSaveFileName(self, dialog_title, 'map.png')
+
+        if path:
+            captureImage(path)
 
     def __addRectangleArea(self) -> None:
 
