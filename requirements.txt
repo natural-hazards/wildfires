@@ -1,0 +1,8 @@
+earthengine-api
+folium
+geographiclib
+geojson
+jinja2
+numpy
+PyQt5
+tensorflow
