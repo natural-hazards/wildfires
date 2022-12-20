@@ -2,6 +2,7 @@ earthengine-api
 folium
 geographiclib
 geojson
+gdal
 jinja2
 numpy
 PyQt5
