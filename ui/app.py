@@ -148,7 +148,7 @@ class UIApp(QWidget):
             elif unit == 1:  # km
                 return v * 1000.
             elif unit == 2:  # px
-                return v * 250.
+                return v * 500.
 
         def draw_rectangle(bounds) -> None:
 
@@ -169,24 +169,6 @@ class UIApp(QWidget):
             # render page
             self._web_view.page().runJavaScript(js)
 
-        def draw_polygon(bounds) -> None:
-
-            # js injection to folium map (draw polygon)
-            map = self._folium_map.map
-            js = Template(
-                """
-                var map = {{map}}
-                
-                var params = {{bounds}}; 
-                var polygon = new L.Polygon(params);
-                
-                drawnItems.addLayer(polygon)
-                """
-            ).render(map=map.get_name(), bounds=bounds)
-
-            # render page
-            self._web_view.page().runJavaScript(js)
-
         # open dialog to specify area size
         dialog = QAreaDialog(self)
         if dialog.exec():
@@ -196,12 +178,8 @@ class UIApp(QWidget):
             rectangle_area.center = (parms_area['center_lat'], parms_area['center_lon'])
             rectangle_area.width = convert_distance(parms_area['area_width'], parms_area['unit'])
             rectangle_area.height = convert_distance(parms_area['area_height'], parms_area['unit'])
-            rectangle_area.projectToEarth = parms_area['project']
 
-            if parms_area['project']:
-                draw_polygon(rectangle_area.bounds)
-            else:
-                draw_rectangle(rectangle_area.bounds)
+            draw_rectangle(rectangle_area.bounds)
 
     def __handleDownloadRequest(self, request) -> None:
 

@@ -1,6 +1,6 @@
 import re
 
-from PyQt5.QtWidgets import QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QHBoxLayout, QLineEdit
+from PyQt5.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QGroupBox, QHBoxLayout
 from PyQt5.QtWidgets import QLineEdit, QLabel, QMessageBox
 from PyQt5.QtGui import QDoubleValidator
 
@@ -60,9 +60,6 @@ class QAreaDialog(QDialog):
         self._size_layout.addWidget(self._area_height)
         self._size_layout.addWidget(self._cb_unit)
 
-        # project area to the Earth (ellipsoid model)
-        self._cb_project = QCheckBox('Project a rectangle area to the Earth (WGS84 model)')
-
         # cancel and ok buttons
         self._button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
 
@@ -70,7 +67,6 @@ class QAreaDialog(QDialog):
         layout = QFormLayout()
         layout.addRow(self._group_area_center)
         layout.addRow(self._group_area_size)
-        layout.addRow(self._cb_project)
         layout.addRow(self._button_box)
 
         self.setLayout(layout)
@@ -144,9 +140,6 @@ class QAreaDialog(QDialog):
 
         id_unit = self._cb_unit.currentIndex()
         geometry['unit'] = id_unit
-
-        flg_project = self._cb_project.isChecked()
-        geometry['project'] = flg_project
 
         return geometry
 

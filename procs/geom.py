@@ -1,5 +1,3 @@
-import numpy as np
-
 from geographiclib.geodesic import Geodesic
 
 
@@ -65,31 +63,9 @@ class RectangleArea(object):
 
         self._project_to_earth = value
 
-    def __boundsRectangle_WGS84(self) -> list:
-
-        proj_geod = Geodesic.WGS84  # Earth is ellipsoid
-
-        a = self.width / 2.
-        b = self.height / 2.
-        r = np.sqrt(a ** 2 + b ** 2)
-
-        lat = self.center[0]
-        lon = self.center[1]
-
-        rt = proj_geod.Direct(lat, lon, 45, r)
-        lt = proj_geod.Direct(lat, lon, -45, r)
-        lb = proj_geod.Direct(lat, lon, -135, r)
-        rb = proj_geod.Direct(lat, lon, 135, r)
-
-        return [[rt['lat2'], rt['lon2']],
-                [lt['lat2'], lt['lon2']],
-                [lb['lat2'], lb['lon2']],
-                [rb['lat2'], rb['lon2']],
-                [rt['lat2'], rt['lon2']]]
-
     def __boundsRectangle(self) -> list:
 
-        proj_geod = Geodesic.WGS84
+        proj_geod = Geodesic.WGS84  # folium takes coordinates in EPSG:4326, i.e. WSG84
 
         a = self.width / 2.
         b = self.height / 2.
@@ -109,4 +85,4 @@ class RectangleArea(object):
     @property
     def bounds(self) -> list:
 
-        return self.__boundsRectangle_WGS84() if self.projectToEarth else self.__boundsRectangle()
+        return self.__boundsRectangle()

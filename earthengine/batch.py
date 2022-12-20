@@ -29,9 +29,17 @@ class FileFormat(Enum):
     TFRecord = 'TFRecord'
 
 
-class EarthEngineBatch(object):
+class CRS(Enum):
+
+    WSG84 = 'EPSG:4326'
+    ALASKA_ALBERS = 'EPSG:3338'
+
+
+class EarthEngineBatch(object):  # TODO set params in constructor
 
     def __init__(self):
+
+        self._crs = CRS.WSG84
 
         self._json_rois = None
         self._polygons = None
@@ -47,7 +55,7 @@ class EarthEngineBatch(object):
         self._output_format = FileFormat.GeoTIFF
 
         self._task_description = None
-        self._scale = 250
+        self._scale = 500
 
         self._gdrive_folder = None
 
@@ -168,12 +176,25 @@ class EarthEngineBatch(object):
         self._output_format = f
 
     @property
+    def crs(self) -> CRS:
+
+        return self._crs
+
+    @crs.setter
+    def crs(self, crs: CRS) -> None:
+
+        self._crs = crs
+
+    @property
     def scale(self) -> int:
 
         return self._scale
 
     @scale.setter
     def scale(self, s: int) -> None:
+
+        if s <= 0:
+            raise ValueError('Scale must be positive!')
 
         self._scale = s
 
@@ -229,7 +250,7 @@ class EarthEngineBatch(object):
             self.__loadCollection()
 
         collection_filtered = self._collection.filterDate(self.start_date, self.end_date)
-        collection_filtered = collection_filtered.toBands()  # get multi spectral image
+        img_bands = collection_filtered.toBands()  # get multi spectral image
 
         _prefix = '' if self.output_prefix is None else '{}_'.format(self.output_prefix)
         _folder = getRandomString(10) if self.gdrive_folder is None else self.gdrive_folder
@@ -239,13 +260,14 @@ class EarthEngineBatch(object):
         for i, area in enumerate(self._polygons):
 
             task = earthengine.batch.Export.image.toDrive(
-                image=collection_filtered,
+                image=img_bands,
                 description='{}area_{}'.format(_desc, i),
                 scale=self.scale,
                 region=area,
                 folder=_folder,
                 fileNamePrefix='{}area_{}'.format(_prefix, i),
                 fileFormat=self.output_format.value,
+                crs=self.crs.value
             )
 
             task.start()
@@ -264,8 +286,11 @@ if __name__ == '__main__':
 
     exporter = EarthEngineBatch()
 
-    exporter.task_description = 'MODIS-reflectance-2004-January'
-    exporter.output_prefix = '2004_january'
+    exporter.crs = CRS.ALASKA_ALBERS
+    exporter.scale = 500  # pixel corresponds to resolution 500x500 meters
+
+    exporter.task_description = 'MODIS-REFLECTANCE-AK-2004-JANUARY-EPSG3338'
+    exporter.output_prefix = 'ak_2004_january_500px2_epsg3338'
 
     exporter.start_date = start_date
     exporter.end_date = end_date
