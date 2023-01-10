@@ -20,12 +20,12 @@ class EarthEngineFireDatasets(object):
 
                 return fn_filter
 
-            CONFIDENCE_LEVEL = confidence_level
-
             ds_fire_cci = earthengine.ImageCollection('ESA/CCI/FireCCI/5_1')
             date_filter = earthengine.Filter.date(start_date, end_date)
 
-            ds_fire_cci = ds_fire_cci.filter(date_filter).map(filter_confidence(CONFIDENCE_LEVEL))
+            ds_fire_cci = ds_fire_cci.filter(date_filter)
+            if confidence_level > 0:
+                ds_fire_cci = ds_fire_cci.map(filter_confidence(confidence_level))
             ds_fire_cci = ds_fire_cci.select('ConfidenceLevel')
             burn_area = ds_fire_cci.max()
 
