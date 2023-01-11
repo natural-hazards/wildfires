@@ -10,6 +10,7 @@ from PyQt5.QtGui import QImage
 from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton, QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
+from ui.prelude import UIPrelude
 from ui.dialog import QAreaDialog
 
 from procs.geom import RectangleArea
@@ -23,12 +24,23 @@ class UIApp(QWidget):
 
         super().__init__(parent)
 
+        self._collection_id = 0
+
+        self.__runPrelude()
+
         self._folium_map = None
         self._select_ds = None
 
         earthengine.Initialize()
 
         self.__initUI()
+
+    def __runPrelude(self) -> None:
+
+        ui_prelude = UIPrelude()
+
+        if ui_prelude.exec():
+            self._collection_id = ui_prelude.getSelectedCollectionID()
 
     def __initUI(self) -> None:
 
@@ -46,8 +58,7 @@ class UIApp(QWidget):
         )
 
         self.__loadMap()
-        # self.__loadFireCollections_CCI()
-        self.__loadFireCollections_MTBS()
+        self.__loadFireCollections()
 
         # add layer control
         layer_control = folium.LayerControl(autoZIndex=False)
@@ -151,6 +162,13 @@ class UIApp(QWidget):
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
         self.__renderMap()
+
+    def __loadFireCollections(self) -> None:
+
+        if self._collection_id == 0:
+            self.__loadFireCollections_CCI()
+        else:
+            self.__loadFireCollections_MTBS()
 
     def __renderMap(self) -> None:
 
