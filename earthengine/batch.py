@@ -21,6 +21,7 @@ class ModisIndex(Enum):
 class FireLabelsCollection(Enum):
 
     ESA_FIRE_CCI = 'ESA/CCI/FireCCI/5_1'
+    MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
 
 
 class FileFormat(Enum):
@@ -241,6 +242,8 @@ class EarthEngineBatch(object):  # TODO set params in constructor
 
         if self.labels_collection == FireLabelsCollection.ESA_FIRE_CCI:
             self._labels = self._labels.select('ConfidenceLevel')
+        else:
+            self._labels = self._labels.select('Severity')
 
     def __loadGeoJSON(self) -> dict:
 
@@ -332,6 +335,7 @@ if __name__ == '__main__':
 
     exporter = EarthEngineBatch()
 
+    exporter.labels_collection = FireLabelsCollection.MTBS
     exporter.crs = CRS.ALASKA_ALBERS
     exporter.scale = 500  # pixel corresponds to resolution 500x500 meters
 
