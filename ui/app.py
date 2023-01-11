@@ -46,7 +46,8 @@ class UIApp(QWidget):
         )
 
         self.__loadMap()
-        self.__loadFireCollections()
+        # self.__loadFireCollections_CCI()
+        self.__loadFireCollections_MTBS()
 
         # add layer control
         layer_control = folium.LayerControl(autoZIndex=False)
@@ -82,9 +83,9 @@ class UIApp(QWidget):
 
         self._folium_map = FoliumMap(location=AK_COORDINATES, shape=MAP_SHAPE, zoom_start=ZOOM_START)
 
-    def __loadFireCollections(self) -> None:
+    def __loadFireCollections_CCI(self) -> None:
 
-        from earthengine import ds
+        from earthengine import ds_fire
 
         # load FireCII v5.1 collection
         CONFIDENCE_LEVEL = 70
@@ -99,7 +100,7 @@ class UIApp(QWidget):
 
         ds_name = 'FireCCI v5.1 (all)'
         with elapsed_timer('Loading {}'.format(ds_name)):
-            burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL)
+            burn_area = ds_fire.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL)
             map = self._folium_map.map
             map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
@@ -110,7 +111,42 @@ class UIApp(QWidget):
 
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
-                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL, start_date, end_date)
+                burn_area = ds_fire.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL, start_date, end_date)
+                map = self._folium_map.map
+                map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+        self.__renderMap()
+
+    def __loadFireCollections_MTBS(self) -> None:
+
+        from earthengine import ds_fire
+
+        # load MTBS fire collection
+        SEVERITY_FROM = 3
+        SEVERITY_TO = 4
+        OPACITY = .7
+
+        visualisation_params = {
+            'min': SEVERITY_FROM,
+            'max': SEVERITY_TO,
+            'opacity': OPACITY,
+            'palette': ['#FFFF00', '#FF0000']
+        }
+
+        ds_name = 'MTBS (all)'
+        with elapsed_timer('Loading {}'.format(ds_name)):
+            burn_area = ds_fire.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO)
+            map = self._folium_map.map
+            map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+        for year in range(2001, 2021):
+            start_date = '{}-01-01'.format(year)
+            end_date = '{}-01-01'.format(year + 1)
+            ds_name = 'MTBS ({})'.format(year)
+
+            # loading fire collection
+            with elapsed_timer('Loading {}'.format(ds_name)):
+                burn_area = ds_fire.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
