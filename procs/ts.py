@@ -1,3 +1,4 @@
+# https://www.youtube.com/watch?v=M5NygAGT5AI (semantic segmentation)
 import os.path
 
 import numpy as np
@@ -7,20 +8,30 @@ from enum import Enum
 
 from osgeo import gdal
 
-from utils.utils_string import band2date
+from utils.utils_string import band2date_firecci, band2date_mtbs
 from utils.timer import elapsed_timer
 
 
 class FillMissingValues(Enum):
 
     TS_SAVITZKY_GOLAY = 1
+    IMFILL = 2
+
+
+class MTBSRegion(Enum):
+
+    ALASKA = 'AK'
+    CONTINENTAL_USA = 'CONUS'
+    HAWAI = 'HI'
+    PUERTO_RICO = 'PR'
     
 
 class TimeSeries(object):
 
     def __init__(self,
                  path_geotiff: str = None,
-                 path_labels: str = None):
+                 path_labels: str = None,
+                 mtbs_region: MTBSRegion = None):
 
         self._ds_sources = None
         self._ds_labels = None
@@ -32,6 +43,10 @@ class TimeSeries(object):
         self._label_path = None
         if path_labels is not None:
             self.path_labels = path_labels
+
+        self._mtbs_region = None
+        if mtbs_region is not None:
+            self.mtbs_region = mtbs_region
 
         # dictionary contains time series
         self._dict_ts = None
@@ -82,6 +97,20 @@ class TimeSeries(object):
 
         del self._ds_labels; self._ds_labels = None
         self._label_path = path_source
+
+    @property
+    def mtbs_region(self) -> MTBSRegion:
+
+        return self._mtbs_region
+
+    @mtbs_region.setter
+    def mtbs_region(self, region: MTBSRegion) -> None:
+
+        if self._mtbs_region == region:
+            return
+
+        self.__reset()
+        self._mtbs_region = region
 
     @property
     def nrasters(self) -> int:
@@ -170,7 +199,7 @@ class TimeSeries(object):
             rs_band = self._ds_sources.GetRasterBand(id_raster + 1)
             dsc_band = rs_band.GetDescription()
 
-            band_date = band2date(dsc_band)
+            band_date = band2date_firecci(dsc_band)
             lst.append(band_date)
 
         lst = sorted(list(set(lst)))
@@ -197,8 +226,12 @@ class TimeSeries(object):
         for id_raster in range(self.nlabels):
             rs_band = self._ds_labels.GetRasterBand(id_raster + 1)
             dsc_band = rs_band.GetDescription()
+            print(dsc_band)
 
-            band_date = band2date(dsc_band)
+            if 'Severity' in dsc_band:
+                band_date = band2date_mtbs(dsc_band)
+            else:
+                band_date = band2date_firecci(dsc_band)
             lst.append(band_date)
 
         df_dates = pd.DataFrame(lst)
@@ -271,7 +304,11 @@ class TimeSeries(object):
             rs_band = self._ds_sources.GetRasterBand(i + 1)
             dsc_band = rs_band.GetDescription()
 
-            band_date = band2date(dsc_band)
+            if 'Severity' in dsc_band:
+                band_date = band2date_firecci(dsc_band)
+            else:
+                band_date = band2date_mtbs(dsc_band)
+
             band_date = pd.Timestamp(band_date, unit='D')
             band_name = dsc_band.split('_')[-1]
 
@@ -302,7 +339,10 @@ class TimeSeries(object):
             rs_band = self._ds_labels.GetRasterBand(i + 1)
             dsc_band = rs_band.GetDescription()
 
-            band_date = band2date(dsc_band)
+            if 'Severity' in dsc_band:
+                band_date = band2date_mtbs(dsc_band)
+            else:
+                band_date = band2date_firecci(dsc_band)
             band_date = pd.Timestamp(band_date, unit='D')
 
             np_band = rs_band.ReadAsArray().flatten()
@@ -325,17 +365,19 @@ if __name__ == '__main__':
     from PIL import Image, ImageEnhance
 
     im_path = 'tutorials/ak_2004_500px2_epsg3338_area_0.tif'
-    label_path = 'tutorials/ak_2004_500px2_epsg3338_area_0_labels.tif'
+    label_path = 'tutorials/ak_1984_2021_500px2_epsg3338_area_0_labels.tif'
 
     ts = TimeSeries(path_geotiff=im_path, path_labels=label_path)
-    with elapsed_timer('Get date list (imgs)'):
-        print(ts.list_dates_imgs)
-
+    # with elapsed_timer('Get date list (imgs)'):
+    #     print(ts.list_dates_imgs)
+    #
     with elapsed_timer('Get date list (labels)'):
         print(ts.list_dates_labels)
-
-    with elapsed_timer('Get labels pandas'):
-        print(ts.get_labels(pd.Timestamp('2004-01')))
+    #
+    # with elapsed_timer('Get labels pandas'):
+    #     print(ts.get_labels(pd.Timestamp('2004-01')))
+    #
+    # print(ts.nlabels)
 
     # ts.__loadLabels()
     # with elapsed_timer('Get pandas serie px=0'):
