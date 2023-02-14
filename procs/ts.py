@@ -8,6 +8,7 @@ from enum import Enum
 
 from osgeo import gdal
 
+from earthengine.ds_fire import MTBSRegion
 from utils.utils_string import band2date_firecci, band2date_mtbs
 from utils.timer import elapsed_timer
 
@@ -18,15 +19,7 @@ class FillMissingValues(Enum):
     IMFILL = 2
 
 
-class MTBSRegion(Enum):
-
-    ALASKA = 'AK'
-    CONTINENTAL_USA = 'CONUS'
-    HAWAI = 'HI'
-    PUERTO_RICO = 'PR'
-    
-
-class TimeSeries(object):
+class DataAdapterTS(object):
 
     def __init__(self,
                  path_geotiff: str = None,
@@ -362,17 +355,19 @@ class TimeSeries(object):
 # tests
 if __name__ == '__main__':
 
+    pass
+
     from PIL import Image, ImageEnhance
 
-    im_path = 'tutorials/ak_2004_500px2_epsg3338_area_0.tif'
-    label_path = 'tutorials/ak_1984_2021_500px2_epsg3338_area_0_labels.tif'
-
-    ts = TimeSeries(path_geotiff=im_path, path_labels=label_path)
+    # im_path = 'tutorials/ak_2004_500px2_epsg3338_area_0.tif'
+    # label_path = 'tutorials/ak_1984_2021_500px2_epsg3338_area_0_labels.tif'
+    #
+    # ts = DataAdapterTS(path_geotiff=im_path, path_labels=label_path)
     # with elapsed_timer('Get date list (imgs)'):
     #     print(ts.list_dates_imgs)
     #
-    with elapsed_timer('Get date list (labels)'):
-        print(ts.list_dates_labels)
+    # with elapsed_timer('Get date list (labels)'):
+    #     print(ts.list_dates_labels)
     #
     # with elapsed_timer('Get labels pandas'):
     #     print(ts.get_labels(pd.Timestamp('2004-01')))
@@ -391,7 +386,7 @@ if __name__ == '__main__':
     # plt.xticks(rotation=15)
     # plt.show()
 
-    # ts = TimeSeries(path_geotiff=im_path)
+    # ts = DataAdapterTS(path_geotiff=im_path)
     #
     # [red, near infra-red (nir), blue, green, short-wave infra-red (swir) 1, swir2, swir3]
     # red = ts.get_imraster(0) / 1e4

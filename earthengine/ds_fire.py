@@ -1,5 +1,15 @@
 import ee as earthengine
 
+from enum import Enum
+
+
+class MTBSRegion(Enum):
+
+    ALASKA = 'AK'
+    CONTINENTAL_USA = 'CONUS'
+    HAWAI = 'HI'
+    PUERTO_RICO = 'PR'
+
 
 class EarthEngineFireDatasets(object):
 
