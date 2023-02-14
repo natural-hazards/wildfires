@@ -8,7 +8,7 @@ from enum import Enum
 
 from osgeo import gdal
 
-from earthengine.ds_fire import MTBSRegion
+from earthengine.ds import MTBSRegion
 from utils.utils_string import band2date_firecci, band2date_mtbs
 from utils.timer import elapsed_timer
 
