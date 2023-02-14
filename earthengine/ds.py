@@ -16,10 +16,10 @@ class ModisReflectanceSpecralBands(Enum):
 
 class ModisIndex(Enum):
 
-    LST = 'MODIS/006/MOD11A2'
+    LST = 'MODIS/006/MOD11A2'  # land surface temperature
     REFLECTANCE = 'MODIS/006/MOD09A1'  # spectral reflectance bands
-    EVI = 'MODIS/006/MOD13A1'
-    NDVI = 'MODIS/006/MOD13A1'
+    EVI = 'MODIS/006/MOD13A1'  # enhanced vegetation index
+    NDVI = 'MODIS/006/MOD13A1'  # normalized difference vegetation index
 
 
 class FireLabelsCollection(Enum):

@@ -7,27 +7,13 @@ import geojson
 
 from enum import Enum
 
+from earthengine.ds import ModisIndex, FireLabelsCollection
 from utils.utils_string import getRandomString
-
-
-class ModisIndex(Enum):
-
-    LST = 'MODIS/006/MOD11A2'
-    REFLECTANCE = 'MODIS/006/MOD09A1'
-    EVI = 'MODIS/006/MOD13A1'
-    NDVI = 'MODIS/006/MOD13A1'
-
-
-class FireLabelsCollection(Enum):
-
-    ESA_FIRE_CCI = 'ESA/CCI/FireCCI/5_1'
-    MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
 
 
 class FileFormat(Enum):
 
     GeoTIFF = 'GeoTIFF'
-    TFRecord = 'TFRecord'
 
 
 class CRS(Enum):
@@ -330,8 +316,8 @@ if __name__ == '__main__':
     EarthEngineBatch.initialize()
 
     fn_json = 'tutorials/data.geojson'
-    start_date = earthengine.Date('2004-01-01')
-    end_date = earthengine.Date('2005-02-01')
+    start_date = earthengine.Date('1984-01-01')
+    end_date = earthengine.Date('2021-02-01')
 
     exporter = EarthEngineBatch()
 
@@ -340,7 +326,7 @@ if __name__ == '__main__':
     exporter.scale = 500  # pixel corresponds to resolution 500x500 meters
 
     exporter.task_description = 'MODIS-REFLECTANCE-AK-2004-EPSG3338'
-    exporter.output_prefix = 'ak_2004_500px2_epsg3338'
+    exporter.output_prefix = 'ak_1984_2021_500px2_epsg3338'
 
     exporter.start_date = start_date
     exporter.end_date = end_date

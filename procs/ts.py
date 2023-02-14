@@ -1,4 +1,5 @@
 # https://www.youtube.com/watch?v=M5NygAGT5AI (semantic segmentation)
+
 import os.path
 
 import numpy as np
@@ -24,6 +25,7 @@ class DataAdapterTS(object):
     def __init__(self,
                  path_geotiff: str = None,
                  path_labels: str = None,
+                 firecii_confidence_level: float = 70,
                  mtbs_region: MTBSRegion = None):
 
         self._ds_sources = None
@@ -110,7 +112,7 @@ class DataAdapterTS(object):
 
         if self._ds_sources is None:
             try:
-                self.__loadGeoTiff_SOURCES()
+                self.__loadGeoTIFF_SOURCES()
             except IOError:
                 print('Can not load geotiff {}'.format(self.path_img))
                 return 0
@@ -122,7 +124,7 @@ class DataAdapterTS(object):
 
         if self._ds_sources is None:
             try:
-                self.__loadGeoTiff_SOURCES()
+                self.__loadGeoTIFF_SOURCES()
             except IOError:
                 print('Can not load geotiff {}'.format(self.path_img))
 
@@ -134,7 +136,7 @@ class DataAdapterTS(object):
 
         if self._ds_sources is None:
             try:
-                self.__loadGeoTiff_SOURCES()
+                self.__loadGeoTIFF_SOURCES()
             except IOError:
                 print('Can not load geotiff {}'.format(self.path_img))
 
@@ -146,7 +148,7 @@ class DataAdapterTS(object):
 
         if self._ds_labels is None:
             try:
-                self.__loadGeoTIff_LABELS()
+                self.__loadGeoTIFF_LABELS()
             except IOError:
                 print('Can not load geotiff {}'.format(self.path_labels))
 
@@ -158,7 +160,7 @@ class DataAdapterTS(object):
         del self._dict_ts; self._dict_ts = None
         del self._df_dates_sources; self._df_dates_sources = None
 
-    def __loadGeoTiff_SOURCES(self) -> None:
+    def __loadGeoTIFF_SOURCES(self) -> None:
 
         if self._ds_sources is not None:
             self.__reset()
@@ -168,7 +170,7 @@ class DataAdapterTS(object):
 
         self._ds_sources = gdal.Open(self.path_img)
 
-    def __loadGeoTIff_LABELS(self) -> None:
+    def __loadGeoTIFF_LABELS(self) -> None:
 
         if self._ds_labels is not None:
             self.__reset()
@@ -182,7 +184,7 @@ class DataAdapterTS(object):
 
         if self._ds_sources is None:
             try:
-                self.__loadGeoTiff_SOURCES()
+                self.__loadGeoTIFF_SOURCES()
             except IOError:
                 print('Can not load geotiff {}'.format(self.path_img))
                 return
@@ -210,7 +212,7 @@ class DataAdapterTS(object):
 
         if self._ds_labels is None:
             try:
-                self.__loadGeoTIff_LABELS()
+                self.__loadGeoTIFF_LABELS()
             except IOError:
                 print('Can not load geotiff {}'.format(self.path_labels))
                 return
@@ -251,7 +253,7 @@ class DataAdapterTS(object):
     def get_imraster(self, id_raster) -> np.ndarray:
 
         if self._ds_sources is None:
-            self.__loadGeoTiff_SOURCES()
+            self.__loadGeoTIFF_SOURCES()
 
         # [red, near infra-red (nir), blue, green, short-wave infra-red (swir) 1, swir2, swir3]
         rs_band = self._ds_sources.GetRasterBand(id_raster + 1).ReadAsArray()
@@ -283,7 +285,7 @@ class DataAdapterTS(object):
 
         if self._ds_sources is None:
             try:
-                self.__loadGeoTiff_SOURCES()
+                self.__loadGeoTIFF_SOURCES()
             except IOError:
                 print('Can not load geotiff (sources) {}'.format(self.path_img))
 
@@ -357,7 +359,7 @@ if __name__ == '__main__':
 
     pass
 
-    from PIL import Image, ImageEnhance
+    # from PIL import Image, ImageEnhance
 
     # im_path = 'tutorials/ak_2004_500px2_epsg3338_area_0.tif'
     # label_path = 'tutorials/ak_1984_2021_500px2_epsg3338_area_0_labels.tif'
