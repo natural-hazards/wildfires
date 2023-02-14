@@ -3,6 +3,31 @@ import ee as earthengine
 from enum import Enum
 
 
+class ModisReflectanceSpecralBands(Enum):
+
+    RED = 1  # visible (wave length 620–670nm)
+    NIR = 2  # near infra-red (wave length 841–876nm)
+    BLUE = 3  # visible (wave length 459–479nm)
+    GREEN = 4  # visible (wave length 545–565nm)
+    SWIR1 = 5  # short-wave infra-red (wave length 1230–1250nm)
+    SWIR2 = 6  # short-wave infra-red (wave length 1628-1652nm)
+    SWIR3 = 7  # short-wave infra-red (wave length 2105-2155nm)
+
+
+class ModisIndex(Enum):
+
+    LST = 'MODIS/006/MOD11A2'
+    REFLECTANCE = 'MODIS/006/MOD09A1'  # spectral reflectance bands
+    EVI = 'MODIS/006/MOD13A1'
+    NDVI = 'MODIS/006/MOD13A1'
+
+
+class FireLabelsCollection(Enum):
+
+    ESA_FIRE_CCI = 'ESA/CCI/FireCCI/5_1'
+    MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
+
+
 class MTBSRegion(Enum):
 
     ALASKA = 'AK'

@@ -10,7 +10,7 @@ from osgeo import gdal
 
 from earthengine.ds import MTBSRegion
 from utils.utils_string import band2date_firecci, band2date_mtbs
-from utils.timer import elapsed_timer
+from utils.time import elapsed_timer
 
 
 class FillMissingValues(Enum):

@@ -15,7 +15,7 @@ from ui.dialog import QAreaDialog
 
 from procs.geom import RectangleArea
 from map.folium import FoliumMap
-from utils.timer import elapsed_timer
+from utils.time import elapsed_timer
 
 
 class UIApp(QWidget):
