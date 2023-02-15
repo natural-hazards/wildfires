@@ -28,6 +28,19 @@ class FireLabelsCollection(Enum):
     MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
 
 
+class FireCIIAvailability(Enum):
+
+    BEGIN = 2001
+    END = 2020
+
+
+class MTBSSeverity(Enum):
+
+    LOW = 2
+    MODERATE = 3
+    HIGH = 4
+
+
 class MTBSRegion(Enum):
 
     ALASKA = 'AK'
