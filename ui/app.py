@@ -1,3 +1,4 @@
+import calendar
 import io
 import sys
 
@@ -25,6 +26,8 @@ class UIApp(QWidget):
         super().__init__(parent)
 
         self._collection_id = 0
+        self._period_id = 0
+        self._collection_year = -1
 
         self.__runPrelude()
 
@@ -41,6 +44,10 @@ class UIApp(QWidget):
 
         if ui_prelude.exec():
             self._collection_id = ui_prelude.getSelectedCollectionID()
+            self._period_id = ui_prelude.getSelectedPeriodID()
+
+            if self._period_id == 1:
+                self._collection_year = ui_prelude.getSelectedYear()
 
     def __initUI(self) -> None:
 
@@ -85,6 +92,11 @@ class UIApp(QWidget):
         self.__renderMap()
         self.show()
 
+    @property
+    def selectedCollectionYear(self) -> int:
+
+        return self._collection_year
+
     def __loadMap(self) -> None:
 
         AK_COORDINATES = (60.160507, -153.369141)
@@ -94,9 +106,47 @@ class UIApp(QWidget):
 
         self._folium_map = FoliumMap(location=AK_COORDINATES, shape=MAP_SHAPE, zoom_start=ZOOM_START)
 
-    def __loadFireCollections_CCI(self) -> None:
+    def __loadFireCollection_CCI_MONTHS(self, confidence_level, visualisation_params) -> None:
 
         from earthengine import ds
+
+        for mon in range(1, 13):
+
+            year = self.selectedCollectionYear
+
+            start_date = '{}-{}-01'.format(year, mon)
+            end_date = '{}-01-01'.format(year + 1) if mon == 12 else '{}-{}-01'.format(year, mon + 1)
+            ds_name = 'FireCII v5.1 ({}, {})'.format(year, calendar.month_name[mon])
+
+            # loading fire collection
+            with elapsed_timer('Loading {}'.format(ds_name)):
+                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
+                map = self._folium_map.map
+                map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+    def __loadFireCollection_CCI_YEARS(self, confidence_level, visualisation_params) -> None:
+
+        from earthengine import ds
+
+        ds_name = 'FireCCI v5.1 (all)'
+        with elapsed_timer('Loading {}'.format(ds_name)):
+            burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level)
+            map = self._folium_map.map
+            map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+        # for year in range(2001, 2021):
+        for year in range(2001, 2002):
+            start_date = '{}-01-01'.format(year)
+            end_date = '{}-01-01'.format(year + 1)
+            ds_name = 'FireCII v5.1 ({})'.format(year)
+
+            # loading fire collection
+            with elapsed_timer('Loading {}'.format(ds_name)):
+                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
+                map = self._folium_map.map
+                map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+    def __loadFireCollections_CCI(self) -> None:
 
         # load FireCII v5.1 collection
         CONFIDENCE_LEVEL = 70
@@ -109,22 +159,12 @@ class UIApp(QWidget):
             'palette': ['red', 'orange', 'yellow']
         }
 
-        ds_name = 'FireCCI v5.1 (all)'
-        with elapsed_timer('Loading {}'.format(ds_name)):
-            burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL)
-            map = self._folium_map.map
-            map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
-
-        for year in range(2001, 2021):
-            start_date = '{}-01-01'.format(year)
-            end_date = '{}-01-01'.format(year + 1)
-            ds_name = 'FireCII v5.1 ({})'.format(year)
-
-            # loading fire collection
-            with elapsed_timer('Loading {}'.format(ds_name)):
-                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(CONFIDENCE_LEVEL, start_date, end_date)
-                map = self._folium_map.map
-                map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+        if self._period_id == 0:
+            self.__loadFireCollection_CCI_YEARS(CONFIDENCE_LEVEL, visualisation_params)
+        elif self._period_id == 1:
+            self.__loadFireCollection_CCI_MONTHS(CONFIDENCE_LEVEL, visualisation_params)
+        else:
+            raise RuntimeError('Something got wrong! :(')
 
         self.__renderMap()
 

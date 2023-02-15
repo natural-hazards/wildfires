@@ -11,6 +11,8 @@ class UIPrelude(QDialog):
 
         super().__init__(parent)
 
+        self._cb_years = None
+
         self.__initUI()
 
     def __initUI(self) -> None:
@@ -64,6 +66,16 @@ class UIPrelude(QDialog):
 
         return self._cb_collection.currentIndex()
 
+    def getSelectedPeriodID(self) -> int:
+
+        return self._cb_period.currentIndex()
+
+    def getSelectedYear(self) -> int:
+
+        if self._cb_years is not None:
+
+            return int(self._cb_years.currentText())
+
     def collectionSelectionChanged(self):
 
         coll_index = self._cb_collection.currentIndex()
@@ -82,8 +94,10 @@ class UIPrelude(QDialog):
                 self._cb_period.removeItem(1)
 
                 if self._hbox_period.count() > 1:
+
                     self._hbox_period.itemAt(1).widget().deleteLater()
                     self._hbox_period.itemAt(2).widget().deleteLater()
+                    self._cb_years = None
 
     def periodSelectionChanged(self):
 
@@ -97,16 +111,18 @@ class UIPrelude(QDialog):
                 self._hbox_period.addWidget(text_label, 1)
 
                 # add year ranges
-                cb_years = QComboBox()
+                self._cb_years = QComboBox()
+
                 YEAR_BEGIN = FireCIIAvailability.BEGIN.value
                 YEAR_END = FireCIIAvailability.END.value
-                cb_years.addItems(['{}'.format(y) for y in range(YEAR_BEGIN, YEAR_END + 1)])
+                self._cb_years.addItems(['{}'.format(y) for y in range(YEAR_BEGIN, YEAR_END + 1)])
 
-                self._hbox_period.addWidget(cb_years, 2)
+                self._hbox_period.addWidget(self._cb_years, 2)
 
             elif self._cb_period.currentIndex() == 0:
 
                 self._hbox_period.itemAt(1).widget().deleteLater()
                 self._hbox_period.itemAt(2).widget().deleteLater()
+                self._cb_years = None
 
         print('Period selection changed')
