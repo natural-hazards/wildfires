@@ -14,6 +14,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from ui.prelude import UIPrelude
 from ui.dialog import QAreaDialog
 
+from earthengine.ds import FireCIIAvailability
 from procs.geom import RectangleArea
 from map.folium import FoliumMap
 from utils.time import elapsed_timer
@@ -134,8 +135,10 @@ class UIApp(QWidget):
             map = self._folium_map.map
             map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
-        # for year in range(2001, 2021):
-        for year in range(2001, 2002):
+        YEAR_BEGIN = FireCIIAvailability.BEGIN.value
+        YEAR_END = FireCIIAvailability.END.value
+
+        for year in range(YEAR_BEGIN, YEAR_END):
             start_date = '{}-01-01'.format(year)
             end_date = '{}-01-01'.format(year + 1)
             ds_name = 'FireCII v5.1 ({})'.format(year)

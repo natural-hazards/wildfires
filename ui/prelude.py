@@ -124,5 +124,3 @@ class UIPrelude(QDialog):
                 self._hbox_period.itemAt(1).widget().deleteLater()
                 self._hbox_period.itemAt(2).widget().deleteLater()
                 self._cb_years = None
-
-        print('Period selection changed')
