@@ -147,4 +147,3 @@ class QAreaDialog(QDialog):
         geometry['unit'] = id_unit
 
         return geometry
-

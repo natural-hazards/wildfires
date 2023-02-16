@@ -229,12 +229,6 @@ class UIPrelude(QDialog):
 
             return int(self._cb_years.currentText())
 
-    # events
-
-    def closeEvent(self, evnt):
-
-        super(UIPrelude, self).closeEvent(evnt)
-
     # slots
 
     def __slotUncertaintyLevelChanged(self):

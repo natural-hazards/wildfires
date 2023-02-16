@@ -45,11 +45,17 @@ class UIApp(QWidget):
         ui_prelude = UIPrelude()
 
         if ui_prelude.exec():
+
             self._collection_id = ui_prelude.getSelectedCollectionID()
             self._time_period = ui_prelude.getSelectedPeriodID()
 
             if self._time_period == TimePeriod.MONTHS:
                 self._collection_year = ui_prelude.getSelectedYear()
+
+        else:
+
+            UIApp.close(self)
+            exit(0)
 
     def __initUI(self) -> None:
 
