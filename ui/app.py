@@ -17,6 +17,7 @@ from ui.dialog import QAreaDialog
 from earthengine.ds import FireCIIAvailability
 from procs.geom import RectangleArea
 from map.folium import FoliumMap
+from utils.time import TimePeriod
 from utils.time import elapsed_timer
 
 
@@ -27,8 +28,8 @@ class UIApp(QWidget):
         super().__init__(parent)
 
         self._collection_id = 0
-        self._period_id = 0
         self._collection_year = -1
+        self._time_period = TimePeriod.YEARS
 
         self.__runPrelude()
 
@@ -45,9 +46,9 @@ class UIApp(QWidget):
 
         if ui_prelude.exec():
             self._collection_id = ui_prelude.getSelectedCollectionID()
-            self._period_id = ui_prelude.getSelectedPeriodID()
+            self._time_period = ui_prelude.getSelectedPeriodID()
 
-            if self._period_id == 1:
+            if self._time_period == TimePeriod.MONTHS:
                 self._collection_year = ui_prelude.getSelectedYear()
 
     def __initUI(self) -> None:
@@ -101,6 +102,11 @@ class UIApp(QWidget):
     def selectedCollectionYear(self) -> int:
 
         return self._collection_year
+
+    @property
+    def selectedTimePeriod(self) -> TimePeriod:
+
+        return self._time_period
 
     def __loadMap(self) -> None:
 
@@ -166,9 +172,9 @@ class UIApp(QWidget):
             'palette': ['red', 'orange', 'yellow']
         }
 
-        if self._period_id == 0:
+        if self._time_period == TimePeriod.YEARS:
             self.__loadFireCollection_CCI_YEARS(CONFIDENCE_LEVEL, visualisation_params)
-        elif self._period_id == 1:
+        elif self._time_period == TimePeriod.MONTHS:
             self.__loadFireCollection_CCI_MONTHS(CONFIDENCE_LEVEL, visualisation_params)
         else:
             raise RuntimeError('Something got wrong! :(')

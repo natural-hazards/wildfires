@@ -1,4 +1,12 @@
+
+from enum import Enum
 from timeit import default_timer
+
+
+class TimePeriod(Enum):
+
+    YEARS = 0
+    MONTHS = 1
 
 
 class elapsed_timer(object):

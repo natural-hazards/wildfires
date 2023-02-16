@@ -3,6 +3,7 @@ from PyQt5.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, Q
 from PyQt5.QtWidgets import QGroupBox
 
 from earthengine.ds import FireCIIAvailability
+from utils.time import TimePeriod
 
 
 class UIPrelude(QDialog):
@@ -71,9 +72,9 @@ class UIPrelude(QDialog):
 
         return self._cb_collection.currentIndex()
 
-    def getSelectedPeriodID(self) -> int:
+    def getSelectedPeriodID(self) -> TimePeriod:
 
-        return self._cb_period.currentIndex()
+        return TimePeriod(self._cb_period.currentIndex())
 
     def getSelectedYear(self) -> int:
 
@@ -110,7 +111,7 @@ class UIPrelude(QDialog):
 
         if coll_index == 0:
 
-            if self._cb_period.currentIndex() == 1:
+            if self._cb_period.currentIndex() == TimePeriod.MONTHS.value:
 
                 text_label = QLabel('of')
                 self._hbox_period.addWidget(text_label, 1)
@@ -124,7 +125,7 @@ class UIPrelude(QDialog):
 
                 self._hbox_period.addWidget(self._cb_years, 2)
 
-            elif self._cb_period.currentIndex() == 0:
+            elif self._cb_period.currentIndex() == TimePeriod.YEARS.value:
 
                 self._hbox_period.itemAt(1).widget().deleteLater()
                 self._hbox_period.itemAt(2).widget().deleteLater()
