@@ -7,8 +7,10 @@ from jinja2 import Template
 import ee as earthengine
 import folium
 
+from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QImage
-from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton, QWidget
+from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout, QPushButton, QProgressDialog
+from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
 from ui.prelude import UIPrelude
@@ -35,6 +37,8 @@ class UIApp(QWidget):
 
         self._folium_map = None
         self._select_ds = None
+
+        self._progress_bar = None
 
         earthengine.Initialize()
 
@@ -73,7 +77,7 @@ class UIApp(QWidget):
         )
 
         self.__loadMap()
-        self.__loadFireCollections()
+        self.__load()
 
         # add layer control
         layer_control = folium.LayerControl(autoZIndex=False)
@@ -98,7 +102,7 @@ class UIApp(QWidget):
         vbox.addWidget(self._web_view)
 
         self.setLayout(vbox)
-        self.setGeometry(500, 500, WINDOW_WIDTH, WINDOW_HEIGHT)
+        self.resize(WINDOW_WIDTH, WINDOW_HEIGHT)
 
         self.setWindowTitle('Select areas')
         self.__renderMap()
@@ -127,43 +131,80 @@ class UIApp(QWidget):
 
         from earthengine import ds
 
+        step_precent = int(100. / 12.)
+        progress_val = 0
+        self._progress_bar.setValue(10)
+
         for mon in range(1, 13):
 
             year = self.selectedCollectionYear
 
             start_date = '{}-{}-01'.format(year, mon)
             end_date = '{}-01-01'.format(year + 1) if mon == 12 else '{}-{}-01'.format(year, mon + 1)
-            ds_name = 'FireCII v5.1 ({}, {})'.format(year, calendar.month_name[mon])
+            ds_name = 'FireCCI v5.1 ({}, {})'.format(year, calendar.month_name[mon])
+
+            self._progress_bar.setLabelText('Loading collection FireCCI, ({}, {}) ...'.format(year, calendar.month_name[mon]))
 
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
                 burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+            if self._progress_bar.wasCanceled():
+                self.close()
+                exit(-1)
+
+            progress_val += step_precent
+            self._progress_bar.setValue(progress_val)
 
     def __loadFireCollection_CCI_YEARS(self, confidence_level, visualisation_params) -> None:
 
         from earthengine import ds
 
+        YEAR_BEGIN = FireCIIAvailability.BEGIN.value
+        YEAR_END = FireCIIAvailability.END.value
+
+        range_years = range(YEAR_BEGIN, YEAR_END)
+        step_percent = int(100. / (len(range_years) + 1))
+        progress_val = 0
+        self._progress_bar.setValue(10)
+
         ds_name = 'FireCCI v5.1 (all)'
         with elapsed_timer('Loading {}'.format(ds_name)):
+
+            self._progress_bar.setLabelText('Loading collection FireCCI, (all) ..')
+
             burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level)
             map = self._folium_map.map
             map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
-        YEAR_BEGIN = FireCIIAvailability.BEGIN.value
-        YEAR_END = FireCIIAvailability.END.value
+            if self._progress_bar.wasCanceled():
+                self.close()
+                exit(-1)
+
+            progress_val += step_percent
+            self._progress_bar.setValue(progress_val)
 
         for year in range(YEAR_BEGIN, YEAR_END):
             start_date = '{}-01-01'.format(year)
             end_date = '{}-01-01'.format(year + 1)
-            ds_name = 'FireCII v5.1 ({})'.format(year)
+            ds_name = 'FireCCI v5.1 ({})'.format(year)
+
+            self._progress_bar.setLabelText('Loading collection FireCCI ({}) ...'.format(year))
 
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
                 burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+            if self._progress_bar.wasCanceled():
+                self.close()
+                exit(-1)
+
+            progress_val += step_percent
+            self._progress_bar.setValue(progress_val)
 
     def __loadFireCollections_CCI(self) -> None:
 
@@ -203,22 +244,39 @@ class UIApp(QWidget):
             'palette': ['#FFFF00', '#FF0000']
         }
 
+        range_year = range(2001, 2021)
+        step_percent = int(100. / (len(range_year) + 1))
+        progress_val = 0
+        self._progress_bar.setValue(10)
+
         ds_name = 'MTBS (all)'
         with elapsed_timer('Loading {}'.format(ds_name)):
+
+            self._progress_bar.setLabelText('Loading collection {} ...'.format(ds_name))
+
             burn_area = ds.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO)
             map = self._folium_map.map
             map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+            # set step
+            progress_val += step_percent
+            self._progress_bar.setValue(progress_val)
 
         for year in range(2001, 2021):
             start_date = '{}-01-01'.format(year)
             end_date = '{}-01-01'.format(year + 1)
             ds_name = 'MTBS ({})'.format(year)
 
+            self._progress_bar.setLabelText('Loading collection {} ...'.format(ds_name))
+
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
                 burn_area = ds.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
+
+            progress_val += step_percent
+            self._progress_bar.setValue(progress_val)
 
         self.__renderMap()
 
@@ -228,6 +286,21 @@ class UIApp(QWidget):
             self.__loadFireCollections_CCI()
         else:
             self.__loadFireCollections_MTBS()
+
+    def __load(self) -> None:
+
+        self._progress_bar = QProgressDialog('Loading ...', None, 0, 100, None)
+        self._progress_bar.setWindowModality(Qt.WindowModal)
+        self._progress_bar.setValue(1)
+        self._progress_bar.show()
+
+        self.__loadFireCollections()
+
+        if self._progress_bar.wasCanceled():
+            UIApp.close()
+            exit(0)
+
+        self._progress_bar.close()
 
     def __renderMap(self) -> None:
 
