@@ -72,8 +72,13 @@ class QAreaDialog(QDialog):
         self.setLayout(layout)
         self.setWindowTitle('Add area')
 
-        self._button_box.accepted.connect(self.accept)
-        self._button_box.rejected.connect(self.reject)
+        # listeners
+        self._button_box.accepted.connect(
+            self.accept
+        )
+        self._button_box.rejected.connect(
+            self.reject
+        )
 
     def __latitudeOnChanged(self, text):
 

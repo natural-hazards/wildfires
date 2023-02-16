@@ -74,10 +74,14 @@ class UIApp(QWidget):
 
         #
         self._button_add_area = QPushButton('Add area')
-        self._button_add_area.clicked.connect(self.__addRectangleArea)
+        self._button_add_area.clicked.connect(
+            self.__addRectangleArea
+        )
 
         self._button_export_map = QPushButton('Export map')
-        self._button_export_map.clicked.connect(self.__exportMap)
+        self._button_export_map.clicked.connect(
+            self.__exportMap
+        )
 
         hbox.addWidget(self._button_add_area)
         hbox.addWidget(self._button_export_map)

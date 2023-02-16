@@ -12,7 +12,6 @@ class UIPrelude(QDialog):
         super().__init__(parent)
 
         self._cb_years = None
-
         self.__initUI()
 
     def __initUI(self) -> None:
@@ -56,11 +55,17 @@ class UIPrelude(QDialog):
         self.setWindowTitle('Select data set')
 
         # combo box
-        self._cb_collection.currentIndexChanged.connect(self.collectionSelectionChanged)
-        self._cb_period.currentIndexChanged.connect(self.periodSelectionChanged)
+        self._cb_collection.currentIndexChanged.connect(
+            self.collectionSelectionChanged
+        )
+        self._cb_period.currentIndexChanged.connect(
+            self.periodSelectionChanged
+        )
 
         # set listeners
-        self._button_box.accepted.connect(self.accept)
+        self._button_box.accepted.connect(
+            self.accept
+        )
 
     def getSelectedCollectionID(self) -> int:
 
@@ -81,7 +86,7 @@ class UIPrelude(QDialog):
         coll_index = self._cb_collection.currentIndex()
         cb_item_cnt = self._cb_period.count()
 
-        if coll_index == 0:  # FireCII collection
+        if coll_index == 0:  # FireCII collection (ESA)
 
             if cb_item_cnt == 1:
                 self._cb_period.addItem('Months')
