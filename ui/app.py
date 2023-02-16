@@ -16,7 +16,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from ui.prelude import UIPrelude
 from ui.dialog import QAreaDialog
 
-from earthengine.ds import FireCIIAvailability
+from earthengine.ds import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
 from procs.geom import RectangleArea
 from map.folium import FoliumMap
 from utils.time import TimePeriod
@@ -32,6 +32,9 @@ class UIApp(QWidget):
         self._collection_id = 0
         self._collection_year = -1
         self._time_period = TimePeriod.YEARS
+
+        self._confidence_level_cci = 0.
+        self._severity_from_mtbs = MTBSSeverity.HIGH
 
         self.__runPrelude()
 
@@ -55,6 +58,11 @@ class UIApp(QWidget):
 
             if self._time_period == TimePeriod.MONTHS:
                 self._collection_year = ui_prelude.getSelectedYear()
+
+            if self._collection_id == FireLabelsCollectionID.ESA_FIRE_CII.value:
+                self._confidence_level_cci = ui_prelude.getUncertaintyLevel_FireCCI()
+            elif self._collection_id == FireLabelsCollectionID.MTBS.value:
+                self._severity_from_mtbs = ui_prelude.getSeverityLevel_MTBS()
 
         else:
 
@@ -209,11 +217,11 @@ class UIApp(QWidget):
     def __loadFireCollections_CCI(self) -> None:
 
         # load FireCII v5.1 collection
-        CONFIDENCE_LEVEL = 70
+        CONFIDENCE_LEVEL = self._confidence_level_cci
         OPACITY = .7
 
         visualisation_params = {
-            'min': CONFIDENCE_LEVEL,
+            'min': 50,
             'max': 100,
             'opacity': OPACITY,
             'palette': ['red', 'orange', 'yellow']
@@ -233,7 +241,7 @@ class UIApp(QWidget):
         from earthengine import ds
 
         # load MTBS fire collection
-        SEVERITY_FROM = 3
+        SEVERITY_FROM = self._severity_from_mtbs
         SEVERITY_TO = 4
         OPACITY = .7
 

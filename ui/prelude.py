@@ -1,6 +1,6 @@
 
 from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QVBoxLayout, QLabel
+from PyQt5.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel
 from PyQt5.QtWidgets import QGroupBox, QSlider
 
 from earthengine.ds import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
@@ -154,10 +154,6 @@ class UIPrelude(QDialog):
 
         return self._group_fire_uncertainty
 
-    def __initUI_GroupFireLevelUncertainty_MTBS(self) -> QGroupBox:
-
-        pass
-
     def __initUI(self) -> None:
 
         hbox = QHBoxLayout()
@@ -228,6 +224,24 @@ class UIPrelude(QDialog):
         if self._cb_years is not None:
 
             return int(self._cb_years.currentText())
+
+    def getUncertaintyLevel_FireCCI(self) -> int:
+
+        coll_index = self._cb_collection.currentIndex()
+
+        if coll_index == FireLabelsCollectionID.ESA_FIRE_CII.value:  # FireCII collection (ESA)
+            return self._slider_firecii_uncertainty.value()
+        else:
+            raise RuntimeError('FireCII is not active!')
+
+    def getSeverityLevel_MTBS(self) -> int:
+
+        coll_index = self._cb_collection.currentIndex()
+
+        if coll_index == FireLabelsCollectionID.MTBS.value:  # MTBS collection (USA)
+            return MTBSSeverity(self._cb_mtbs_severity_from.currentIndex() + 2).value
+        else:
+            raise RuntimeError('MTBS is not active!')
 
     # slots
 
