@@ -28,6 +28,12 @@ class FireLabelsCollection(Enum):
     MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
 
 
+class FireLabelsCollectionID(Enum):
+
+    ESA_FIRE_CII = 0
+    MTBS = 1
+
+
 class FireCIIAvailability(Enum):
 
     BEGIN = 2001
