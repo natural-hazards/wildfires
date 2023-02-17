@@ -24,13 +24,13 @@ class ModisIndex(Enum):
 
 class FireLabelsCollection(Enum):
 
-    ESA_FIRE_CCI = 'ESA/CCI/FireCCI/5_1'
+    CCI = 'ESA/CCI/FireCCI/5_1'
     MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
 
 
 class FireLabelsCollectionID(Enum):
 
-    ESA_FIRE_CII = 0
+    CII = 0
     MTBS = 1
 
 

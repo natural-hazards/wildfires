@@ -35,7 +35,7 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         self._type_index = ModisIndex.REFLECTANCE
 
         self._labels = None
-        self._labels_collection = FireLabelsCollection.ESA_FIRE_CCI
+        self._labels_collection = FireLabelsCollection.CCI
 
         self._start_date = None
         self._end_date = None
@@ -226,8 +226,8 @@ class EarthEngineBatch(object):  # TODO set params in constructor
 
         self._labels = earthengine.ImageCollection(self.labels_collection.value)
 
-        if self.labels_collection == FireLabelsCollection.ESA_FIRE_CCI:
-            self._labels = self._labels.select('ConfidenceLevel')
+        if self.labels_collection == FireLabelsCollection.CCI:
+            self._labels = self._labels.select('ConfidenceLevel', 'ObservedFlag')
         else:
             self._labels = self._labels.select('Severity')
 
@@ -272,6 +272,9 @@ class EarthEngineBatch(object):  # TODO set params in constructor
 
         labels_filtered = self._labels.filterDate(self.start_date, self.end_date)
         labels_bands = labels_filtered.toBands()
+        if self.labels_collection == FireLabelsCollection.CCI:
+            # avoid inconsistent types
+            labels_bands = labels_bands.toUint16()
 
         _prefix = '' if self.output_prefix is None else '{}_'.format(self.output_prefix)
         _folder = getRandomString(10) if self.gdrive_folder is None else self.gdrive_folder
@@ -280,30 +283,32 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         print('Submitted jobs:')
         for i, area in enumerate(self._polygons):
 
-            task_modis = earthengine.batch.Export.image.toDrive(
-                image=img_bands,
-                description='{}area_{}'.format(_desc, i),
-                scale=self.scale,
-                region=area,
-                folder=_folder,
-                fileNamePrefix='{}area_{}'.format(_prefix, i),
-                fileFormat=self.output_format.value,
-                crs=self.crs.value
-            )
+            # task_modis = earthengine.batch.Export.image.toDrive(
+            #     image=img_bands,
+            #     description='{}area_{}'.format(_desc, i),
+            #     scale=self.scale,
+            #     region=area,
+            #     folder=_folder,
+            #     fileNamePrefix='{}area_{}'.format(_prefix, i),
+            #     fileFormat=self.output_format.value,
+            #     crs=self.crs.value
+            # )
+
+            collection_name = self.labels_collection.name.lower()
 
             task_labels = earthengine.batch.Export.image.toDrive(
                 image=labels_bands,
-                description='{}area_{}_labels'.format(_desc, i),
+                description='{}area_{}_{}_labels'.format(_desc, i, collection_name),
                 scale=self.scale,
                 region=area,
                 folder=_folder,
-                fileNamePrefix='{}area_{}_labels'.format(_prefix, i),
+                fileNamePrefix='{}area_{}_{}_labels'.format(_prefix, i, collection_name),
                 fileFormat=self.output_format.value,
                 crs=self.crs.value
             )
 
-            task_modis.start()
-            print(task_modis.status)
+            # task_modis.start()
+            # print(task_modis.status)
 
             task_labels.start()
             print(task_labels.status)
@@ -315,18 +320,18 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    fn_json = 'tutorials/data.geojson'
-    start_date = earthengine.Date('1984-01-01')
-    end_date = earthengine.Date('2021-02-01')
+    fn_json = 'tutorials/ak_area_500px.geojson'
+    start_date = earthengine.Date('2004-04-01')
+    end_date = earthengine.Date('2004-08-01')
 
     exporter = EarthEngineBatch()
 
-    exporter.labels_collection = FireLabelsCollection.MTBS
+    exporter.labels_collection = FireLabelsCollection.CCI
     exporter.crs = CRS.ALASKA_ALBERS
     exporter.scale = 500  # pixel corresponds to resolution 500x500 meters
 
-    exporter.task_description = 'MODIS-REFLECTANCE-AK-2004-EPSG3338'
-    exporter.output_prefix = 'ak_1984_2021_500px2_epsg3338'
+    exporter.task_description = 'MODIS-REFLECTANCE-AK-2004-APRIL-JULY-EPSG3338'
+    exporter.output_prefix = 'ak_april_july_2004_500_epsg3338'
 
     exporter.start_date = start_date
     exporter.end_date = end_date

@@ -229,7 +229,7 @@ class UIPrelude(QDialog):
 
         coll_index = self._cb_collection.currentIndex()
 
-        if coll_index == FireLabelsCollectionID.ESA_FIRE_CII.value:  # FireCII collection (ESA)
+        if coll_index == FireLabelsCollectionID.CII.value:  # FireCII collection (ESA)
             return self._slider_firecii_uncertainty.value()
         else:
             raise RuntimeError('FireCII is not active!')
@@ -255,7 +255,7 @@ class UIPrelude(QDialog):
         coll_index = self._cb_collection.currentIndex()
         cb_item_cnt = self._cb_time_period.count()  # this is just for sure to avoid wrong states of the application
 
-        if coll_index == FireLabelsCollectionID.ESA_FIRE_CII.value:  # FireCII collection (ESA)
+        if coll_index == FireLabelsCollectionID.CII.value:  # FireCII collection (ESA)
 
             if cb_item_cnt == 1:
                 self._cb_time_period.addItem('Months')

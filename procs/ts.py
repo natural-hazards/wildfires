@@ -17,7 +17,7 @@ class DataAdapterTS(object):
 
     def __init__(self,
                  src_labels: str,
-                 label_collection: FireLabelsCollection = FireLabelsCollection.ESA_FIRE_CCI,
+                 label_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  cci_confidence_level: int = None,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = None):
@@ -229,7 +229,7 @@ class DataAdapterTS(object):
 
     def __getBandDates_LABEL(self) -> None:
 
-        if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
+        if self.label_collection == FireLabelsCollection.CCI:
             self.__getBandDates_LABEL_CCI()
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__processBandDates_LABEL_MTBS()
@@ -285,7 +285,7 @@ class DataAdapterTS(object):
 
     def __processLabels(self) -> None:
 
-        if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
+        if self.label_collection == FireLabelsCollection.CCI:
             self.__processLabels_CCI()
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__processLabels_MTBS()
@@ -361,7 +361,7 @@ class DataAdapterTS(object):
 
     def imshow_label(self, band_id: int) -> None:
 
-        if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
+        if self.label_collection == FireLabelsCollection.CCI:
             self.__imshow_label_CCI(band_id)
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__imshow_label_MTBS(band_id)
@@ -377,7 +377,7 @@ if __name__ == '__main__':
     # adapter
     # adapter = DataAdapterTS(
     #     src_labels=fn_labels,
-    #     label_collection=FireLabelsCollection.ESA_FIRE_CCI,
+    #     label_collection=FireLabelsCollection.CCI,
     #     cci_confidence_level=70
     # )
 

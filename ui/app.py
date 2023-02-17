@@ -59,7 +59,7 @@ class UIApp(QWidget):
             if self._time_period == TimePeriod.MONTHS:
                 self._collection_year = ui_prelude.getSelectedYear()
 
-            if self._collection_id == FireLabelsCollectionID.ESA_FIRE_CII.value:
+            if self._collection_id == FireLabelsCollectionID.CII.value:
                 self._confidence_level_cci = ui_prelude.getUncertaintyLevel_FireCCI()
             elif self._collection_id == FireLabelsCollectionID.MTBS.value:
                 self._severity_from_mtbs = ui_prelude.getSeverityLevel_MTBS()
