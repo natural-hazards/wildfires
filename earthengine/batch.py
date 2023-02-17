@@ -283,16 +283,16 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         print('Submitted jobs:')
         for i, area in enumerate(self._polygons):
 
-            # task_modis = earthengine.batch.Export.image.toDrive(
-            #     image=img_bands,
-            #     description='{}area_{}'.format(_desc, i),
-            #     scale=self.scale,
-            #     region=area,
-            #     folder=_folder,
-            #     fileNamePrefix='{}area_{}'.format(_prefix, i),
-            #     fileFormat=self.output_format.value,
-            #     crs=self.crs.value
-            # )
+            task_modis = earthengine.batch.Export.image.toDrive(
+                image=img_bands,
+                description='{}area_{}'.format(_desc, i),
+                scale=self.scale,
+                region=area,
+                folder=_folder,
+                fileNamePrefix='{}area_{}'.format(_prefix, i),
+                fileFormat=self.output_format.value,
+                crs=self.crs.value
+            )
 
             collection_name = self.labels_collection.name.lower()
 
@@ -307,8 +307,8 @@ class EarthEngineBatch(object):  # TODO set params in constructor
                 crs=self.crs.value
             )
 
-            # task_modis.start()
-            # print(task_modis.status)
+            task_modis.start()
+            print(task_modis.status)
 
             task_labels.start()
             print(task_labels.status)
