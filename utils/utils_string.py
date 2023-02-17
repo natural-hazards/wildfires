@@ -21,5 +21,5 @@ def band2date_firecci(band_name) -> datetime.datetime.date:
 
 def band2date_mtbs(band_name) -> datetime.datetime.date:
 
-    str_date = re.match(r'\d{4}', band_name).group(0)
+    str_date = re.search(r'\d{4}', band_name).group(0)
     return datetime.datetime.strptime(str_date, '%Y').strftime('%Y')

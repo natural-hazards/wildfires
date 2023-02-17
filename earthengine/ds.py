@@ -45,6 +45,8 @@ class MTBSSeverity(Enum):
     LOW = 2
     MODERATE = 3
     HIGH = 4
+    INCREASE_GREENNESS = 5
+    NON_MAPPING_AREA = 6
 
 
 class MTBSRegion(Enum):

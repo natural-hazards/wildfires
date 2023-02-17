@@ -9,14 +9,18 @@ import pandas as pd
 
 from osgeo import gdal
 
-from utils.utils_string import band2date_firecci
+from earthengine.ds import FireLabelsCollection, MTBSRegion, MTBSSeverity
+from utils.utils_string import band2date_firecci, band2date_mtbs
 
 
 class DataAdapterTS(object):
 
     def __init__(self,
                  src_labels: str,
-                 cci_confidence_level: int = None):
+                 label_collection: FireLabelsCollection = FireLabelsCollection.ESA_FIRE_CCI,
+                 cci_confidence_level: int = None,
+                 mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
+                 mtbs_region: MTBSRegion = None):
 
         self._ds_labels = None
         self._df_dates_labels = None
@@ -24,8 +28,17 @@ class DataAdapterTS(object):
         self._src_labels = None
         self.src_labels = src_labels
 
+        self._label_collection = None
+        self.label_collection = label_collection
+
         self._cci_confidence_level = None
         self.cci_confidence_level = cci_confidence_level
+
+        self._mtbs_severity_from = None
+        self.mtbs_severity_from = mtbs_severity_from
+
+        self._mtbs_region = None
+        self.mtbs_region = mtbs_region
 
     @property
     def src_labels(self) -> str:
@@ -44,6 +57,22 @@ class DataAdapterTS(object):
         self._src_labels = fn
 
     @property
+    def label_collection(self) -> FireLabelsCollection:
+
+        return self._label_collection
+
+    @label_collection.setter
+    def label_collection(self, collection: FireLabelsCollection) -> None:
+
+        if self.label_collection == collection:
+            return
+
+        self.__reset()
+        self._label_collection = collection
+
+    # FireCII properties
+
+    @property
     def cci_confidence_level(self) -> int:
 
         return self._cci_confidence_level
@@ -58,6 +87,36 @@ class DataAdapterTS(object):
             raise ValueError('Confidence level for FireCCI labels must be positive int between 0 and 100!')
 
         self._cci_confidence_level = level
+
+    # MTBS properties
+
+    @property
+    def mtbs_severity_from(self) -> MTBSSeverity:
+
+        return self._mtbs_severity_from
+
+    @mtbs_severity_from.setter
+    def mtbs_severity_from(self, severity: MTBSSeverity) -> None:
+
+        if self._mtbs_severity_from == severity:
+            return
+
+        self.__reset()
+        self._mtbs_severity_from = severity
+
+    @property
+    def mtbs_region(self) -> MTBSRegion:
+
+        return self._mtbs_region
+
+    @mtbs_region.setter
+    def mtbs_region(self, region: MTBSRegion) -> None:
+
+        if self._mtbs_region == region:
+            return
+
+        self.__reset()
+        self._mtbs_region = region
 
     def __reset(self) -> None:
 
@@ -76,14 +135,16 @@ class DataAdapterTS(object):
     def dates_label(self) -> pd.DataFrame:
 
         if self._df_dates_labels is None:
-            self.__getBandDates_LABEL_CCI()
+            self.__getBandDates_LABEL()
 
         return self._df_dates_labels
 
     def getLabelBandDate(self, band_id: int):
 
+        # TODO reimplement
+
         if self._df_dates_labels is None:
-            self.__getBandDates_LABEL_CCI()
+            self.__getBandDates_LABEL()
 
         band_date = self._df_dates_labels.iloc[band_id][0]
         return band_date
@@ -119,9 +180,49 @@ class DataAdapterTS(object):
             lst.append(band_date)
 
         df_dates = pd.DataFrame(lst)
+        del lst
+        gc.collect()
+
         self._df_dates_labels = df_dates
 
+    def __getBandDates_LABEL_MTBS(self) -> None:
+
+        try:
+            self.__loadGeoTIFF_LABELS()
+        except IOError:
+            raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
+
+        lst = []
+
+        for raster_id in range(self.nbands_labels):
+
+            rs_band = self._ds_labels.GetRasterBand(raster_id + 1)
+            dsc_band = rs_band.GetDescription()
+
+            if self.mtbs_region.value in dsc_band:
+                band_date = band2date_mtbs(dsc_band)
+                lst.append(band_date)
+
+        df_dates = pd.DataFrame(lst)
+        del lst
+        gc.collect()
+
+        self._df_dates_labels = df_dates
+
+    def __getBandDates_LABEL(self) -> None:
+
+        if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
+            self.__getBandDates_LABEL_CCI()
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            self.__getBandDates_LABEL_MTBS()
+        else:
+            raise NotImplementedError
+
     def __processLabels_CCI(self) -> None:
+
+        pass
+
+    def __processLabels_MTBS(self) -> None:
 
         pass
 
@@ -130,6 +231,42 @@ class DataAdapterTS(object):
         pass
 
     # display functionality
+
+    def __imshow_label_MTBS(self, band_id: int) -> None:
+
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
+
+        if band_id < 0:
+            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+
+        if self.nbands_labels - 1 < band_id:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
+
+        # read band as raster image
+        img = self._ds_labels.GetRasterBand(band_id + 1).ReadAsArray()
+
+        # create mask for non-mapping areas
+        mask = np.zeros(shape=img.shape)
+        mask[img == MTBSSeverity.NON_MAPPING_AREA.value] = 1
+
+        # create label mask
+        label = np.zeros(shape=img.shape)
+        label[np.logical_and(img >= self.mtbs_severity_from.value, img <= MTBSSeverity.HIGH.value)] = 1
+
+        # create image for visualizing labels
+        img = np.ones(shape=img.shape + (3,), dtype=np.float32)
+        img[label == 1, 0:2] = 0; img[label == 1, 2] = 1  # display area affected by a fire in a red colour
+        if np.max(mask) == 1:
+            img[mask == 1, :] = 0  # display non-mapping areas in a black colour
+
+        # display labels
+        str_title = ''
+        opencv.imshow(str_title, img)
+        opencv.waitKey(0)
 
     def __imshow_label_CCI(self, band_id: int) -> None:
 
@@ -145,10 +282,10 @@ class DataAdapterTS(object):
         if self.nbands_labels - 1 < band_id:
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
 
-        # read band as raster
+        # read band as raster image
         img = self._ds_labels.GetRasterBand(band_id + 1).ReadAsArray()
 
-        # create binary mask
+        # create label mask
         img[img < self.cci_confidence_level] = 0  # not fire
         img[img >= self.cci_confidence_level] = 1  # fire
 
@@ -161,14 +298,32 @@ class DataAdapterTS(object):
 
     def imshow_label(self, band_id: int) -> None:
 
-        self.__imshow_label_CCI(band_id)
+        if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
+            self.__imshow_label_CCI(band_id)
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            self.__imshow_label_MTBS(band_id)
+        else:
+            raise NotImplementedError
 
 
 if __name__ == '__main__':
 
-    src_labels = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_labels.tif'
+    # fn_labels = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif'
+    fn_labels = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_mtbs_labels.tif'
+
+    # adapter
+    # adapter = DataAdapterTS(
+    #     src_labels=fn_labels,
+    #     label_collection=FireLabelsCollection.ESA_FIRE_CCI,
+    #     cci_confidence_level=70
+    # )
+
     adapter = DataAdapterTS(
-        src_labels=src_labels,
-        cci_confidence_level=70
+        src_labels=fn_labels,
+        label_collection=FireLabelsCollection.MTBS,
+        mtbs_region=MTBSRegion.ALASKA,
     )
-    adapter.imshow_label(2)
+
+    # print dates and show label
+    print(adapter.dates_label)
+    adapter.imshow_label(0)
