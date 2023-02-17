@@ -25,6 +25,12 @@ class DataAdapterTS(object):
         self._ds_labels = None
         self._df_dates_labels = None
 
+        self._map_band_ids = None
+
+        self._nbands_labels = -1
+
+        # properties
+
         self._src_labels = None
         self.src_labels = src_labels
 
@@ -39,6 +45,8 @@ class DataAdapterTS(object):
 
         self._mtbs_region = None
         self.mtbs_region = mtbs_region
+
+        self._labels_processed = False
 
     @property
     def src_labels(self) -> str:
@@ -121,15 +129,19 @@ class DataAdapterTS(object):
     def __reset(self) -> None:
 
         del self._df_dates_labels; self._df_dates_labels = None
+        del self._map_band_ids; self._map_band_ids = None
         gc.collect()
+
+        self._nbands_labels = -1
+        self._labels_processed = False
 
     @property
     def nbands_labels(self) -> int:
 
-        if self._ds_labels is None:
-            self.__loadGeoTIFF_LABELS()
+        if not self._labels_processed:
+            self.__processLabels()
 
-        return self._ds_labels.RasterCount
+        return self._nbands_labels
 
     @property
     def dates_label(self) -> pd.DataFrame:
@@ -163,10 +175,11 @@ class DataAdapterTS(object):
 
     def __getBandDates_LABEL_CCI(self) -> None:
 
-        try:
-            self.__loadGeoTIFF_LABELS()
-        except IOError:
-            raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
 
         lst = []
 
@@ -185,16 +198,18 @@ class DataAdapterTS(object):
 
         self._df_dates_labels = df_dates
 
-    def __getBandDates_LABEL_MTBS(self) -> None:
+    def __processBandDates_LABEL_MTBS(self) -> None:
 
-        try:
-            self.__loadGeoTIFF_LABELS()
-        except IOError:
-            raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
 
         lst = []
+        nbands = self._ds_labels.RasterCount
 
-        for raster_id in range(self.nbands_labels):
+        for raster_id in range(nbands):
 
             rs_band = self._ds_labels.GetRasterBand(raster_id + 1)
             dsc_band = rs_band.GetDescription()
@@ -202,6 +217,9 @@ class DataAdapterTS(object):
             if self.mtbs_region.value in dsc_band:
                 band_date = band2date_mtbs(dsc_band)
                 lst.append(band_date)
+
+        if not lst:
+            raise ValueError('Label file does not containe any useful data!')
 
         df_dates = pd.DataFrame(lst)
         del lst
@@ -214,7 +232,7 @@ class DataAdapterTS(object):
         if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
             self.__getBandDates_LABEL_CCI()
         elif self.label_collection == FireLabelsCollection.MTBS:
-            self.__getBandDates_LABEL_MTBS()
+            self.__processBandDates_LABEL_MTBS()
         else:
             raise NotImplementedError
 
@@ -224,19 +242,63 @@ class DataAdapterTS(object):
 
     def __processLabels_MTBS(self) -> None:
 
-        pass
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load a label file ({})'.format(self.src_labels))
+
+        # process date
+        try:
+            self.__processBandDates_LABEL_MTBS()
+        except ValueError:
+            raise ValueError('Cannot process date bands!')
+
+        # determine bands and their ids for region selection
+        if self._map_band_ids is None:
+            del self._map_band_ids; self._map_band_ids = None
+            gc.collect()  # invoke garbage collector
+
+        map_band_ids = {}
+        pos = 0
+
+        # get all number of bands in GeoTIFF data set
+        nbands = self._ds_labels.RasterCount
+
+        for band_id, raster_id in enumerate(range(nbands)):
+
+            rs_band = self._ds_labels.GetRasterBand(raster_id + 1)
+            dsc_band = rs_band.GetDescription()
+
+            # map id data set for selected region to band id
+            if self.mtbs_region.value in dsc_band:
+                map_band_ids[pos] = band_id + 1; pos += 1
+
+        if not map_band_ids:
+            raise ValueError('Label file {} does not contain any useful information for a selected region.')
+
+        self._map_band_ids = map_band_ids
+        self._nbands_labels = pos
+
+        # set that everything is done
+        self._labels_processed = True
 
     def __processLabels(self) -> None:
 
-        pass
+        if self.label_collection == FireLabelsCollection.ESA_FIRE_CCI:
+            self.__processLabels_CCI()
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            self.__processLabels_MTBS()
+        else:
+            raise NotImplementedError
 
     # display functionality
 
     def __imshow_label_MTBS(self, band_id: int) -> None:
 
-        if self._ds_labels is None:
+        if not self._labels_processed:
             try:
-                self.__loadGeoTIFF_LABELS()
+                self.__processLabels()
             except IOError:
                 raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
 
@@ -247,7 +309,8 @@ class DataAdapterTS(object):
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
 
         # read band as raster image
-        img = self._ds_labels.GetRasterBand(band_id + 1).ReadAsArray()
+        rs_band_id = self._map_band_ids[band_id]
+        img = self._ds_labels.GetRasterBand(rs_band_id).ReadAsArray()
 
         # create mask for non-mapping areas
         mask = np.zeros(shape=img.shape)
@@ -264,7 +327,7 @@ class DataAdapterTS(object):
             img[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
         # display labels
-        str_title = ''
+        str_title = 'MTBS labels ({}, {})'.format(self.mtbs_region.name, self.dates_label.iloc[band_id][0])
         opencv.imshow(str_title, img)
         opencv.waitKey(0)
 
