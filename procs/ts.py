@@ -78,7 +78,9 @@ class DataAdapterTS(object):
         self.__reset()
         self._label_collection = collection
 
-    # FireCII properties
+    """
+    FireCII properties
+    """
 
     @property
     def cci_confidence_level(self) -> int:
@@ -96,7 +98,9 @@ class DataAdapterTS(object):
 
         self._cci_confidence_level = level
 
-    # MTBS properties
+    """
+    MTBS properties
+    """
 
     @property
     def mtbs_severity_from(self) -> MTBSSeverity:
@@ -161,7 +165,9 @@ class DataAdapterTS(object):
         band_date = self._df_dates_labels.iloc[band_id][0]
         return band_date
 
-    # io functionality
+    """
+    IO functionality
+    """
 
     def __loadGeoTIFF_LABELS(self) -> None:
 
@@ -171,9 +177,11 @@ class DataAdapterTS(object):
         # load data set of labels from GeoTIFF
         self._ds_labels = gdal.Open(self.src_labels)
 
-    # process functionality
+    """
+    Process functionality (LABELS)
+    """
 
-    def __getBandDates_LABEL_CCI(self) -> None:
+    def __processBandDates_LABEL_CCI(self) -> None:
 
         if self._ds_labels is None:
             try:
@@ -182,17 +190,22 @@ class DataAdapterTS(object):
                 raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
 
         lst = []
+        nbands = self._ds_labels.RasterCount
 
-        for raster_id in range(self.nbands_labels):
+        for raster_id in range(nbands):
 
             rs_band = self._ds_labels.GetRasterBand(raster_id + 1)
             dsc_band = rs_band.GetDescription()
 
-            lst_date = band2date_firecci(dsc_band).split('-')
-            band_date = datetime.date(year=int(lst_date[0]), month=int(lst_date[1]), day=1)
-            lst.append(band_date)
+            if 'ConfidenceLevel' in dsc_band:
 
-        df_dates = pd.DataFrame(lst)
+                band_date = band2date_firecci(dsc_band)
+                lst.append(band_date)
+
+        if not lst:
+            raise ValueError('Label file does not contain any useful data!')
+
+        df_dates = pd.DataFrame(lst, columns=['Date'])
         del lst
         gc.collect()
 
@@ -219,7 +232,7 @@ class DataAdapterTS(object):
                 lst.append(band_date)
 
         if not lst:
-            raise ValueError('Label file does not containe any useful data!')
+            raise ValueError('Label file does not contain any useful data!')
 
         df_dates = pd.DataFrame(lst)
         del lst
@@ -230,7 +243,7 @@ class DataAdapterTS(object):
     def __getBandDates_LABEL(self) -> None:
 
         if self.label_collection == FireLabelsCollection.CCI:
-            self.__getBandDates_LABEL_CCI()
+            self.__processBandDates_LABEL_CCI()
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__processBandDates_LABEL_MTBS()
         else:
@@ -238,21 +251,44 @@ class DataAdapterTS(object):
 
     def __processLabels_CCI(self) -> None:
 
-        pass
+        try:
+            self.__processBandDates_LABEL_CCI()
+        except ValueError:
+            raise ValueError('Cannot process dates related to bands for CCI collection!')
+
+        # determine bands and their ids for region selection
+        if self._map_band_ids is None:
+            del self._map_band_ids; self._map_band_ids = None
+            gc.collect()
+
+        map_band_ids = {}
+        pos = 0
+
+        # get all number of bands in GeoTIFF data set
+        nbands = self._ds_labels.RasterCount
+
+        for band_id, raster_id in enumerate(range(nbands)):
+
+            rs_band = self._ds_labels.GetRasterBand(raster_id + 1)
+            dsc_band = rs_band.GetDescription()
+
+            # map id data set for selected region to band id
+            if 'ConfidenceLevel' in dsc_band:
+                map_band_ids[pos] = band_id + 1; pos += 1
+
+        if not map_band_ids:
+            raise ValueError('Label file {} does not contain any useful information for a selected region.')
+
+        self._map_band_ids = map_band_ids
+        self._nbands_labels = pos
 
     def __processLabels_MTBS(self) -> None:
-
-        if self._ds_labels is None:
-            try:
-                self.__loadGeoTIFF_LABELS()
-            except IOError:
-                raise IOError('Cannot load a label file ({})'.format(self.src_labels))
 
         # process date
         try:
             self.__processBandDates_LABEL_MTBS()
         except ValueError:
-            raise ValueError('Cannot process date bands!')
+            raise ValueError('Cannot process dates related to bands for MTBS collection!')
 
         # determine bands and their ids for region selection
         if self._map_band_ids is None:
@@ -280,10 +316,13 @@ class DataAdapterTS(object):
         self._map_band_ids = map_band_ids
         self._nbands_labels = pos
 
-        # set that everything is done
-        self._labels_processed = True
-
     def __processLabels(self) -> None:
+
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load a label file ({})'.format(self.src_labels))
 
         if self.label_collection == FireLabelsCollection.CCI:
             self.__processLabels_CCI()
@@ -292,7 +331,59 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    # display functionality
+        # set that everything is done
+        self._labels_processed = True
+
+    """
+    Display functionality
+    """
+
+    def __imshow_label_CCI(self, band_id: int) -> None:
+
+        if not self._labels_processed:
+            try:
+                self.__processLabels()
+            except IOError:
+                raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
+
+        if band_id < 0:
+            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+
+        if self.nbands_labels - 1 < band_id:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
+
+        rs_band_id = self._map_band_ids[band_id]
+
+        # confidence level
+        rs_cl = self._ds_labels.GetRasterBand(rs_band_id)
+        dsc_cl = rs_cl.GetDescription()
+
+        # observed flag
+        rs_mask = self._ds_labels.GetRasterBand(rs_band_id + 1)
+        dsc_mask = rs_mask.GetDescription()
+
+        # checking for sure to avoid problems in subsequent processing
+        if band2date_firecci(dsc_cl) != band2date_firecci(dsc_mask):
+            raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+
+        confidence_level = rs_cl.ReadAsArray()
+        mask = rs_mask.ReadAsArray()
+
+        confidence_level[confidence_level < self.cci_confidence_level] = 0
+        confidence_level[confidence_level >= self.cci_confidence_level] = 1
+
+        PIXEL_NOT_BURNABLE = -1
+        mask[mask <= PIXEL_NOT_BURNABLE] = 1
+
+        # label
+        label = np.ones(shape=confidence_level.shape + (3,), dtype=np.float32)
+        label[confidence_level == 1, 0:2] = 0; label[confidence_level == 1, 2] = 1  # display area affected by a fire in a red colour
+        if np.max(mask) == 1:
+            label[mask == 1, :] = 0  # display non-mapping areas in a black colour
+
+        str_title = 'CCI labels ({})'.format(self.dates_label.iloc[band_id][0])
+        opencv.imshow(str_title, label)
+        opencv.waitKey(0)
 
     def __imshow_label_MTBS(self, band_id: int) -> None:
 
@@ -331,34 +422,6 @@ class DataAdapterTS(object):
         opencv.imshow(str_title, img)
         opencv.waitKey(0)
 
-    def __imshow_label_CCI(self, band_id: int) -> None:
-
-        if self._ds_labels is None:
-            try:
-                self.__loadGeoTIFF_LABELS()
-            except IOError:
-                raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
-
-        if band_id < 0:
-            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-
-        if self.nbands_labels - 1 < band_id:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
-
-        # read band as raster image
-        img = self._ds_labels.GetRasterBand(band_id + 1).ReadAsArray()
-
-        # create label mask
-        img[img < self.cci_confidence_level] = 0  # not fire
-        img[img >= self.cci_confidence_level] = 1  # fire
-
-        band_date = self.getLabelBandDate(band_id)
-
-        # display
-        str_title = 'Labels ({}, {})'.format(band_date.year, calendar.month_name[band_date.month])
-        opencv.imshow(str_title, img.astype(np.float32))
-        opencv.waitKey(0)
-
     def imshow_label(self, band_id: int) -> None:
 
         if self.label_collection == FireLabelsCollection.CCI:
@@ -371,22 +434,22 @@ class DataAdapterTS(object):
 
 if __name__ == '__main__':
 
-    # fn_labels = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif'
-    fn_labels = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_mtbs_labels.tif'
+    fn_labels = 'tutorials/test_ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif'
+    # fn_labels = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_mtbs_labels.tif'
 
     # adapter
-    # adapter = DataAdapterTS(
-    #     src_labels=fn_labels,
-    #     label_collection=FireLabelsCollection.CCI,
-    #     cci_confidence_level=70
-    # )
-
     adapter = DataAdapterTS(
         src_labels=fn_labels,
-        label_collection=FireLabelsCollection.MTBS,
-        mtbs_region=MTBSRegion.ALASKA,
+        label_collection=FireLabelsCollection.CCI,
+        cci_confidence_level=70
     )
+
+    # adapter = DataAdapterTS(
+    #     src_labels=fn_labels,
+    #     label_collection=FireLabelsCollection.MTBS,
+    #     mtbs_region=MTBSRegion.ALASKA,
+    # )
 
     # print dates and show label
     print(adapter.dates_label)
-    adapter.imshow_label(0)
+    adapter.imshow_label(3)
