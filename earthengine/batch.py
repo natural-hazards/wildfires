@@ -274,7 +274,7 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         labels_bands = labels_filtered.toBands()
         if self.labels_collection == FireLabelsCollection.CCI:
             # avoid inconsistent types
-            labels_bands = labels_bands.toUint16()
+            labels_bands = labels_bands.toInt16()
 
         _prefix = '' if self.output_prefix is None else '{}_'.format(self.output_prefix)
         _folder = getRandomString(10) if self.gdrive_folder is None else self.gdrive_folder
@@ -331,7 +331,7 @@ if __name__ == '__main__':
     exporter.scale = 500  # pixel corresponds to resolution 500x500 meters
 
     exporter.task_description = 'MODIS-REFLECTANCE-AK-2004-APRIL-JULY-EPSG3338'
-    exporter.output_prefix = 'ak_april_july_2004_500_epsg3338'
+    exporter.output_prefix = 'test_ak_april_july_2004_500_epsg3338'
 
     exporter.start_date = start_date
     exporter.end_date = end_date
