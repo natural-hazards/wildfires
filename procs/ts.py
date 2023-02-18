@@ -9,7 +9,7 @@ import pandas as pd
 
 from osgeo import gdal
 
-from earthengine.ds import FireLabelsCollection, ModisIndex, MTBSRegion, MTBSSeverity
+from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands, MTBSRegion, MTBSSeverity
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
 
@@ -31,8 +31,9 @@ class DataAdapterTS(object):
         self._df_dates_labels = None
 
         self._map_band_id_label = None
+        self._map_start_satimgs = None
 
-        self._nbands_satimg = -1
+        self._nimages = -1
         self._nbands_labels = -1
 
         # properties (satellite image)
@@ -179,25 +180,28 @@ class DataAdapterTS(object):
         del self._map_band_id_label; self._map_band_id_label = None
         gc.collect()
 
-        self._nbands_satimg = -1
+        del self._df_dates_satimg; self._df_dates_satimg = None
+        del self._map_start_satimgs; self._map_start_satimgs = None
+
+        self._nimages = -1
         self._nbands_labels = -1
 
         self._satimg_processed = False
         self._labels_processed = False
 
     @property
-    def nbands_satimg(self) -> int:
+    def nimgs(self) -> int:
 
         if not self._satimg_processed:
-            self.__processSatImg()
+            self.__processMetaData_SATELLITE_IMG()
 
-        return self._nbands_satimg
+        return self._nimages
 
     @property
-    def dates_satimg(self) -> pd.DataFrame:
+    def satimg_dates(self) -> pd.DataFrame:
 
         if not self._satimg_processed:
-            self.__processSatImg()
+            self.__processMetaData_SATELLITE_IMG()
 
         return self._df_dates_satimg
 
@@ -210,7 +214,7 @@ class DataAdapterTS(object):
         return self._nbands_labels
 
     @property
-    def dates_label(self) -> pd.DataFrame:
+    def label_dates(self) -> pd.DataFrame:
 
         if self._df_dates_labels is None:
             self.__processBandDates_LABEL()
@@ -231,7 +235,7 @@ class DataAdapterTS(object):
     IO functionality
     """
 
-    def __loadGeoTIFF_SATIMG(self) -> None:
+    def __loadGeoTIFF_SATELLITE_IMG(self) -> None:
 
         if self._src_satimg is None:
             raise IOError('File related to modis data is not set!')
@@ -250,35 +254,38 @@ class DataAdapterTS(object):
         self._ds_labels = gdal.Open(self.src_labels)
 
     """
-    Process functionality (MODIS)
+    Processing meta data (SATELLITE IMAGE, MODIS)
     """
 
     def __processBandDates_SATIMG_MODIS_REFLECTANCE(self) -> None:
 
         nbands = self._ds_satimg.RasterCount
 
-        lst = []
+        unique_dates = set()
 
-        for band_id in range(0, nbands, 7):  # proportion of spectra is divided in 7 bands
+        for band_id in range(0, nbands):  # proportion of spectra is divided in 7 bands
 
             rs_band = self._ds_satimg.GetRasterBand(band_id + 1)
-            band_date = band2data_reflectance(rs_band.GetDescription())
-            lst.append(band_date)
+            band_dsc = rs_band.GetDescription()
 
-        if not lst:
+            if '_sur_refl_' in band_dsc:
+                band_date = band2data_reflectance(rs_band.GetDescription())
+                unique_dates.add(band_date)
+
+        if not unique_dates:
             raise ValueError('Label file does not contain any useful data!')
 
-        df_dates = pd.DataFrame(lst, columns=['Date'])
-        del lst
+        df_dates = pd.DataFrame(sorted(unique_dates), columns=['Date'])
+        del unique_dates
         gc.collect()
 
         self._df_dates_satimg = df_dates
 
-    def __processBandDates_SATIMG(self) -> None:
+    def __processBandDates_SATELLITE_IMG(self) -> None:
 
         if self._ds_satimg is None:
             try:
-                self.__loadGeoTIFF_SATIMG()
+                self.__loadGeoTIFF_SATELLITE_IMG()
             except IOError:
                 raise IOError('Cannot load a satellite imgs file ({})'.format(self.src_satimg))
 
@@ -287,21 +294,55 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    def __processSatImg(self) -> None:
+    def __processMetaData_SATIMG_MODIS_REFLECTANCE(self) -> None:
+
+        if self._map_start_satimgs is not None:
+            del self._map_start_satimgs; self._map_band_id_satimg = None
+            gc.collect()
+
+        map_start_satimg = {}
+        pos = 0
+
+        # get all number of bands in GeoTIFF data set
+        nbands = self._ds_satimg.RasterCount
+        last_date = 0
+
+        for band_id, raster_id in enumerate(range(nbands)):
+
+            rs_band = self._ds_satimg.GetRasterBand(raster_id + 1)
+            band_dsc = rs_band.GetDescription()
+            band_date = band2data_reflectance(band_dsc)
+
+            if '_sur_refl_' in band_dsc and last_date != band_date:
+                map_start_satimg[pos] = band_id + 1; pos += 1
+                last_date = band_date
+
+        if not map_start_satimg:
+            raise ValueError('Sattelite image file does not contain any useful data!')
+
+        self._map_start_satimgs = map_start_satimg
+        self._nimages = pos
+
+    def __processMetaData_SATELLITE_IMG(self) -> None:
 
         if self._ds_satimg is None:
             try:
-                self.__loadGeoTIFF_SATIMG()
+                self.__loadGeoTIFF_SATELLITE_IMG()
             except IOError:
                 raise IOError('Cannot load a label file ({})'.format(self.src_labels))
 
         if self._df_dates_satimg is None:
             try:
-                self.__processBandDates_SATIMG()
+                self.__processBandDates_SATELLITE_IMG()
             except ValueError:
                 raise ValueError('Cannot process dates related to bands for CCI collection!')
 
-        # TODO implement
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            self.__processMetaData_SATIMG_MODIS_REFLECTANCE()
+        else:
+            raise NotImplementedError
+
+        self._satimg_processed = True
 
     """
     Process functionality (LABELS)
@@ -371,7 +412,6 @@ class DataAdapterTS(object):
 
     def __processLabels_CCI(self) -> None:
 
-        # determine bands and their ids for region selection
         if self._map_band_id_label is None:
             del self._map_band_id_label; self._map_band_id_label = None
             gc.collect()
@@ -450,6 +490,52 @@ class DataAdapterTS(object):
         self._labels_processed = True
 
     """
+    Display functionality (SATELLITE IMAGE, MODIS)
+    """
+
+    def __imshow_SATELLITE_IMG_REFLECTANCE(self, img_id) -> None:
+
+        if not self._satimg_processed:
+            try:
+                self.__processMetaData_SATELLITE_IMG()
+            except IOError and ValueError:
+                raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
+
+        if img_id < 0:
+            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+
+        if self.nimgs - 1 < img_id:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nimgs))
+
+        band_start = self._map_start_satimgs[img_id]
+
+        ref_red = self._ds_satimg.GetRasterBand(band_start).ReadAsArray()
+        band_id = band_start + ModisReflectanceSpecralBands.BLUE.value - 1
+        ref_blue = self._ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        band_id = band_start + ModisReflectanceSpecralBands.GREEN.value - 1
+        ref_green = self._ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        # get image
+        img = np.zeros(shape=ref_red.shape + (3,), dtype=np.uint8)
+        img[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
+        img[:, :, 1] = (ref_green + 100.) / 16100. * 255.
+        img[:, :, 2] = (ref_red + 100.) / 16100. * 255.
+
+        enhanced_img = opencv.convertScaleAbs(img, alpha=5., beta=5.)
+        img = enhanced_img
+
+        str_title = 'MODIS Reflectance ({})'.format(self.satimg_dates.iloc[img_id]['Date'])
+        opencv.imshow(str_title, img)
+        opencv.waitKey(0)
+
+    def imshow(self, img_id: int) -> None:
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            self.__imshow_SATELLITE_IMG_REFLECTANCE(img_id)
+        else:
+            raise NotImplementedError
+
+    """
     Display functionality (LABELS)
     """
 
@@ -458,14 +544,14 @@ class DataAdapterTS(object):
         if not self._labels_processed:
             try:
                 self.__processLabels()
-            except IOError:
-                raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
+            except IOError and ValueError:
+                raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         if band_id < 0:
             raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
 
         if self.nbands_labels - 1 < band_id:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_labels))
 
         rs_band_id = self._map_band_id_label[band_id]
 
@@ -496,7 +582,7 @@ class DataAdapterTS(object):
         if np.max(mask) == 1:
             label[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
-        str_title = 'CCI labels ({})'.format(self.dates_label.iloc[band_id][0])
+        str_title = 'CCI labels ({})'.format(self.label_dates.iloc[band_id][0])
         opencv.imshow(str_title, label)
         opencv.waitKey(0)
 
@@ -533,7 +619,7 @@ class DataAdapterTS(object):
             img[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
         # display labels
-        str_title = 'MTBS labels ({}, {})'.format(self.mtbs_region.name, self.dates_label.iloc[band_id][0])
+        str_title = 'MTBS labels ({}, {})'.format(self.mtbs_region.name, self.label_dates.iloc[band_id][0])
         opencv.imshow(str_title, img)
         opencv.waitKey(0)
 
@@ -562,7 +648,7 @@ if __name__ == '__main__':
     # )
 
     # print dates and show label
-    # print(adapter.dates_label)
+    # print(adapter.label_dates)
     # adapter.imshow_label(3)
 
     adapter = DataAdapterTS(
@@ -572,12 +658,14 @@ if __name__ == '__main__':
         mtbs_region=MTBSRegion.ALASKA,
     )
 
-    print(adapter.dates_label)
-    print(adapter.dates_satimg)
-    # print(adapter.nbands_satimg)
+    print(adapter.label_dates)
+    print(adapter.satimg_dates)
+    print(adapter.nimgs)
+    adapter.imshow(14)
+    # print(adapter.nimgs)
 
     # print dates and show satellite image
 
     # print dates and show label
-    # print(adapter.dates_label)
+    # print(adapter.label_dates)
     # adapter.imshow_label(0)
