@@ -18,6 +18,8 @@ class DataAdapterTS(object):
     def __init__(self,
                  src_satimg: str,
                  src_labels: str,
+                 ds_start_date: datetime.date = None,
+                 ds_end_date: datetime.date = None,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  cci_confidence_level: int = None,
@@ -35,6 +37,13 @@ class DataAdapterTS(object):
 
         self._nimages = -1
         self._nbands_labels = -1
+
+        # properties training and test data set
+        self._ds_start_date = None
+        if ds_start_date is not None: self.ds_start_date = ds_start_date
+
+        self._ds_end_date = None
+        if ds_end_date is not None: self._ds_end_date = ds_end_date
 
         # properties (satellite image)
 
@@ -121,6 +130,38 @@ class DataAdapterTS(object):
 
         self.__reset()
         self._label_collection = collection
+
+    """
+    Training and test data set  properties
+    """
+
+    @property
+    def ds_start_date(self) -> datetime.date:
+
+        return self._ds_start_date
+
+    @ds_start_date.setter
+    def ds_start_date(self, d: datetime.date) -> None:
+
+        if self._ds_start_date == d:
+            return
+
+        # self.__reset()
+        self._ds_start_date = d
+
+    @property
+    def ds_end_date(self) -> datetime.date:
+
+        return self._ds_end_date
+
+    @ds_end_date.setter
+    def ds_end_date(self, d: datetime.date) -> None:
+
+        if self._ds_end_date == d:
+            return
+
+        # self.__reset()
+        self._ds_end_date = d
 
     """
     FireCII properties
@@ -490,6 +531,80 @@ class DataAdapterTS(object):
         self._labels_processed = True
 
     """
+    Creating date set
+    """
+
+    def __loadLabels_CCI(self) -> (np.ndarray, np.ndarray):
+
+        if not self._labels_processed:
+            try:
+                self.__processLabels()
+            except IOError and ValueError:
+                raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
+
+        start_date = self.ds_start_date
+        start_date = datetime.date(year=start_date.year, month=start_date.month, day=1)
+
+        start_band_id = self._df_dates_labels.index[self._df_dates_labels['Date'] == start_date][0]
+        start_band_id = self._map_band_id_label[start_band_id]
+
+        end_date = self.ds_end_date
+        end_date = datetime.date(year=end_date.year, month=end_date.month, day=1)
+
+        end_band_id = self._df_dates_labels.index[self._df_dates_labels['Date'] == end_date][0]
+        end_band_id = self._map_band_id_label[end_band_id]
+
+        lst_confidence = []
+        lst_masks = []
+
+        for band_id in range(start_band_id, end_band_id + 1, 2):
+
+            lst_confidence.append(self._ds_labels.GetRasterBand(band_id).ReadAsArray())
+            lst_masks.append(self._ds_labels.GetRasterBand(band_id + 1).ReadAsArray())
+
+        # mask
+        np_mask = np.array(lst_masks)
+        np_mask[np_mask <= -1] = 1
+        np_mask = np.logical_not(np.max(np_mask, axis=0))
+
+        # invoke garbage collector
+        gc.collect()
+
+        # convert confidence to labels (using threshold)
+        np_confidence = np.array(lst_confidence)
+        np_confidence = np.max(np_confidence, axis=0)
+
+        # invoke garbage collector
+        gc.collect()
+
+        np_confidence[np_confidence < self.cci_confidence_level] = 0
+        np_confidence[np_confidence >= self.cci_confidence_level] = 1
+
+        return np_confidence, np_mask
+
+    def __loadLabels(self) -> (np.ndarray, np.ndarray):
+
+        if self.label_collection == FireLabelsCollection.CCI:
+            return self.__loadLabels_CCI()
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            raise NotImplementedError
+        else:
+            raise NotImplementedError
+
+    def createDataset(self) -> None:
+
+        # load labels
+        labels, mask = self.__loadLabels()
+
+        opencv.imshow('Labels', labels.astype(np.float32))
+        opencv.waitKey(0)
+
+        opencv.imshow('Binary mask', mask.astype(np.float32))
+        opencv.waitKey(0)
+
+        pass
+
+    """
     Display functionality (SATELLITE IMAGE, MODIS)
     """
 
@@ -652,7 +767,7 @@ class DataAdapterTS(object):
     Display functionality satellite image combined with labels
     """
 
-    def __findLabelsForSource_CCI(self, img_id: int) -> np.ndarray:
+    def __getLabelsForSatImgDate_CCI(self, img_id: int) -> np.ndarray:
 
         date_satimg = self._df_dates_satimg.iloc[img_id]['Date']
         date_satimg = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
@@ -668,7 +783,7 @@ class DataAdapterTS(object):
 
         return confidence_level
 
-    def __findLabelsForSource_MTBS(self, img_id: int) -> np.ndarray:
+    def __getLabelsForSatImgDate_MTBS(self, img_id: int) -> np.ndarray:
 
         date_satimg = self._df_dates_satimg.iloc[img_id]['Date']
         date_satimg = datetime.date(year=date_satimg.year, month=1, day=1)
@@ -687,9 +802,9 @@ class DataAdapterTS(object):
     def __getLabelsForSource(self, img_id: int) -> np.ndarray:
 
         if self.label_collection == FireLabelsCollection.CCI:
-            return self.__findLabelsForSource_CCI(img_id)
+            return self.__getLabelsForSatImgDate_CCI(img_id)
         elif self.label_collection == FireLabelsCollection.MTBS:
-            return self.__findLabelsForSource_MTBS(img_id)
+            return self.__getLabelsForSatImgDate_MTBS(img_id)
         else:
             raise NotImplementedError
 
@@ -742,9 +857,19 @@ if __name__ == '__main__':
         cci_confidence_level=70
     )
 
-    adapter.imshow(2)
-    adapter.imshow_label(2)
-    adapter.imshow_with_labels(10)
+    label_dates = adapter.label_dates
+    satimg_dates = adapter.satimg_dates
+
+    print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
+    adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
+    print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
+    adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
+
+    adapter.createDataset()
+
+    # adapter.imshow(2)
+    # adapter.imshow_label(2)
+    # adapter.imshow_with_labels(10)
 
 
     # adapter = DataAdapterTS(
