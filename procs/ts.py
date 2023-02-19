@@ -536,12 +536,6 @@ class DataAdapterTS(object):
 
     def __loadLabels_CCI(self) -> (np.ndarray, np.ndarray):
 
-        if not self._labels_processed:
-            try:
-                self.__processLabels()
-            except IOError and ValueError:
-                raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
-
         start_date = self.ds_start_date
         start_date = datetime.date(year=start_date.year, month=start_date.month, day=1)
 
@@ -564,30 +558,88 @@ class DataAdapterTS(object):
 
         # mask
         np_mask = np.array(lst_masks)
+        # clean up
+        del lst_masks; gc.collect()
+
         np_mask[np_mask <= -1] = 1
         np_mask = np.logical_not(np.max(np_mask, axis=0))
-
-        # invoke garbage collector
-        gc.collect()
+        gc.collect()  # invoke garbage collector
 
         # convert confidence to labels (using threshold)
         np_confidence = np.array(lst_confidence)
-        np_confidence = np.max(np_confidence, axis=0)
+        del lst_confidence; gc.collect()
 
-        # invoke garbage collector
-        gc.collect()
+        np_confidence = np.max(np_confidence, axis=0)
+        gc.collect()  # invoke garbage collector
 
         np_confidence[np_confidence < self.cci_confidence_level] = 0
         np_confidence[np_confidence >= self.cci_confidence_level] = 1
 
         return np_confidence, np_mask
 
+    def __loadLabels_MTBS(self) -> (np.ndarray, np.ndarray):
+
+        start_date = self.ds_start_date
+        start_date = datetime.date(year=start_date.year, month=1, day=1)
+
+        start_band_id = self._df_dates_labels.index[self._df_dates_labels['Date'] == start_date][0]
+        start_band_id = self._map_band_id_label[start_band_id]
+
+        end_date = self.ds_end_date
+        end_date = datetime.date(year=end_date.year, month=1, day=1)
+
+        if start_date == end_date:
+            end_band_id = start_band_id
+        else:
+            end_band_id = self._df_dates_labels.index[self._df_dates_labels['Date'] == end_date][0]
+            end_band_id = self._map_band_id_label[end_band_id]
+
+        lst_labels = []
+        lst_masks = []
+
+        for band_id in range(start_band_id, end_band_id + 1):
+
+            # invoke garbage collector
+            gc.collect()
+
+            np_severity = self._ds_labels.GetRasterBand(band_id).ReadAsArray()
+
+            np_label = np.zeros(shape=np_severity.shape, dtype=np_severity.dtype)
+            np_label[np.logical_and(np_label >= self.mtbs_severity_from.value, np_label <= MTBSSeverity.HIGH.value)] = 1
+            lst_labels.append(np_severity)
+
+            np_mask = np.ones(shape=np_severity.shape, dtype=np_severity.dtype)
+            np_mask[np_severity == MTBSSeverity.NON_MAPPING_AREA.value] = 0
+            lst_masks.append(np_mask)
+
+        # create array of labels
+        np_labels = np.array(lst_labels)
+        del lst_labels; gc.collect()
+
+        np_label = np.max(np_labels, axis=0)
+        gc.collect()  # invoke garbage collector
+
+        # create binary mask
+        np_masks = np.array(lst_masks)
+        del lst_masks; gc.collect()
+
+        np_mask = np.max(np_masks, axis=0)
+        gc.collect()
+
+        return np_label, np_mask
+
     def __loadLabels(self) -> (np.ndarray, np.ndarray):
+
+        if not self._labels_processed:
+            try:
+                self.__processLabels()
+            except IOError and ValueError:
+                raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         if self.label_collection == FireLabelsCollection.CCI:
             return self.__loadLabels_CCI()
         elif self.label_collection == FireLabelsCollection.MTBS:
-            raise NotImplementedError
+            return self.__loadLabels_MTBS()
         else:
             raise NotImplementedError
 
@@ -850,15 +902,33 @@ if __name__ == '__main__':
     fn_labels_mtbs = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_mtbs_labels.tif'
 
     # adapter
+    # adapter = DataAdapterTS(
+    #     src_satimg=fn_satimg,
+    #     src_labels=fn_labels_cci,
+    #     label_collection=FireLabelsCollection.CCI,
+    #     cci_confidence_level=70
+    # )
+    #
+    # label_dates = adapter.label_dates
+    # satimg_dates = adapter.satimg_dates
+    #
+    # print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
+    # adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
+    # print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
+    # adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
+    #
+    # adapter.createDataset()
+
+    # adapter.imshow(2)
+    # adapter.imshow_label(2)
+    # adapter.imshow_with_labels(10)
+
     adapter = DataAdapterTS(
         src_satimg=fn_satimg,
-        src_labels=fn_labels_cci,
-        label_collection=FireLabelsCollection.CCI,
-        cci_confidence_level=70
+        src_labels=fn_labels_mtbs,
+        label_collection=FireLabelsCollection.MTBS,
+        mtbs_region=MTBSRegion.ALASKA,
     )
-
-    label_dates = adapter.label_dates
-    satimg_dates = adapter.satimg_dates
 
     print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
     adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
@@ -867,17 +937,6 @@ if __name__ == '__main__':
 
     adapter.createDataset()
 
-    # adapter.imshow(2)
-    # adapter.imshow_label(2)
-    # adapter.imshow_with_labels(10)
-
-
-    # adapter = DataAdapterTS(
-    #     src_satimg=fn_satimg,
-    #     src_labels=fn_labels_mtbs,
-    #     label_collection=FireLabelsCollection.MTBS,
-    #     mtbs_region=MTBSRegion.ALASKA,
-    # )
     #
     # adapter.imshow(0)
     # adapter.imshow_label(0)
