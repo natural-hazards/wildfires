@@ -38,6 +38,9 @@ class DataAdapterTS(object):
         self._nimages = -1
         self._nbands_labels = -1
 
+        # final data set
+        self._ds_timeseries = None
+
         # properties training and test data set
         self._ds_start_date = None
         if ds_start_date is not None: self.ds_start_date = ds_start_date
@@ -146,7 +149,9 @@ class DataAdapterTS(object):
         if self._ds_start_date == d:
             return
 
-        # self.__reset()
+        del self._ds_timeseries; self._ds_timeseries = None
+        gc.collect()
+
         self._ds_start_date = d
 
     @property
@@ -160,7 +165,9 @@ class DataAdapterTS(object):
         if self._ds_end_date == d:
             return
 
-        # self.__reset()
+        del self._ds_timeseries; self._ds_timeseries = None
+        gc.collect()
+
         self._ds_end_date = d
 
     """
@@ -531,7 +538,7 @@ class DataAdapterTS(object):
         self._labels_processed = True
 
     """
-    Creating date set
+    Creating data set
     """
 
     def __loadLabels_CCI(self) -> (np.ndarray, np.ndarray):
@@ -643,18 +650,68 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
+    def __loadTimeSeries_REFLECTANCE(self, mask: np.ndarray = None) -> np.ndarray:
+
+        start_date = self.ds_start_date
+        if start_date not in self._df_dates_satimg['Date'].values:
+            raise AttributeError('Start date does not correspond any band!')
+
+        end_date = self.ds_end_date
+        if end_date not in self._df_dates_satimg['Date'].values:
+            raise AttributeError('End date does not correspont any band!')
+
+        start_band_id = self._df_dates_satimg['Date'].index[self._df_dates_satimg['Date'] == start_date][0]
+        start_band_id = self._map_start_satimgs[start_band_id]
+
+        end_band_id = self._df_dates_satimg['Date'].index[self._df_dates_satimg['Date'] == end_date][0]
+        end_band_id = self._map_start_satimgs[end_band_id]
+
+        lst_bands = []
+
+        for img_start in range(start_band_id, end_band_id + 1, 7):
+
+            # getting reflectance bands
+            for band_id in range(img_start, img_start + 7):
+
+                np_band = self._ds_satimg.GetRasterBand(band_id).ReadAsArray()
+                lst_bands.append(np_band)
+
+                # TODO process nan values
+
+        img_ts = np.array(lst_bands)
+        del lst_bands; gc.collect()
+
+        img_ts = img_ts.reshape((img_ts.shape[0], -1)).T
+        ts_reflectance = img_ts[mask.reshape(-1) == 1, :].astype(np.float32)
+
+        return ts_reflectance
+
+    def __loadTimeSeries(self, mask: np.ndarray = None) -> np.ndarray:
+
+        if not self._satimg_processed:
+            try:
+                self.__processMetaData_SATELLITE_IMG()
+            except IOError and ValueError:
+                raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            return self.__loadTimeSeries_REFLECTANCE(mask)
+        else:
+            raise NotImplementedError
+
     def createDataset(self) -> None:
+
+        if self._ds_timeseries:
+            return
 
         # load labels
         labels, mask = self.__loadLabels()
 
-        opencv.imshow('Labels', labels.astype(np.float32))
-        opencv.waitKey(0)
+        # load time series used mask
+        ts = self.__loadTimeSeries(mask)
+        labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
-        opencv.imshow('Binary mask', mask.astype(np.float32))
-        opencv.waitKey(0)
-
-        pass
+        self._ds_timeseries = (ts, labels)
 
     """
     Display functionality (SATELLITE IMAGE, MODIS)
