@@ -493,19 +493,7 @@ class DataAdapterTS(object):
     Display functionality (SATELLITE IMAGE, MODIS)
     """
 
-    def __imshow_SATELLITE_IMG_REFLECTANCE(self, img_id) -> None:
-
-        if not self._satimg_processed:
-            try:
-                self.__processMetaData_SATELLITE_IMG()
-            except IOError and ValueError:
-                raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
-
-        if img_id < 0:
-            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-
-        if self.nimgs - 1 < img_id:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nimgs))
+    def __getSatelliteImageArray_REFLECTANCE(self, img_id: int) -> np.ndarray:
 
         band_start = self._map_start_satimgs[img_id]
 
@@ -521,11 +509,35 @@ class DataAdapterTS(object):
         img[:, :, 1] = (ref_green + 100.) / 16100. * 255.
         img[:, :, 2] = (ref_red + 100.) / 16100. * 255.
 
+        return img
+
+    def __getSatelliteImageArray(self, img_id: int) -> np.ndarray:
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            return self.__getSatelliteImageArray_REFLECTANCE(img_id)
+        else:
+            raise NotImplementedError
+
+    def __imshow_SATELLITE_IMG_REFLECTANCE(self, img_id) -> None:
+
+        if not self._satimg_processed:
+            try:
+                self.__processMetaData_SATELLITE_IMG()
+            except IOError and ValueError:
+                raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
+
+        if img_id < 0:
+            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+
+        if self.nimgs - 1 < img_id:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nimgs))
+
+        img = self.__getSatelliteImageArray(img_id)
+        # increase image brightness
         enhanced_img = opencv.convertScaleAbs(img, alpha=5., beta=5.)
-        img = enhanced_img
 
         str_title = 'MODIS Reflectance ({})'.format(self.satimg_dates.iloc[img_id]['Date'])
-        opencv.imshow(str_title, img)
+        opencv.imshow(str_title, enhanced_img)
         opencv.waitKey(0)
 
     def imshow(self, img_id: int) -> None:
@@ -582,7 +594,10 @@ class DataAdapterTS(object):
         if np.max(mask) == 1:
             label[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
-        str_title = 'CCI labels ({})'.format(self.label_dates.iloc[band_id][0])
+        label_date = self.label_dates.iloc[band_id]['Date']
+        str_label_date = '{:4}-{:02d}-{:02d}'.format(label_date.year, label_date.month, label_date.day)
+
+        str_title = 'CCI labels ({})'.format(str_label_date)
         opencv.imshow(str_title, label)
         opencv.waitKey(0)
 
@@ -619,7 +634,10 @@ class DataAdapterTS(object):
             img[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
         # display labels
-        str_title = 'MTBS labels ({}, {})'.format(self.mtbs_region.name, self.label_dates.iloc[band_id][0])
+        label_date = self.label_dates.iloc[band_id]['Date']
+        str_label_date = '{:4}-{:02d}-{:02d}'.format(label_date.year, label_date.month, label_date.day)
+
+        str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, str_label_date)
         opencv.imshow(str_title, img)
         opencv.waitKey(0)
 
@@ -632,6 +650,89 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
+    """
+    Display functionality satellite image combined with labels
+    """
+
+    def __findLabelsForSource_CCI(self, img_id: int) -> np.ndarray:
+
+        date_satimg = self._df_dates_satimg.iloc[img_id]['Date']
+        # remove day
+        date_satimg = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
+        date_satimg = pd.Timestamp(date_satimg)
+
+        # get index of corresponding labels
+        label_index = self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0]
+        rs_band_id = self._map_band_id_label[label_index]
+
+        confidence_level = self._ds_labels.GetRasterBand(rs_band_id).ReadAsArray()
+
+        confidence_level[confidence_level < self.cci_confidence_level] = 0
+        confidence_level[confidence_level >= self.cci_confidence_level] = 1
+
+        return confidence_level
+
+    def __findLabelsForSource_MTBS(self, img_id: int) -> np.ndarray:
+
+        date_satimg = self._df_dates_satimg[img_id]['Date']
+        # remove day and year
+        date_satimg = date_satimg(year=date_satimg.year, month=1, day=1)
+        date_satimg = pd.Timestamp(date_satimg)
+
+        # get index of corresponding labels
+        label_index = self._df_dates_labels.index[self._df_dates_labels == date_satimg][0]
+        rs_band_id = self._map_band_id_label[label_index]
+
+        # get severity
+        severity_fire = self._ds_labels.GetRasterBand(rs_band_id).ReadAsArray()
+        label = np.zeros(shape=severity_fire.shape)
+        label[np.logical_and(severity_fire >= self.mtbs_severity_from.value, severity_fire <= MTBSSeverity.HIGH.value)] = 1
+
+        return label
+
+    def __findLabelsForSource(self, img_id: int) -> np.ndarray:
+
+        if self.label_collection == FireLabelsCollection.CCI:
+            return self.__findLabelsForSource_CCI(img_id)
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            return self.__findLabelsForSource_MTBS(img_id)
+        else:
+            raise NotImplementedError
+
+    def __imshow_SATELLITE_IMG_REFLECTANCE_WITH_LABELS(self, img_id: int):
+
+        if not self._labels_processed:
+            try:
+                self.__processLabels()
+            except IOError and ValueError:
+                raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
+
+        if not self._satimg_processed:
+            try:
+                self.__processMetaData_SATELLITE_IMG()
+            except IOError and ValueError:
+                raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
+
+        satimg = self.__getSatelliteImageArray(img_id)
+        # increase image brightness
+        satimg = opencv.convertScaleAbs(satimg, alpha=5., beta=5.)
+
+        labels = self.__findLabelsForSource(img_id)
+        satimg[labels == 1, 0:2] = 0; satimg[labels == 1, 2] = 255
+
+        ref_date = self.satimg_dates.iloc[img_id]['Date']
+        str_title = 'MODIS Reflectance ({:4}-{:02d}-{:02d})'.format(ref_date.year, ref_date.month, ref_date.day)
+
+        opencv.imshow(str_title, satimg)
+        opencv.waitKey(0)
+
+    def imshow_with_labels(self, img_id: int) -> None:
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            self.__imshow_SATELLITE_IMG_REFLECTANCE_WITH_LABELS(img_id)
+        else:
+            raise NotImplementedError
+
 
 if __name__ == '__main__':
 
@@ -640,28 +741,35 @@ if __name__ == '__main__':
     fn_labels_mtbs = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_mtbs_labels.tif'
 
     # adapter
-    # adapter = DataAdapterTS(
-    #     src_satimg=fn_satimg,
-    #     src_labels=fn_labels_cci,
-    #     label_collection=FireLabelsCollection.CCI,
-    #     cci_confidence_level=70
-    # )
-
-    # print dates and show label
-    # print(adapter.label_dates)
-    # adapter.imshow_label(3)
-
     adapter = DataAdapterTS(
         src_satimg=fn_satimg,
-        src_labels=fn_labels_mtbs,
-        label_collection=FireLabelsCollection.MTBS,
-        mtbs_region=MTBSRegion.ALASKA,
+        src_labels=fn_labels_cci,
+        label_collection=FireLabelsCollection.CCI,
+        cci_confidence_level=70
     )
 
+    # print dates and show label
     print(adapter.label_dates)
     print(adapter.satimg_dates)
-    print(adapter.nimgs)
-    adapter.imshow(14)
+
+    adapter.imshow_label(0)
+
+    # for img_id in range(adapter.nimgs):
+    #     adapter.imshow_with_labels(img_id)
+    #     opencv.waitKey(0)
+    #     opencv.destroyAllWindows()
+
+    # adapter = DataAdapterTS(
+    #     src_satimg=fn_satimg,
+    #     src_labels=fn_labels_mtbs,
+    #     label_collection=FireLabelsCollection.MTBS,
+    #     mtbs_region=MTBSRegion.ALASKA,
+    # )
+    #
+    # print(adapter.label_dates)
+    # print(adapter.satimg_dates)
+    # print(adapter.nimgs)
+    # adapter.imshow_with_labels(14)
     # print(adapter.nimgs)
 
     # print dates and show satellite image
