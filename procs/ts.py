@@ -595,9 +595,8 @@ class DataAdapterTS(object):
             label[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
         label_date = self.label_dates.iloc[band_id]['Date']
-        str_label_date = '{:4}-{:02d}-{:02d}'.format(label_date.year, label_date.month, label_date.day)
+        str_title = 'CCI labels ({}, {})'.format(label_date.year, calendar.month_name[label_date.month])
 
-        str_title = 'CCI labels ({})'.format(str_label_date)
         opencv.imshow(str_title, label)
         opencv.waitKey(0)
 
@@ -635,9 +634,8 @@ class DataAdapterTS(object):
 
         # display labels
         label_date = self.label_dates.iloc[band_id]['Date']
-        str_label_date = '{:4}-{:02d}-{:02d}'.format(label_date.year, label_date.month, label_date.day)
+        str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, label_date.year)
 
-        str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, str_label_date)
         opencv.imshow(str_title, img)
         opencv.waitKey(0)
 
@@ -657,9 +655,7 @@ class DataAdapterTS(object):
     def __findLabelsForSource_CCI(self, img_id: int) -> np.ndarray:
 
         date_satimg = self._df_dates_satimg.iloc[img_id]['Date']
-        # remove day
         date_satimg = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
-        date_satimg = pd.Timestamp(date_satimg)
 
         # get index of corresponding labels
         label_index = self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0]
@@ -674,13 +670,11 @@ class DataAdapterTS(object):
 
     def __findLabelsForSource_MTBS(self, img_id: int) -> np.ndarray:
 
-        date_satimg = self._df_dates_satimg[img_id]['Date']
-        # remove day and year
-        date_satimg = date_satimg(year=date_satimg.year, month=1, day=1)
-        date_satimg = pd.Timestamp(date_satimg)
+        date_satimg = self._df_dates_satimg.iloc[img_id]['Date']
+        date_satimg = datetime.date(year=date_satimg.year, month=1, day=1)
 
         # get index of corresponding labels
-        label_index = self._df_dates_labels.index[self._df_dates_labels == date_satimg][0]
+        label_index = self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0]
         rs_band_id = self._map_band_id_label[label_index]
 
         # get severity
@@ -690,7 +684,7 @@ class DataAdapterTS(object):
 
         return label
 
-    def __findLabelsForSource(self, img_id: int) -> np.ndarray:
+    def __getLabelsForSource(self, img_id: int) -> np.ndarray:
 
         if self.label_collection == FireLabelsCollection.CCI:
             return self.__findLabelsForSource_CCI(img_id)
@@ -717,11 +711,11 @@ class DataAdapterTS(object):
         # increase image brightness
         satimg = opencv.convertScaleAbs(satimg, alpha=5., beta=5.)
 
-        labels = self.__findLabelsForSource(img_id)
+        labels = self.__getLabelsForSource(img_id)
         satimg[labels == 1, 0:2] = 0; satimg[labels == 1, 2] = 255
 
         ref_date = self.satimg_dates.iloc[img_id]['Date']
-        str_title = 'MODIS Reflectance ({:4}-{:02d}-{:02d})'.format(ref_date.year, ref_date.month, ref_date.day)
+        str_title = 'MODIS Reflectance ({})'.format(ref_date)
 
         opencv.imshow(str_title, satimg)
         opencv.waitKey(0)
@@ -748,16 +742,10 @@ if __name__ == '__main__':
         cci_confidence_level=70
     )
 
-    # print dates and show label
-    print(adapter.label_dates)
-    print(adapter.satimg_dates)
+    adapter.imshow(2)
+    adapter.imshow_label(2)
+    adapter.imshow_with_labels(10)
 
-    adapter.imshow_label(0)
-
-    # for img_id in range(adapter.nimgs):
-    #     adapter.imshow_with_labels(img_id)
-    #     opencv.waitKey(0)
-    #     opencv.destroyAllWindows()
 
     # adapter = DataAdapterTS(
     #     src_satimg=fn_satimg,
@@ -766,9 +754,16 @@ if __name__ == '__main__':
     #     mtbs_region=MTBSRegion.ALASKA,
     # )
     #
+    # adapter.imshow(0)
+    # adapter.imshow_label(0)
+    # adapter.imshow_with_labels(0)
+    #
     # print(adapter.label_dates)
     # print(adapter.satimg_dates)
     # print(adapter.nimgs)
+    #
+    # adapter.imshow_with_labels(0)
+
     # adapter.imshow_with_labels(14)
     # print(adapter.nimgs)
 
