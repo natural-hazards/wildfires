@@ -612,8 +612,8 @@ class DataAdapterTS(object):
             np_severity = self._ds_labels.GetRasterBand(band_id).ReadAsArray()
 
             np_label = np.zeros(shape=np_severity.shape, dtype=np_severity.dtype)
-            np_label[np.logical_and(np_label >= self.mtbs_severity_from.value, np_label <= MTBSSeverity.HIGH.value)] = 1
-            lst_labels.append(np_severity)
+            np_label[np.logical_and(np_severity >= self.mtbs_severity_from.value, np_severity <= MTBSSeverity.HIGH.value)] = 1
+            lst_labels.append(np_label)
 
             np_mask = np.ones(shape=np_severity.shape, dtype=np_severity.dtype)
             np_mask[np_severity == MTBSSeverity.NON_MAPPING_AREA.value] = 0
@@ -640,7 +640,7 @@ class DataAdapterTS(object):
         if not self._labels_processed:
             try:
                 self.__processLabels()
-            except IOError and ValueError:
+            except IOError or ValueError:
                 raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         if self.label_collection == FireLabelsCollection.CCI:
@@ -691,7 +691,7 @@ class DataAdapterTS(object):
         if not self._satimg_processed:
             try:
                 self.__processMetaData_SATELLITE_IMG()
-            except IOError and ValueError:
+            except IOError or ValueError:
                 raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
@@ -699,19 +699,34 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    def createDataset(self) -> None:
+    def __createDataset(self) -> None:
 
         if self._ds_timeseries:
             return
 
         # load labels
-        labels, mask = self.__loadLabels()
+        try:
+            labels, mask = self.__loadLabels()
+        except IOError:
+            raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         # load time series used mask
-        ts = self.__loadTimeSeries(mask)
+        try:
+            ts = self.__loadTimeSeries(mask)
+        except IOError:
+            raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
         labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
         self._ds_timeseries = (ts, labels)
+
+        # TODO data transformation
+
+    def getDataset(self) -> tuple:
+
+        if self._ds_timeseries is None:
+            self.__createDataset()
+
+        return self._ds_timeseries
 
     """
     Display functionality (SATELLITE IMAGE, MODIS)
@@ -993,6 +1008,7 @@ if __name__ == '__main__':
     adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
 
     adapter.createDataset()
+    # TODO get data set
 
     #
     # adapter.imshow(0)

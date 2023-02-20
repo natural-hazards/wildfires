@@ -18,7 +18,7 @@ class elapsed_timer(object):
 
     def __enter__(self):
 
-        print(self._title, end=' ', flush=True)
+        print('Start event: \'{}\'.'.format(self._title), flush=True)
         self._start = default_timer()
 
     def __exit__(self,
@@ -27,4 +27,4 @@ class elapsed_timer(object):
                  traceback):
 
         self._end = default_timer()
-        print('takes {:.2f}s'.format(self._end - self._start))
+        print('Finnish event: \'{}\'. It takes {:.2f}s.'.format(self._title, self._end - self._start), flush=True)
