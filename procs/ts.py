@@ -12,6 +12,8 @@ from osgeo import gdal
 from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands, MTBSRegion, MTBSSeverity
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
+from utils.time import elapsed_timer
+
 
 class DataAdapterTS(object):
 
@@ -635,7 +637,7 @@ class DataAdapterTS(object):
 
         return np_label, np_mask
 
-    def __loadLabels(self) -> (np.ndarray, np.ndarray):
+    def __createLabels(self) -> (np.ndarray, np.ndarray):
 
         if not self._labels_processed:
             try:
@@ -686,7 +688,7 @@ class DataAdapterTS(object):
 
         return ts_reflectance
 
-    def __loadTimeSeries(self, mask: np.ndarray = None) -> np.ndarray:
+    def __createTimeSeries(self, mask: np.ndarray = None) -> np.ndarray:
 
         if not self._satimg_processed:
             try:
@@ -706,17 +708,20 @@ class DataAdapterTS(object):
 
         # load labels
         try:
-            labels, mask = self.__loadLabels()
+            with elapsed_timer('Creating labels'):
+                labels, mask = self.__createLabels()
         except IOError:
             raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         # load time series used mask
         try:
-            ts = self.__loadTimeSeries(mask)
+            with elapsed_timer('Creating time series date set'):
+                ts = self.__createTimeSeries(mask)
         except IOError:
             raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
         labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
+        # set data set
         self._ds_timeseries = (ts, labels)
 
         # TODO data transformation
@@ -1007,7 +1012,7 @@ if __name__ == '__main__':
     print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
     adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
 
-    adapter.createDataset()
+    adapter.getDataset()
     # TODO get data set
 
     #
