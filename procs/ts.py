@@ -28,7 +28,8 @@ from utils.plots import imshow
 class DatasetTransformOP(Enum):
 
     NONE = 0
-    PCA = 1
+    STANDARTIZE_ZSCORE = 1
+    PCA = 2
 
 
 class DataAdapterTS(object):
@@ -928,13 +929,29 @@ class DataAdapterTS(object):
 
     #
 
-    def __transformTimeSeries(self, ts: np.ndarray) -> np.ndarray:
+    def __transformTimeSeries_REFLECTANCE(self, ts: np.ndarray) -> np.ndarray:
 
-        # standardize data
+        nbands = 7
+
+        # standardize data using z-score
+        if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
+
+            with elapsed_timer('Standardizing data'):
+                for band_id in range(nbands):
+                    # TODO avoid time series with std = 0
+                    ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
+
         # SW-Filter
         # FFT
 
-        pass
+        return ts
+
+    def __transformTimeSeries(self, ts: np.ndarray) -> np.ndarray:
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            return self.__transformTimeSeries_REFLECTANCE(ts)
+        else:
+            raise NotImplementedError
 
     # Principal component analysis
 
@@ -942,12 +959,13 @@ class DataAdapterTS(object):
 
         nbands = 7
 
-        with elapsed_timer('Standardizing data'):
+        if DatasetTransformOP.STANDARTIZE_ZSCORE not in self._lst_transform_ops:
             # standardize using z-score before applying reduction using PCA
-            for ts in (ts_training, ts_test):
-                for band_id in range(nbands):
-                    # TODO avoid time series with std = 0
-                    ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
+            with elapsed_timer('Standardizing data'):
+                for ts in (ts_training, ts_test):
+                    for band_id in range(nbands):
+                        # TODO avoid time series with std = 0
+                        ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
 
         with elapsed_timer('Transforming data using PCA'):
 
@@ -1011,7 +1029,7 @@ class DataAdapterTS(object):
 
         return reduced_ts_training, reduced_ts_test
 
-    def __principalComponentAnalysis(self, ts_training: np.ndarray, ts_test: np.ndarray) -> np.ndarray:
+    def __principalComponentAnalysis(self, ts_training: np.ndarray, ts_test: np.ndarray) -> (np.ndarray, np.ndarray):
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
             return self.__principalCompoenentAnalysis_REFLECTANCE(ts_training, ts_test)
@@ -1041,7 +1059,7 @@ class DataAdapterTS(object):
         labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
         # time series transformation
-        # ts = self.__transformTimeSeries(ts)
+        ts = self.__transformTimeSeries(ts)
 
         # split data set into training and test
         ts_train, ts_test, labels_train, labels_test = train_test_split(
