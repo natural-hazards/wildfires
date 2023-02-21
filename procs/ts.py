@@ -7,17 +7,28 @@ import cv2 as opencv
 import numpy as np
 import pandas as pd
 
+from enum import Enum
+
 from osgeo import gdal
+
+from scipy import stats
+from sklearn.model_selection import train_test_split
 
 from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands, MTBSRegion, MTBSSeverity
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
 # time series transformation
-from procs.fft import TransformFFT
+# from procs.fft import TransformFFT
 from procs.pca import TransformPCA, FactorOP
 
 from utils.time import elapsed_timer
 from utils.plots import imshow
+
+
+class DatasetTransformOP(Enum):
+
+    NONE = 0
+    PCA = 1
 
 
 class DataAdapterTS(object):
@@ -27,11 +38,16 @@ class DataAdapterTS(object):
                  src_labels: str,
                  ds_start_date: datetime.date = None,
                  ds_end_date: datetime.date = None,
+                 ds_test_ratio: float = 0.33,
+                 transform_ops: list[DatasetTransformOP] = (DatasetTransformOP.NONE,),
+                 nfactors_pca: int = None,
+                 pca_ops: list[FactorOP] = (FactorOP.NONE,),
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  cci_confidence_level: int = None,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
-                 mtbs_region: MTBSRegion = None):
+                 mtbs_region: MTBSRegion = None,
+                 verbose: bool = False):
 
         self._ds_satimg = None
         self._df_dates_satimg = None
@@ -45,10 +61,29 @@ class DataAdapterTS(object):
         self._nimages = -1
         self._nbands_labels = -1
 
-        # final data set
-        self._ds_timeseries = None
+        # training and test data set
+
+        self._ds_training = None
+        self._ds_test = None
+
+        self._ds_test_ratio = None
+        self.test_ratio = ds_test_ratio
+
+        # properties data transformation
+
+        self._lst_transform_ops = None
+        self._transform_ops = 0
+        self.transform_ops = transform_ops
+
+        self._nfactors_pca = 0
+        self.nfactors_pca = nfactors_pca
+
+        self._lst_pca_ops = None
+        self._pca_ops = 0
+        self.pca_ops = pca_ops
 
         # properties training and test data set
+
         self._ds_start_date = None
         if ds_start_date is not None: self.ds_start_date = ds_start_date
 
@@ -82,6 +117,10 @@ class DataAdapterTS(object):
 
         self._satimg_processed = False
         self._labels_processed = False
+
+        # verbose
+        self._verbose = False
+        self.verbose = verbose
 
     @property
     def src_satimg(self) -> str:
@@ -142,8 +181,77 @@ class DataAdapterTS(object):
         self._label_collection = collection
 
     """
+    Time series transformation properties
+    """
+
+    @property
+    def transform_ops(self) -> list[DatasetTransformOP]:
+
+        return self._lst_transform_ops
+
+    @transform_ops.setter
+    def transform_ops(self, lst_ops: list[DatasetTransformOP]) -> None:
+
+        if self._lst_transform_ops == lst_ops:
+            return
+
+        self.__reset()
+
+        self._transform_ops = 0
+        self._lst_transform_ops = lst_ops
+        for op in lst_ops: self._transform_ops |= op.value
+
+    @property
+    def nfactors_pca(self) -> int:
+
+        return self._nfactors_pca
+
+    @nfactors_pca.setter
+    def nfactors_pca(self, n) -> None:
+
+        if self._nfactors_pca == n:
+            return
+
+        self.__reset()
+        self._nfactors_pca = n
+
+    @property
+    def pca_ops(self) -> list[FactorOP]:
+
+        return self._lst_pca_ops
+
+    @pca_ops.setter
+    def pca_ops(self, lst_ops: list[FactorOP]) -> None:
+
+        if self._lst_pca_ops == lst_ops:
+            return
+
+        self.__reset()
+
+        self._lst_pca_ops = lst_ops
+        self._pca_ops = 0
+        # set ops flag
+        for op in lst_ops: self._pca_ops |= op.value
+
+    """
     Training and test data set  properties
     """
+
+    @property
+    def ds_training(self) -> tuple:
+
+        if self._ds_training is None:
+            self.__createDatasets()
+
+        return self._ds_training
+
+    @property
+    def ds_test(self) -> tuple:
+
+        if self._ds_test is None:
+            self.__createDatasets()
+
+        return self._ds_test
 
     @property
     def ds_start_date(self) -> datetime.date:
@@ -156,7 +264,8 @@ class DataAdapterTS(object):
         if self._ds_start_date == d:
             return
 
-        del self._ds_timeseries; self._ds_timeseries = None
+        del self._ds_training; self._ds_training = None
+        del self._ds_test; self._ds_test = None
         gc.collect()
 
         self._ds_start_date = d
@@ -172,10 +281,25 @@ class DataAdapterTS(object):
         if self._ds_end_date == d:
             return
 
-        del self._ds_timeseries; self._ds_timeseries = None
+        del self._ds_training; self._ds_training = None
+        del self._ds_test; self._ds_test = None
         gc.collect()
 
         self._ds_end_date = d
+
+    @property
+    def ds_test_ratio(self) -> float:
+
+        return self._ds_test_ratio
+
+    @ds_test_ratio.setter
+    def ds_test_ratio(self, ratio: float) -> None:
+
+        if self._ds_test_ratio == ratio:
+            return
+
+        self.__reset()
+        self._ds_test_ratio = ratio
 
     """
     FireCII properties
@@ -233,10 +357,15 @@ class DataAdapterTS(object):
 
         del self._df_dates_labels; self._df_dates_labels = None
         del self._map_band_id_label; self._map_band_id_label = None
-        gc.collect()
 
         del self._df_dates_satimg; self._df_dates_satimg = None
         del self._map_start_satimgs; self._map_start_satimgs = None
+
+        del self._ds_training; self._ds_training = None
+        del self._ds_test; self._ds_test = None
+
+        # invoke garbage collector
+        gc.collect()
 
         self._nimages = -1
         self._nbands_labels = -1
@@ -286,6 +415,16 @@ class DataAdapterTS(object):
         band_date = self._df_dates_labels.iloc[band_id][0]
         return band_date
 
+    @property
+    def verbose(self) -> bool:
+
+        return self._verbose
+
+    @verbose.setter
+    def verbose(self, flg: bool):
+
+        self._verbose = flg
+
     """
     IO functionality
     """
@@ -315,24 +454,25 @@ class DataAdapterTS(object):
     def __processBandDates_SATIMG_MODIS_REFLECTANCE(self) -> None:
 
         nbands = self._ds_satimg.RasterCount
-
         unique_dates = set()
 
-        for band_id in range(0, nbands):  # proportion of spectra is divided in 7 bands
+        with elapsed_timer('Processing band dates (satellite images, reflectance)'):
+            # processing band dates related to multi spectral images (reflectance)
+            for band_id in range(0, nbands):  # proportion of spectra is divided in 7 bands
 
-            rs_band = self._ds_satimg.GetRasterBand(band_id + 1)
-            band_dsc = rs_band.GetDescription()
+                rs_band = self._ds_satimg.GetRasterBand(band_id + 1)
+                band_dsc = rs_band.GetDescription()
 
-            if '_sur_refl_' in band_dsc:
-                band_date = band2data_reflectance(rs_band.GetDescription())
-                unique_dates.add(band_date)
+                if '_sur_refl_' in band_dsc:
+                    band_date = band2data_reflectance(rs_band.GetDescription())
+                    unique_dates.add(band_date)
 
-        if not unique_dates:
-            raise ValueError('Label file does not contain any useful data!')
+            if not unique_dates:
+                raise ValueError('Label file does not contain any useful data!')
 
-        df_dates = pd.DataFrame(sorted(unique_dates), columns=['Date'])
-        del unique_dates
-        gc.collect()
+            df_dates = pd.DataFrame(sorted(unique_dates), columns=['Date'])
+            del unique_dates
+            gc.collect()
 
         self._df_dates_satimg = df_dates
 
@@ -676,14 +816,17 @@ class DataAdapterTS(object):
         lst_bands = []
 
         for img_start in range(start_band_id, end_band_id + 1, 7):
-
             # getting reflectance bands
             for band_id in range(img_start, img_start + 7):
 
-                np_band = self._ds_satimg.GetRasterBand(band_id).ReadAsArray()
-                lst_bands.append(np_band)
+                rs_band = self._ds_satimg.GetRasterBand(band_id)
+                band_dsc = rs_band.GetDescription()
+
+                with elapsed_timer('Loading spectral band {} (satellite image)'.format(band_dsc)):
+                    np_band = rs_band.ReadAsArray()
 
                 # TODO process nan values
+                lst_bands.append(np_band)
 
         img_ts = np.array(lst_bands)
         del lst_bands; gc.collect()
@@ -749,7 +892,7 @@ class DataAdapterTS(object):
     #
     #             transformer_pca = TransformPCA(
     #                 train_ds=b,
-    #                 nlatent_factors=nfactors,
+    #                 nlatent_factors_user=nfactors,
     #                 factor_ops=[FactorOP.USER_SET],
     #                 verbose=True
     #             )
@@ -783,20 +926,101 @@ class DataAdapterTS(object):
     #     # ts = mod_ts
     #     return ts
 
-    def __transformTimeSeries_PCA_REFLECTANCE(self, ds_training: np.ndarray, ds_test: np.ndarray) -> (np.ndarray, np.ndarray):
+    #
+
+    def __transformTimeSeries(self, ts: np.ndarray) -> np.ndarray:
+
+        # standardize data
+        # SW-Filter
+        # FFT
 
         pass
 
-    def __transformTimeSeries_PCA(self, ts: np.ndarray) -> np.ndarray:
+    # Principal component analysis
+
+    def __principalCompoenentAnalysis_REFLECTANCE(self, ts_training: np.ndarray, ts_test: np.ndarray) -> (np.ndarray, np.ndarray):
+
+        nbands = 7
+
+        with elapsed_timer('Standardizing data'):
+            # standardize using z-score before applying reduction using PCA
+            for ts in (ts_training, ts_test):
+                for band_id in range(nbands):
+                    # TODO avoid time series with std = 0
+                    ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
+
+        with elapsed_timer('Transforming data using PCA'):
+
+            # transforming training and test data set
+
+            lst_transformers = []
+            nlatent_factors_found = 0
+
+            for band_id in range(nbands):
+
+                transformer_pca = TransformPCA(
+                    train_ds=ts_training[:, band_id::nbands],
+                    factor_ops=self._lst_pca_ops,
+                    nlatent_factors=self.nfactors_pca,
+                    verbose=True
+                )
+
+                transformer_pca.fit()
+
+                nlatent_factors_found = max(nlatent_factors_found, transformer_pca.nlatent_factors)
+                lst_transformers.append(transformer_pca)
+
+            nsamples_training = ts_training.shape[0]
+            reduced_ts_training = np.zeros(shape=(nsamples_training, nbands * nlatent_factors_found), dtype=ts_training.dtype)
+
+            # transforming training data set
+            for band_id in range(nbands):
+
+                transformer_pca = lst_transformers[band_id]
+
+                # retrain if required
+                if transformer_pca.nlatent_factors < nlatent_factors_found:
+                    transformer_pca.nlatent_factors_user = nlatent_factors_found
+
+                    # explicitly required number of latent factors
+                    mod_lst_pca_ops = self._lst_pca_ops.copy()
+                    if FactorOP.TEST_CUMSUM in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_CUMSUM)
+                    if FactorOP.TEST_BARTLETT in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_BARTLETT)
+                    if FactorOP.USER_SET not in mod_lst_pca_ops: mod_lst_pca_ops.append(FactorOP.USER_SET)
+                    transformer_pca.factor_ops = mod_lst_pca_ops
+
+                    # set test
+                    transformer_pca.fit()
+
+                # transform training and test data set
+                reduced_ts_training[:, band_id::nbands] = transformer_pca.transform(ts_training[:, band_id::nbands])
+
+            # clean up and invoke garbage collector
+            del ts_training; gc.collect()
+
+            # transforming test dat set
+            nsamples_test = ts_test.shape[0]
+            reduced_ts_test = np.zeros(shape=(nsamples_test, nbands * nlatent_factors_found), dtype=ts_test.dtype)
+
+            for band_id in range(nbands):
+                ransformer_pca = lst_transformers[band_id]
+                reduced_ts_test[:, band_id::nbands] = ransformer_pca.transform(ts_test[:, band_id::nbands])
+
+            # clean up and invoke garbage collector
+            del ts_test; gc.collect()
+
+        return reduced_ts_training, reduced_ts_test
+
+    def __principalComponentAnalysis(self, ts_training: np.ndarray, ts_test: np.ndarray) -> np.ndarray:
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            return self.__transformTimeSeries_PCA_REFLECTANCE(ts)
+            return self.__principalCompoenentAnalysis_REFLECTANCE(ts_training, ts_test)
         else:
             raise NotImplementedError
 
-    def __createDataset(self) -> None:
+    def __createDatasets(self) -> None:
 
-        if self._ds_timeseries:
+        if self._ds_training and self._ds_test:
             return
 
         # load labels
@@ -812,20 +1036,26 @@ class DataAdapterTS(object):
                 ts = self.__createTimeSeries(mask)
         except IOError:
             raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
+
+        # reshape labels to be 1D vector
         labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
-        # set data set
-        self._ds_timeseries = [ts, labels]
-
         # time series transformation
-        self._ds_timeseries[0] = self.__transformTimeSeries(ts)
+        # ts = self.__transformTimeSeries(ts)
 
-    def getDataset(self) -> tuple:
+        # split data set into training and test
+        ts_train, ts_test, labels_train, labels_test = train_test_split(
+            ts,
+            labels,
+            test_size=self._ds_test_ratio,
+            random_state=42
+        )
 
-        if self._ds_timeseries is None:
-            self.__createDataset()
+        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+            ts_train, ts_test = self.__principalComponentAnalysis(ts_train, ts_test)
 
-        return self._ds_timeseries
+        self._ds_training = (ts_train, labels_train)
+        self._ds_test = (ts_test, labels_test)
 
     """
     Display functionality (SATELLITE IMAGE, MODIS)
