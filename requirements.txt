@@ -4,6 +4,9 @@ geographiclib
 geojson
 gdal
 jinja2
+matplotlib
 numpy
 PyQt5
-tensorflow
+torch
+xgboost
+imbalanced-learn
