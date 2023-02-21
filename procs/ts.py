@@ -12,7 +12,12 @@ from osgeo import gdal
 from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands, MTBSRegion, MTBSSeverity
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
+# time series transformation
+from procs.fft import TransformFFT
+from procs.pca import TransformPCA, FactorOP
+
 from utils.time import elapsed_timer
+from utils.plots import imshow
 
 
 class DataAdapterTS(object):
@@ -701,6 +706,94 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
+    # def __transformTimeSeries_REFLECTANCE(self, ts: np.ndarray) -> np.ndarray:
+    #
+    #     nfeatures_fft = 60
+    #     mod_ts = np.zeros(shape=(ts.shape[0], 7 * nfeatures_fft))
+    #
+    #     # with elapsed_timer('Transforming to frequency domain'):
+    #     #     # transform reflectance to frequency domain (FFT)
+    #     #     for band_id in range(7):
+    #     #         # get band values
+    #     #         b = ts[:, band_id::7]
+    #     #
+    #     #         # transform to frequency domain
+    #     #         transformer_fft = TransformFFT(nfeatures=nfeatures_fft)
+    #     #         mod_ts[:, band_id::7] = transformer_fft.transform(b)
+    #     #
+    #     #         # invoke garbage collector
+    #     #         gc.collect()
+    #     #
+    #     # ts = mod_ts
+    #
+    #     with elapsed_timer('Standarding data'):
+    #         # standardizing data using z-score
+    #         for band_id in range(7):
+    #
+    #             b = ts[:, band_id::7]
+    #             b_std = np.std(b, axis=1); b_std = np.expand_dims(b_std, axis=1)
+    #             b_mean = np.mean(b, axis=1); b_mean = np.expand_dims(b_mean, axis=1)
+    #
+    #             b = (b - b_mean) / b_std
+    #             ts[:, band_id::7] = b
+    #
+    #     nfactors = 40
+    #
+    #     with elapsed_timer('Transforming data using PCA'):
+    #
+    #         mod_ts = np.zeros(shape=(ts.shape[0], 7 * nfactors))
+    #
+    #         for band_id in range(7):
+    #
+    #             b = ts[:, band_id::7]
+    #
+    #             transformer_pca = TransformPCA(
+    #                 train_ds=b,
+    #                 nlatent_factors=nfactors,
+    #                 factor_ops=[FactorOP.USER_SET],
+    #                 verbose=True
+    #             )
+    #
+    #             b = transformer_pca.fit_transform(b)
+    #             mod_ts[:, band_id::7] = b
+    #
+    #     ts = mod_ts
+    #
+    #
+    #     # with elapsed_timer('Transforming data using PCA'):
+    #     #     # transform fft to latent factors
+    #     #     for band_id in range(7):
+    #     #
+    #     #         transformer_pca = TransformPCA(
+    #     #             train_ds=ts[band_id::7],
+    #     #             factor_ops=[FactorOP.TEST_CUMSUM],
+    #     #             verbose=True
+    #     #         )
+    #     #
+    #     #      = transformer_pca.fit_transform(ts[band_id::7])
+    #
+    #     # with elapsed_timer('Transforming data using principal component'):
+    #     #
+    #     #     for band_id in range(7):
+    #     #         # get band values
+    #     #         b = ts[:, band_id:7]
+    #     #
+    #     #         #
+    #
+    #     # ts = mod_ts
+    #     return ts
+
+    def __transformTimeSeries_PCA_REFLECTANCE(self, ds_training: np.ndarray, ds_test: np.ndarray) -> (np.ndarray, np.ndarray):
+
+        pass
+
+    def __transformTimeSeries_PCA(self, ts: np.ndarray) -> np.ndarray:
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            return self.__transformTimeSeries_PCA_REFLECTANCE(ts)
+        else:
+            raise NotImplementedError
+
     def __createDataset(self) -> None:
 
         if self._ds_timeseries:
@@ -722,9 +815,10 @@ class DataAdapterTS(object):
         labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
         # set data set
-        self._ds_timeseries = (ts, labels)
+        self._ds_timeseries = [ts, labels]
 
-        # TODO data transformation
+        # time series transformation
+        self._ds_timeseries[0] = self.__transformTimeSeries(ts)
 
     def getDataset(self) -> tuple:
 
@@ -959,10 +1053,9 @@ class DataAdapterTS(object):
         satimg[labels == 1, 0:2] = 0; satimg[labels == 1, 2] = 255
 
         ref_date = self.satimg_dates.iloc[img_id]['Date']
-        str_title = 'MODIS Reflectance ({})'.format(ref_date)
+        str_title = 'MODIS Reflectance ({}, labels={})'.format(ref_date, self.label_collection.name)
 
-        opencv.imshow(str_title, satimg)
-        opencv.waitKey(0)
+        imshow(src=satimg, title=str_title, figsize=(6.5, 6.5), show=True)
 
     def imshow_with_labels(self, img_id: int) -> None:
 
@@ -974,11 +1067,16 @@ class DataAdapterTS(object):
 
 if __name__ == '__main__':
 
-    fn_satimg = 'tutorials/ak_reflec_april_july_2004_500_epsg3338_area_0.tif'
-    fn_labels_cci = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif'
-    fn_labels_mtbs = 'tutorials/ak_april_july_2004_500_epsg3338_area_0_mtbs_labels.tif'
+    DATA_DIR = 'pipelines/ts/data/'
 
-    # adapter
+    # fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_500_epsg3338_area_0.tif')
+    # fn_labels_cci = os.path.join(DATA_DIR, 'ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif')
+    # fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_500_epsg3338_area_0_mtbs_labels.tif')
+    fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_850_850_km_epsg3338_area_0.tif')
+    fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_mtbs_labels.tif')
+    fn_labels_cci = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_cci_labels.tif')
+
+    # # adapter
     # adapter = DataAdapterTS(
     #     src_satimg=fn_satimg,
     #     src_labels=fn_labels_cci,
@@ -987,24 +1085,23 @@ if __name__ == '__main__':
     # )
     #
     # label_dates = adapter.label_dates
+    # print(label_dates)
     # satimg_dates = adapter.satimg_dates
+    # print(satimg_dates)
     #
     # print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
     # adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
     # print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
     # adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
     #
-    # adapter.createDataset()
-
-    # adapter.imshow(2)
-    # adapter.imshow_label(2)
-    # adapter.imshow_with_labels(10)
+    # adapter.getDataset()
 
     adapter = DataAdapterTS(
         src_satimg=fn_satimg,
-        src_labels=fn_labels_mtbs,
-        label_collection=FireLabelsCollection.MTBS,
+        src_labels=fn_labels_cci,
+        label_collection=FireLabelsCollection.CCI,
         mtbs_region=MTBSRegion.ALASKA,
+        cci_confidence_level=70
     )
 
     print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
@@ -1012,25 +1109,9 @@ if __name__ == '__main__':
     print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
     adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
 
-    adapter.getDataset()
-    # TODO get data set
+    print(adapter.satimg_dates)
+    print(adapter.label_dates)
+    # adapter.getDataset()
 
-    #
-    # adapter.imshow(0)
-    # adapter.imshow_label(0)
-    # adapter.imshow_with_labels(0)
-    #
-    # print(adapter.label_dates)
-    # print(adapter.satimg_dates)
-    # print(adapter.nimgs)
-    #
-    # adapter.imshow_with_labels(0)
-
-    # adapter.imshow_with_labels(14)
-    # print(adapter.nimgs)
-
-    # print dates and show satellite image
-
-    # print dates and show label
-    # print(adapter.label_dates)
-    # adapter.imshow_label(0)
+    for i in range(20, 40):
+        adapter.imshow_with_labels(i)
