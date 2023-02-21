@@ -22,32 +22,76 @@ class CRS(Enum):
     ALASKA_ALBERS = 'EPSG:3338'
 
 
-class EarthEngineBatch(object):  # TODO set params in constructor
+class ExportData(Enum):
 
-    def __init__(self):
+    NONE = 0
+    SATIMG = 1
+    LABEL = 2
+    ALL = 3
 
-        self._crs = CRS.WSG84
+    def __and__(self, other):
 
-        self._json_rois = None
+        return ExportData(self.value & other.value)
+
+
+class EarthEngineBatch(object):
+
+    def __init__(self,
+                 file_json: str,
+                 startdate: earthengine.Date = None,
+                 enddate: earthengine.Date = None,
+                 modis_index: ModisIndex = ModisIndex.REFLECTANCE,
+                 labels_collection: FireLabelsCollection = FireLabelsCollection.CCI,
+                 export: ExportData = ExportData.ALL,
+                 resolution_per_pixel: int = 500,
+                 crs: CRS = CRS.WSG84,
+                 output_prefix: str = None,
+                 output_format: FileFormat = FileFormat.GeoTIFF,
+                 task_description: str = None,
+                 gdrive_folder: str = None):
+
         self._polygons = None
 
-        self._collection = None
-        self._type_index = ModisIndex.REFLECTANCE
+        self._collection_img_modis = None
+        self._collection_img_labels = None
 
-        self._labels = None
-        self._labels_collection = FireLabelsCollection.CCI
+        # properties related to exporting labels and satellite images
+        self._json_rois = None
+        self.file_json = file_json
 
-        self._start_date = None
-        self._end_date = None
+        self.modis_index = None
+        self._modis_index = modis_index
 
-        # task
+        self._labels_collection = None
+        self.labels_collection = labels_collection
+
+        self._export_flg = None
+        self.export_flag = export
+
+        self._startdate = None
+        self.startdate = startdate
+
+        self._enddate = None
+        self.enddate = enddate
+
+        # task properties
+        self._crs = None
+        self.crs = crs
+
         self._output_prefix = None
-        self._output_format = FileFormat.GeoTIFF
+        if output_prefix is not None: self.output_prefix = output_prefix
+
+        self._output_format = None
+        self.output_format = output_format
 
         self._task_description = None
-        self._scale = 500
+        self.task_description = task_description
+
+        self._scale = None
+        self.resolution_per_pixel = resolution_per_pixel
 
         self._gdrive_folder = None
+        if gdrive_folder is not None: self.gdrive_folder = gdrive_folder
 
     @staticmethod
     def authenticate() -> None:
@@ -75,6 +119,18 @@ class EarthEngineBatch(object):  # TODO set params in constructor
 
         earthengine.batch.Task.cancel()
 
+    # properties
+
+    @property
+    def export_flag(self) -> ExportData:
+
+        return self._export_flg
+
+    @export_flag.setter
+    def export_flag(self, flg) -> None:
+
+        self._export_flg = flg
+
     @property
     def file_json(self) -> str:
 
@@ -90,14 +146,14 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         self._json_rois = fn
 
     @property
-    def type_index(self) -> ModisIndex:
+    def modis_index(self) -> ModisIndex:
 
-        return self._type_index
+        return self._modis_index
 
-    @type_index.setter
-    def type_index(self, index: ModisIndex) -> None:
+    @modis_index.setter
+    def modis_index(self, index: ModisIndex) -> None:
 
-        self._type_index = index
+        self._modis_index = index
 
     @property
     def labels_collection(self) -> FireLabelsCollection:
@@ -110,24 +166,24 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         self._labels_collection = collection
 
     @property
-    def start_date(self) -> earthengine.Date:
+    def startdate(self) -> earthengine.Date:
 
-        return self._start_date
+        return self._startdate
 
-    @start_date.setter
-    def start_date(self, date: earthengine.Date) -> None:
+    @startdate.setter
+    def startdate(self, date: earthengine.Date) -> None:
 
-        self._start_date = date
+        self._startdate = date
 
     @property
-    def end_date(self) -> earthengine.Date:
+    def enddate(self) -> earthengine.Date:
 
-        return self._end_date
+        return self._enddate
 
-    @end_date.setter
-    def end_date(self, date) -> None:
+    @enddate.setter
+    def enddate(self, date) -> None:
 
-        self._end_date = date
+        self._enddate = date
 
     @property
     def output_prefix(self) -> str:
@@ -186,50 +242,52 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         self._crs = crs
 
     @property
-    def scale(self) -> int:
+    def resolution_per_pixel(self) -> int:
 
         return self._scale
 
-    @scale.setter
-    def scale(self, s: int) -> None:
+    @resolution_per_pixel.setter
+    def resolution_per_pixel(self, s: int) -> None:
 
         if s <= 0:
             raise ValueError('Scale must be positive!')
 
         self._scale = s
 
+    # methods
+
     def __reset(self) -> None:
 
         del self._polygons; self._polygons = None
-        del self._collection; self._collection = None
+        del self._collection_img_modis; self._collection_img_modis = None
 
     def __loadCollection(self) -> None:
 
-        if self._collection is not None:
+        if self._collection_img_modis is not None:
             return
 
-        self._collection = earthengine.ImageCollection(self._type_index.value)
+        self._collection_img_modis = earthengine.ImageCollection(self._modis_index.value)
 
-        if self._type_index == ModisIndex.REFLECTANCE:
-            self._collection = self._collection.select('sur_refl.+')
-        elif self._type_index == ModisIndex.LST:
-            self._collection = self._collection.select('LST_Day.+')
-        elif self._type_index == ModisIndex.EVI:
-            self._collection = self._collection.select('EVI')
-        elif self._collection == ModisIndex.NDVI:
-            self._collection = self._collection.select('NDVI')
+        if self._modis_index == ModisIndex.REFLECTANCE:
+            self._collection_img_modis = self._collection_img_modis.select('sur_refl.+')
+        elif self._modis_index == ModisIndex.LST:
+            self._collection_img_modis = self._collection_img_modis.select('LST_Day.+')
+        elif self._modis_index == ModisIndex.EVI:
+            self._collection_img_modis = self._collection_img_modis.select('EVI')
+        elif self._collection_img_modis == ModisIndex.NDVI:
+            self._collection_img_modis = self._collection_img_modis.select('NDVI')
 
     def __loadLabels(self) -> None:
 
-        if self._labels is not None:
+        if self._collection_img_labels is not None:
             return
 
-        self._labels = earthengine.ImageCollection(self.labels_collection.value)
+        self._collection_img_labels = earthengine.ImageCollection(self.labels_collection.value)
 
         if self.labels_collection == FireLabelsCollection.CCI:
-            self._labels = self._labels.select('ConfidenceLevel', 'ObservedFlag')
+            self._collection_img_labels = self._collection_img_labels.select('ConfidenceLevel', 'ObservedFlag')
         else:
-            self._labels = self._labels.select('Severity')
+            self._collection_img_labels = self._collection_img_labels.select('Severity')
 
     def __loadGeoJSON(self) -> dict:
 
@@ -256,21 +314,21 @@ class EarthEngineBatch(object):  # TODO set params in constructor
                 polygon = earthengine.Geometry.Polygon(coordinates)
                 self._polygons.append(polygon)
 
-    def export(self):
+    def submit(self):
 
         if self._polygons is None:
             self.__loadROI()
 
-        if self._collection is None:
+        if self._collection_img_modis is None:
             self.__loadCollection()
 
-        if self._labels is None:
+        if self._collection_img_labels is None:
             self.__loadLabels()
 
-        collection_filtered = self._collection.filterDate(self.start_date, self.end_date)
+        collection_filtered = self._collection_img_modis.filterDate(self.startdate, self.enddate)
         img_bands = collection_filtered.toBands()  # get multi spectral image
 
-        labels_filtered = self._labels.filterDate(self.start_date, self.end_date)
+        labels_filtered = self._collection_img_labels.filterDate(self.startdate, self.enddate)
         labels_bands = labels_filtered.toBands()
         if self.labels_collection == FireLabelsCollection.CCI:
             # avoid inconsistent types
@@ -283,35 +341,49 @@ class EarthEngineBatch(object):  # TODO set params in constructor
         print('Submitted jobs:')
         for i, area in enumerate(self._polygons):
 
-            task_modis = earthengine.batch.Export.image.toDrive(
-                image=img_bands,
-                description='{}area_{}'.format(_desc, i),
-                scale=self.scale,
-                region=area,
-                folder=_folder,
-                fileNamePrefix='{}area_{}'.format(_prefix, i),
-                fileFormat=self.output_format.value,
-                crs=self.crs.value
-            )
+            task_modis = None
+            task_labels = None
 
-            collection_name = self.labels_collection.name.lower()
+            if self._export_flg & ExportData.SATIMG == ExportData.SATIMG:
 
-            task_labels = earthengine.batch.Export.image.toDrive(
-                image=labels_bands,
-                description='{}area_{}_{}_labels'.format(_desc, i, collection_name),
-                scale=self.scale,
-                region=area,
-                folder=_folder,
-                fileNamePrefix='{}area_{}_{}_labels'.format(_prefix, i, collection_name),
-                fileFormat=self.output_format.value,
-                crs=self.crs.value
-            )
+                # define a job for exporting satellite images (bands)
+                task_modis = earthengine.batch.Export.image.toDrive(
+                    image=img_bands,
+                    description='{}area_{}'.format(_desc, i),
+                    scale=self.resolution_per_pixel,
+                    region=area,
+                    folder=_folder,
+                    fileNamePrefix='{}area_{}'.format(_prefix, i),
+                    fileFormat=self.output_format.value,
+                    crs=self.crs.value
+                )
 
-            task_modis.start()
-            print(task_modis.status)
+            if self._export_flg & ExportData.LABEL == ExportData.LABEL:
 
-            task_labels.start()
-            print(task_labels.status)
+                # get name related to collection name
+                collection_name = self.labels_collection.name.lower()
+
+                # define job for exporting labels
+                task_labels = earthengine.batch.Export.image.toDrive(
+                    image=labels_bands,
+                    description='{}area_{}_{}_labels'.format(_desc, i, collection_name),
+                    scale=self.resolution_per_pixel,
+                    region=area,
+                    folder=_folder,
+                    fileNamePrefix='{}area_{}_{}_labels'.format(_prefix, i, collection_name),
+                    fileFormat=self.output_format.value,
+                    crs=self.crs.value
+                )
+
+            if self._export_flg & ExportData.SATIMG == ExportData.SATIMG:
+
+                task_modis.start()
+                print(task_modis.status)
+
+            if self._export_flg & ExportData.LABEL == ExportData.LABEL:
+
+                task_labels.start()
+                print(task_labels.status)
 
 
 # tests
@@ -320,27 +392,28 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    fn_json = 'tutorials/ak_area_500px.geojson'
-    start_date = earthengine.Date('2004-04-01')
-    end_date = earthengine.Date('2004-08-01')
+    fn_json = 'tutorials/ak_area_850_850_km.geojson'
+    start_date = earthengine.Date('2004-01-01')
+    end_date = earthengine.Date('2005-01-01')
 
-    exporter = EarthEngineBatch()
+    earthengine_batch = EarthEngineBatch(
+        file_json=fn_json,
+        startdate=start_date,
+        enddate=end_date
+    )
+    earthengine_batch.export_flag = ExportData.LABEL
 
-    exporter.labels_collection = FireLabelsCollection.CCI
-    exporter.crs = CRS.ALASKA_ALBERS
-    exporter.scale = 500  # pixel corresponds to resolution 500x500 meters
+    earthengine_batch.crs = CRS.ALASKA_ALBERS
+    earthengine_batch.resolution_per_pixel = 500  # pixel corresponds to resolution 500x500 meters
 
-    exporter.task_description = 'MODIS-REFLECTANCE-AK-2004-APRIL-JULY-EPSG3338'
-    exporter.output_prefix = 'test_ak_april_july_2004_500_epsg3338'
+    earthengine_batch.task_description = 'MODIS-REFLECTANCE-AK-2004-JANUARY-DECEMBER-EPSG3338'
+    earthengine_batch.output_prefix = 'ak_january_december_2004_850_850_km_epsg3338'
 
-    exporter.start_date = start_date
-    exporter.end_date = end_date
+    earthengine_batch.labels_collection = FireLabelsCollection.CCI
+    earthengine_batch.modis_index = ModisIndex.REFLECTANCE
 
-    exporter.file_json = fn_json
-    exporter.type_index = ModisIndex.REFLECTANCE
-
-    exporter.gdrive_folder = 'AK_2004'
-    exporter.export()
+    earthengine_batch.gdrive_folder = 'AK_2004'
+    earthengine_batch.submit()
 
     # print task list (running or ready)
-    exporter.task_list()
+    earthengine_batch.task_list()
