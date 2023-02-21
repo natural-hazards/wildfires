@@ -18,7 +18,7 @@ from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpe
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
 # time series transformation
-# from procs.fft import TransformFFT
+from procs.fft import TransformFFT
 from procs.pca import TransformPCA, FactorOP
 
 from utils.time import elapsed_timer
@@ -29,7 +29,8 @@ class DatasetTransformOP(Enum):
 
     NONE = 0
     STANDARTIZE_ZSCORE = 1
-    PCA = 2
+    FFT = 2
+    PCA = 4
 
 
 class DataAdapterTS(object):
@@ -43,6 +44,7 @@ class DataAdapterTS(object):
                  transform_ops: list[DatasetTransformOP] = (DatasetTransformOP.NONE,),
                  nfactors_pca: int = None,
                  pca_ops: list[FactorOP] = (FactorOP.NONE,),
+                 fft_nfeatures: int = None,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  cci_confidence_level: int = None,
@@ -75,6 +77,9 @@ class DataAdapterTS(object):
         self._lst_transform_ops = None
         self._transform_ops = 0
         self.transform_ops = transform_ops
+
+        self._fft_nfeatures = None
+        self.fft_nfeatures = fft_nfeatures
 
         self._nfactors_pca = 0
         self.nfactors_pca = nfactors_pca
@@ -201,6 +206,20 @@ class DataAdapterTS(object):
         self._transform_ops = 0
         self._lst_transform_ops = lst_ops
         for op in lst_ops: self._transform_ops |= op.value
+
+    @property
+    def fft_nfeatures(self) -> int:
+
+        return self._fft_nfeatures
+
+    @fft_nfeatures.setter
+    def fft_nfeatures(self, n: int) -> None:
+
+        if self._fft_nfeatures == n:
+            return
+
+        self.__reset()
+        self._fft_nfeatures = n
 
     @property
     def nfactors_pca(self) -> int:
@@ -850,85 +869,6 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    # def __transformTimeSeries_REFLECTANCE(self, ts: np.ndarray) -> np.ndarray:
-    #
-    #     nfeatures_fft = 60
-    #     mod_ts = np.zeros(shape=(ts.shape[0], 7 * nfeatures_fft))
-    #
-    #     # with elapsed_timer('Transforming to frequency domain'):
-    #     #     # transform reflectance to frequency domain (FFT)
-    #     #     for band_id in range(7):
-    #     #         # get band values
-    #     #         b = ts[:, band_id::7]
-    #     #
-    #     #         # transform to frequency domain
-    #     #         transformer_fft = TransformFFT(nfeatures=nfeatures_fft)
-    #     #         mod_ts[:, band_id::7] = transformer_fft.transform(b)
-    #     #
-    #     #         # invoke garbage collector
-    #     #         gc.collect()
-    #     #
-    #     # ts = mod_ts
-    #
-    #     with elapsed_timer('Standarding data'):
-    #         # standardizing data using z-score
-    #         for band_id in range(7):
-    #
-    #             b = ts[:, band_id::7]
-    #             b_std = np.std(b, axis=1); b_std = np.expand_dims(b_std, axis=1)
-    #             b_mean = np.mean(b, axis=1); b_mean = np.expand_dims(b_mean, axis=1)
-    #
-    #             b = (b - b_mean) / b_std
-    #             ts[:, band_id::7] = b
-    #
-    #     nfactors = 40
-    #
-    #     with elapsed_timer('Transforming data using PCA'):
-    #
-    #         mod_ts = np.zeros(shape=(ts.shape[0], 7 * nfactors))
-    #
-    #         for band_id in range(7):
-    #
-    #             b = ts[:, band_id::7]
-    #
-    #             transformer_pca = TransformPCA(
-    #                 train_ds=b,
-    #                 nlatent_factors_user=nfactors,
-    #                 factor_ops=[FactorOP.USER_SET],
-    #                 verbose=True
-    #             )
-    #
-    #             b = transformer_pca.fit_transform(b)
-    #             mod_ts[:, band_id::7] = b
-    #
-    #     ts = mod_ts
-    #
-    #
-    #     # with elapsed_timer('Transforming data using PCA'):
-    #     #     # transform fft to latent factors
-    #     #     for band_id in range(7):
-    #     #
-    #     #         transformer_pca = TransformPCA(
-    #     #             train_ds=ts[band_id::7],
-    #     #             factor_ops=[FactorOP.TEST_CUMSUM],
-    #     #             verbose=True
-    #     #         )
-    #     #
-    #     #      = transformer_pca.fit_transform(ts[band_id::7])
-    #
-    #     # with elapsed_timer('Transforming data using principal component'):
-    #     #
-    #     #     for band_id in range(7):
-    #     #         # get band values
-    #     #         b = ts[:, band_id:7]
-    #     #
-    #     #         #
-    #
-    #     # ts = mod_ts
-    #     return ts
-
-    #
-
     def __transformTimeSeries_REFLECTANCE(self, ts: np.ndarray) -> np.ndarray:
 
         nbands = 7
@@ -941,8 +881,28 @@ class DataAdapterTS(object):
                     # TODO avoid time series with std = 0
                     ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
 
-        # SW-Filter
-        # FFT
+        # TODO Savitzky–Golay filter
+
+        # Transforming data to frequency domain
+        if self._transform_ops & DatasetTransformOP.FFT.value == DatasetTransformOP.FFT.value:
+
+            with elapsed_timer('Transforming time series to frequency domain'):
+
+                mod_ts = np.zeros(shape=(ts.shape[0], 7 * self.fft_nfeatures))
+
+                for band_id in range(nbands):
+                    # transforming data to frequency domain
+                    ts_band = ts[:, band_id::7]
+                    transformer_fft = TransformFFT(
+                        nfeatures=self.fft_nfeatures
+                    )
+                    mod_ts[:, band_id::7] = transformer_fft.transform(ts_band)
+
+                    # invoke garbage collector
+                    gc.collect()
+
+                del ts; gc.collect()
+                ts = mod_ts
 
         return ts
 
