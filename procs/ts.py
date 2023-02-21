@@ -12,6 +12,7 @@ from enum import Enum
 from osgeo import gdal
 
 from scipy import stats
+from scipy.signal import savgol_filter
 from sklearn.model_selection import train_test_split
 
 from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands, MTBSRegion, MTBSSeverity
@@ -31,6 +32,7 @@ class DatasetTransformOP(Enum):
     STANDARTIZE_ZSCORE = 1
     FFT = 2
     PCA = 4
+    SAVITZKY_GOLAY = 8
 
 
 class DataAdapterTS(object):
@@ -45,6 +47,8 @@ class DataAdapterTS(object):
                  nfactors_pca: int = None,
                  pca_ops: list[FactorOP] = (FactorOP.NONE,),
                  fft_nfeatures: int = None,
+                 savgol_polyorder: int = 1,
+                 savgol_winlen: int = 5,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  cci_confidence_level: int = None,
@@ -77,6 +81,12 @@ class DataAdapterTS(object):
         self._lst_transform_ops = None
         self._transform_ops = 0
         self.transform_ops = transform_ops
+
+        self._savgol_polyorder = None
+        self.savgol_polyorder = savgol_polyorder
+
+        self._savgol_winlen = None
+        self.savgol_winlen = savgol_winlen
 
         self._fft_nfeatures = None
         self.fft_nfeatures = fft_nfeatures
@@ -206,6 +216,34 @@ class DataAdapterTS(object):
         self._transform_ops = 0
         self._lst_transform_ops = lst_ops
         for op in lst_ops: self._transform_ops |= op.value
+
+    @property
+    def savgol_polyorder(self) -> int:
+
+        return self._savgol_polyorder
+
+    @savgol_polyorder.setter
+    def savgol_polyorder(self, order: int) -> None:
+
+        if self._savgol_polyorder == order:
+            return
+
+        self.__reset()
+        self._savgol_polyorder = order
+
+    @property
+    def savgol_winlen(self) -> int:
+
+        return self._savgol_winlen
+
+    @savgol_winlen.setter
+    def savgol_winlen(self, winlen: int) -> None:
+
+        if self._savgol_winlen == winlen:
+            return
+
+        self.__reset()
+        self._savgol_winlen = winlen
 
     @property
     def fft_nfeatures(self) -> int:
@@ -881,7 +919,16 @@ class DataAdapterTS(object):
                     # TODO avoid time series with std = 0
                     ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
 
-        # TODO Savitzky–Golay filter
+        if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
+
+            with elapsed_timer('Smoothing time series using Savitzky Golay filter'):
+
+                for band_id in range(nbands):
+                    ts[:, band_id::nbands] = savgol_filter(
+                        ts[:, band_id::nbands],
+                        window_length=self.savgol_winlen,
+                        polyorder=self.savgol_polyorder
+                    )
 
         # Transforming data to frequency domain
         if self._transform_ops & DatasetTransformOP.FFT.value == DatasetTransformOP.FFT.value:
