@@ -51,7 +51,7 @@ class DataAdapterTS(object):
                  savgol_winlen: int = 5,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.CCI,
-                 cci_confidence_level: int = None,
+                 cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = None,
                  verbose: bool = False):
@@ -939,11 +939,11 @@ class DataAdapterTS(object):
 
                 for band_id in range(nbands):
                     # transforming data to frequency domain
-                    ts_band = ts[:, band_id::7]
+                    ts_band = ts[:, band_id::nbands]
                     transformer_fft = TransformFFT(
                         nfeatures=self.fft_nfeatures
                     )
-                    mod_ts[:, band_id::7] = transformer_fft.transform(ts_band)
+                    mod_ts[:, band_id::nbands] = transformer_fft.transform(ts_band)
 
                     # invoke garbage collector
                     gc.collect()
@@ -1055,15 +1055,25 @@ class DataAdapterTS(object):
         except IOError:
             raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
+        # reshape labels to be 1D vector
+        labels = labels.reshape(-1)[mask.reshape(-1) == 1]
+
+        if self.verbose:
+            nbackground_pixels = np.count_nonzero(labels == 0)
+            percent_bp = nbackground_pixels / labels.shape[0]
+
+            nfire_pixels = np.count_nonzero(labels == 1)
+            percent_fp = nfire_pixels / labels.shape[0]
+
+            print('#background pixels {} ({:.2f}%)'.format(nbackground_pixels, percent_bp * 100.))
+            print('#fire pixels {} ({:.2f})'.format(nfire_pixels, percent_fp * 100.))
+
         # load time series used mask
         try:
             with elapsed_timer('Creating time series date set'):
                 ts = self.__createTimeSeries(mask)
         except IOError:
             raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
-
-        # reshape labels to be 1D vector
-        labels = labels.reshape(-1)[mask.reshape(-1) == 1]
 
         # time series transformation
         ts = self.__transformTimeSeries(ts)
@@ -1356,7 +1366,8 @@ if __name__ == '__main__':
         src_labels=fn_labels_cci,
         label_collection=FireLabelsCollection.CCI,
         mtbs_region=MTBSRegion.ALASKA,
-        cci_confidence_level=70
+        cci_confidence_level=70,
+        verbose=True
     )
 
     print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
