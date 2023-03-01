@@ -16,7 +16,7 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from ui.prelude import UIPrelude
 from ui.dialog import QAreaDialog
 
-from earthengine.ds import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
+from earthengine.collections import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
 from procs.geom import RectangleArea
 from map.folium import FoliumMap
 from utils.time import TimePeriod
@@ -137,7 +137,7 @@ class UIApp(QWidget):
 
     def __loadFireCollection_CCI_MONTHS(self, confidence_level, visualisation_params) -> None:
 
-        from earthengine import ds
+        from earthengine import collections
 
         step_precent = int(100. / 12.)
         progress_val = 0
@@ -168,7 +168,7 @@ class UIApp(QWidget):
 
     def __loadFireCollection_CCI_YEARS(self, confidence_level, visualisation_params) -> None:
 
-        from earthengine import ds
+        from earthengine import collections
 
         YEAR_BEGIN = FireCIIAvailability.BEGIN.value
         YEAR_END = FireCIIAvailability.END.value
@@ -238,7 +238,7 @@ class UIApp(QWidget):
 
     def __loadFireCollections_MTBS(self) -> None:
 
-        from earthengine import ds
+        from earthengine import collections
 
         # load MTBS fire collection
         SEVERITY_FROM = self._severity_from_mtbs

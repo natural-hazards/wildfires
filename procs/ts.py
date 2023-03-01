@@ -16,8 +16,8 @@ from scipy import stats
 from scipy.signal import savgol_filter
 from sklearn.model_selection import train_test_split
 
-from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands
-from earthengine.ds import MTBSRegion, MTBSSeverity
+from earthengine.collections import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands
+from earthengine.collections import MTBSRegion, MTBSSeverity
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
 # time series transformation
