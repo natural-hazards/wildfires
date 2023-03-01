@@ -1,4 +1,5 @@
 import calendar
+import copy
 import datetime
 import gc
 import os.path
@@ -15,13 +16,15 @@ from scipy import stats
 from scipy.signal import savgol_filter
 from sklearn.model_selection import train_test_split
 
-from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands, MTBSRegion, MTBSSeverity
+from earthengine.ds import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands
+from earthengine.ds import MTBSRegion, MTBSSeverity
 from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
 # time series transformation
 from procs.fft import TransformFFT
 from procs.pca import TransformPCA, FactorOP
 
+# utils imports
 from utils.time import elapsed_timer
 from utils.plots import imshow
 
@@ -40,6 +43,7 @@ class DataAdapterTS(object):
     def __init__(self,
                  src_satimg: str,
                  src_labels: str,
+                 # TODO src_satimg_test and src_labels_test
                  ds_start_date: datetime.date = None,
                  ds_end_date: datetime.date = None,
                  ds_test_ratio: float = 0.33,
@@ -74,9 +78,9 @@ class DataAdapterTS(object):
         self._ds_test = None
 
         self._ds_test_ratio = None
-        self.test_ratio = ds_test_ratio
+        self.ds_test_ratio = ds_test_ratio
 
-        # properties data transformation
+        # properties of data transformation
 
         self._lst_transform_ops = None
         self._transform_ops = 0
@@ -98,7 +102,7 @@ class DataAdapterTS(object):
         self._pca_ops = 0
         self.pca_ops = pca_ops
 
-        # properties training and test data set
+        # properties of training and test data set
 
         self._ds_start_date = None
         if ds_start_date is not None: self.ds_start_date = ds_start_date
@@ -292,7 +296,7 @@ class DataAdapterTS(object):
         for op in lst_ops: self._pca_ops |= op.value
 
     """
-    Training and test data set  properties
+    Training and test data set properties
     """
 
     @property
@@ -1008,7 +1012,10 @@ class DataAdapterTS(object):
                     transformer_pca.nlatent_factors_user = nlatent_factors_found
 
                     # explicitly required number of latent factors
-                    mod_lst_pca_ops = self._lst_pca_ops.copy()
+                    if isinstance(self._lst_transform_ops, tuple):
+                        mod_lst_pca_ops = list(self._lst_pca_ops)
+                    else:
+                        mod_lst_pca_ops = copy.deepcopy(self._lst_transform_ops)
                     if FactorOP.TEST_CUMSUM in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_CUMSUM)
                     if FactorOP.TEST_BARTLETT in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_BARTLETT)
                     if FactorOP.USER_SET not in mod_lst_pca_ops: mod_lst_pca_ops.append(FactorOP.USER_SET)
@@ -1023,16 +1030,18 @@ class DataAdapterTS(object):
             # clean up and invoke garbage collector
             del ts_training; gc.collect()
 
-            # transforming test dat set
-            nsamples_test = ts_test.shape[0]
-            reduced_ts_test = np.zeros(shape=(nsamples_test, nbands * nlatent_factors_found), dtype=ts_test.dtype)
+            if ts_test is not None:
+                nsamples_test = ts_test.shape[0]
+                reduced_ts_test = np.zeros(shape=(nsamples_test, nbands * nlatent_factors_found), dtype=ts_test.dtype)
 
-            for band_id in range(nbands):
-                ransformer_pca = lst_transformers[band_id]
-                reduced_ts_test[:, band_id::nbands] = ransformer_pca.transform(ts_test[:, band_id::nbands])
+                for band_id in range(nbands):
+                    transformer_pca = lst_transformers[band_id]
+                    reduced_ts_test[:, band_id::nbands] = transformer_pca.transform(ts_test[:, band_id::nbands])
 
-            # clean up and invoke garbage collector
-            del ts_test; gc.collect()
+                # clean up and invoke garbage collector
+                del ts_test; gc.collect()
+            else:
+                reduced_ts_test = None
 
         return reduced_ts_training, reduced_ts_test
 
@@ -1066,7 +1075,7 @@ class DataAdapterTS(object):
             percent_fp = nfire_pixels / labels.shape[0]
 
             print('#background pixels {} ({:.2f}%)'.format(nbackground_pixels, percent_bp * 100.))
-            print('#fire pixels {} ({:.2f})'.format(nfire_pixels, percent_fp * 100.))
+            print('#fire pixels {} ({:.2f}%)'.format(nfire_pixels, percent_fp * 100.))
 
         # load time series used mask
         try:
@@ -1079,12 +1088,18 @@ class DataAdapterTS(object):
         ts = self.__transformTimeSeries(ts)
 
         # split data set into training and test
-        ts_train, ts_test, labels_train, labels_test = train_test_split(
-            ts,
-            labels,
-            test_size=self._ds_test_ratio,
-            random_state=42
-        )
+        if self._ds_test_ratio > 0.:
+            ts_train, ts_test, labels_train, labels_test = train_test_split(
+                ts,
+                labels,
+                test_size=self._ds_test_ratio,
+                random_state=42
+            )
+        else:
+            ts_train = ts
+            labels_train = labels
+            ts_test = None
+            labels_test = None
 
         if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
             ts_train, ts_test = self.__principalComponentAnalysis(ts_train, ts_test)
@@ -1126,7 +1141,7 @@ class DataAdapterTS(object):
         if not self._satimg_processed:
             try:
                 self.__processMetaData_SATELLITE_IMG()
-            except IOError and ValueError:
+            except IOError or ValueError:
                 raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
 
         if img_id < 0:
@@ -1159,7 +1174,7 @@ class DataAdapterTS(object):
         if not self._labels_processed:
             try:
                 self.__processLabels()
-            except IOError and ValueError:
+            except IOError or ValueError:
                 raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         if band_id < 0:
@@ -1301,13 +1316,13 @@ class DataAdapterTS(object):
         if not self._labels_processed:
             try:
                 self.__processLabels()
-            except IOError and ValueError:
+            except IOError or ValueError:
                 raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
         if not self._satimg_processed:
             try:
                 self.__processMetaData_SATELLITE_IMG()
-            except IOError and ValueError:
+            except IOError or ValueError:
                 raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
 
         satimg = self.__getSatelliteImageArray(img_id)
@@ -1337,9 +1352,9 @@ if __name__ == '__main__':
     # fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_500_epsg3338_area_0.tif')
     # fn_labels_cci = os.path.join(DATA_DIR, 'ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif')
     # fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_500_epsg3338_area_0_mtbs_labels.tif')
-    fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_850_850_km_epsg3338_area_0.tif')
-    fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_mtbs_labels.tif')
-    fn_labels_cci = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_cci_labels.tif')
+    # fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_850_850_km_epsg3338_area_0.tif')
+    # fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_mtbs_labels.tif')
+    # fn_labels_cci = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_cci_labels.tif')
 
     # # adapter
     # adapter = DataAdapterTS(
