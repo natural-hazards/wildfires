@@ -147,7 +147,6 @@ class TransformPCA(object):
 
             if self.verbose:
                 print('PCA cumsum test, found explainable latent factor {}'.format(self._nlatent_factor))
-
         elif self._factor_ops & FactorOP.TEST_BARTLETT.value == FactorOP.TEST_BARTLETT.value:
             # TODO implement
             pass

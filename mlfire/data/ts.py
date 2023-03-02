@@ -20,9 +20,9 @@ from mlfire.earthengine.collections import FireLabelsCollection, ModisIndex, Mod
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
-# time series transformation
-from mlfire.procs.fft import TransformFFT
-from mlfire.procs.pca import TransformPCA, FactorOP
+# feature extraction
+from mlfire.features.fft import TransformFFT
+from mlfire.features.pca import TransformPCA, FactorOP
 
 # utils imports
 from mlfire.utils.time import elapsed_timer
@@ -1171,6 +1171,8 @@ class DataAdapterTS(object):
 
     def __imshow_label_CCI(self, band_id: int) -> None:
 
+        PIXEL_NOT_BURNABLE = -1
+
         if not self._labels_processed:
             try:
                 self.__processLabels()
@@ -1203,7 +1205,7 @@ class DataAdapterTS(object):
         confidence_level[confidence_level < self.cci_confidence_level] = 0
         confidence_level[confidence_level >= self.cci_confidence_level] = 1
 
-        PIXEL_NOT_BURNABLE = -1
+        # set mask
         mask[mask <= PIXEL_NOT_BURNABLE] = 1
 
         # label
@@ -1376,23 +1378,23 @@ if __name__ == '__main__':
     #
     # adapter.getDataset()
 
-    adapter = DataAdapterTS(
-        src_satimg=fn_satimg,
-        src_labels=fn_labels_cci,
-        label_collection=FireLabelsCollection.CCI,
-        mtbs_region=MTBSRegion.ALASKA,
-        cci_confidence_level=70,
-        verbose=True
-    )
-
-    print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
-    adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
-    print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
-    adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
-
-    print(adapter.satimg_dates)
-    print(adapter.label_dates)
+    # adapter = DataAdapterTS(
+    #     src_satimg=fn_satimg,
+    #     src_labels=fn_labels_cci,
+    #     label_collection=FireLabelsCollection.CCI,
+    #     mtbs_region=MTBSRegion.ALASKA,
+    #     cci_confidence_level=70,
+    #     verbose=True
+    # )
+    #
+    # print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
+    # adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
+    # print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
+    # adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
+    #
+    # print(adapter.satimg_dates)
+    # print(adapter.label_dates)
     # adapter.getDataset()
 
-    for i in range(20, 40):
-        adapter.imshow_with_labels(i)
+    # for i in range(20, 40):
+    #     adapter.imshow_with_labels(i)

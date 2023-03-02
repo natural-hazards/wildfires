@@ -13,12 +13,15 @@ from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout,
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
-from mlfire.app.prelude import UIPrelude
-from mlfire.app.dialog import QAreaDialog
-
 from mlfire.earthengine.collections import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
-from mlfire.procs.geom import RectangleArea
+
+# app imports
+from mlfire.app.dialog import QAreaDialog
+from mlfire.app.geom import RectangleArea
 from mlfire.app.map.folium import FoliumMap
+from mlfire.app.prelude import UIPrelude
+
+# utils imports
 from mlfire.utils.time import TimePeriod
 from mlfire.utils.time import elapsed_timer
 
