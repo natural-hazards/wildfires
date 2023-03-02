@@ -3,7 +3,8 @@ import folium
 
 from folium import plugins as _FoliumPlugins
 from folium.plugins import MousePosition as _FoliumMousePosition
-from map.plugins import draw as _MapPluginDraw
+
+from mlfire.app.map.plugins import draw as _MapPluginDraw
 
 from IPython.display import display_html
 

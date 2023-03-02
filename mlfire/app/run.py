@@ -13,14 +13,14 @@ from PyQt5.QtWidgets import QApplication, QFileDialog, QHBoxLayout, QVBoxLayout,
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 
-from ui.prelude import UIPrelude
-from ui.dialog import QAreaDialog
+from mlfire.app.prelude import UIPrelude
+from mlfire.app.dialog import QAreaDialog
 
-from earthengine.collections import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
-from procs.geom import RectangleArea
-from map.folium import FoliumMap
-from utils.time import TimePeriod
-from utils.time import elapsed_timer
+from mlfire.earthengine.collections import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
+from mlfire.procs.geom import RectangleArea
+from mlfire.app.map.folium import FoliumMap
+from mlfire.utils.time import TimePeriod
+from mlfire.utils.time import elapsed_timer
 
 
 class UIApp(QWidget):
@@ -137,7 +137,7 @@ class UIApp(QWidget):
 
     def __loadFireCollection_CCI_MONTHS(self, confidence_level, visualisation_params) -> None:
 
-        from earthengine import collections
+        from mlfire.earthengine import collections
 
         step_precent = int(100. / 12.)
         progress_val = 0
@@ -155,7 +155,7 @@ class UIApp(QWidget):
 
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
-                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
+                burn_area = collections.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
@@ -168,7 +168,7 @@ class UIApp(QWidget):
 
     def __loadFireCollection_CCI_YEARS(self, confidence_level, visualisation_params) -> None:
 
-        from earthengine import collections
+        from mlfire.earthengine import collections
 
         YEAR_BEGIN = FireCIIAvailability.BEGIN.value
         YEAR_END = FireCIIAvailability.END.value
@@ -183,7 +183,7 @@ class UIApp(QWidget):
 
             self._progress_bar.setLabelText('Loading collection FireCCI, (all) ..')
 
-            burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level)
+            burn_area = collections.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level)
             map = self._folium_map.map
             map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
@@ -203,7 +203,7 @@ class UIApp(QWidget):
 
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
-                burn_area = ds.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
+                burn_area = collections.EarthEngineFireDatasets.FireCII.getBurnArea(confidence_level, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
@@ -238,7 +238,7 @@ class UIApp(QWidget):
 
     def __loadFireCollections_MTBS(self) -> None:
 
-        from earthengine import collections
+        from mlfire.earthengine import collections
 
         # load MTBS fire collection
         SEVERITY_FROM = self._severity_from_mtbs
@@ -262,7 +262,7 @@ class UIApp(QWidget):
 
             self._progress_bar.setLabelText('Loading collection {} ...'.format(ds_name))
 
-            burn_area = ds.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO)
+            burn_area = collections.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO)
             map = self._folium_map.map
             map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 
@@ -279,7 +279,7 @@ class UIApp(QWidget):
 
             # loading fire collection
             with elapsed_timer('Loading {}'.format(ds_name)):
-                burn_area = ds.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO, start_date, end_date)
+                burn_area = collections.EarthEngineFireDatasets.FireMTBS.getBurnArea(SEVERITY_FROM, SEVERITY_TO, start_date, end_date)
                 map = self._folium_map.map
                 map.addGoogleEarthEngineLayer(burn_area, visualisation_params, ds_name, show=False)
 

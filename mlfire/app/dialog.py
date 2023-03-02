@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, Q
 from PyQt5.QtWidgets import QLineEdit, QLabel, QMessageBox
 from PyQt5.QtGui import QDoubleValidator
 
-from ui.validator import ValidLatitude
+from mlfire.app.validator import ValidLatitude
 
 
 class QAreaDialog(QDialog):

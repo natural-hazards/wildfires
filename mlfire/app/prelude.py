@@ -1,10 +1,9 @@
-
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QLabel
 from PyQt5.QtWidgets import QGroupBox, QSlider
 
-from earthengine.collections import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
-from utils.time import TimePeriod
+from mlfire.earthengine.collections import FireCIIAvailability, FireLabelsCollectionID, MTBSSeverity
+from mlfire.utils.time import TimePeriod
 
 
 class UIPrelude(QDialog):

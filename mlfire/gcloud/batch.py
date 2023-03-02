@@ -1,4 +1,3 @@
-
 import os
 import re
 
@@ -7,8 +6,8 @@ import geojson
 
 from enum import Enum
 
-from earthengine.collections import ModisIndex, FireLabelsCollection
-from utils.utils_string import getRandomString
+from mlfire.earthengine.collections import ModisIndex, FireLabelsCollection
+from mlfire.utils.utils_string import getRandomString
 
 
 class FileFormat(Enum):

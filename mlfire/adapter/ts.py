@@ -16,17 +16,17 @@ from scipy import stats
 from scipy.signal import savgol_filter
 from sklearn.model_selection import train_test_split
 
-from earthengine.collections import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands
-from earthengine.collections import MTBSRegion, MTBSSeverity
-from utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
+from mlfire.earthengine.collections import FireLabelsCollection, ModisIndex, ModisReflectanceSpecralBands
+from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
+from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs, band2data_reflectance
 
 # time series transformation
-from procs.fft import TransformFFT
-from procs.pca import TransformPCA, FactorOP
+from mlfire.procs.fft import TransformFFT
+from mlfire.procs.pca import TransformPCA, FactorOP
 
 # utils imports
-from utils.time import elapsed_timer
-from utils.plots import imshow
+from mlfire.utils.time import elapsed_timer
+from mlfire.utils.plots import imshow
 
 
 class DatasetTransformOP(Enum):
