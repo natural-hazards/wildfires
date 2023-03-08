@@ -347,7 +347,7 @@ class UIApp(QWidget):
             elif unit == 2:  # px
                 return v * 500.
 
-        def draw_rectangle(bounds) -> None:
+        def drawRectangle(bounds) -> None:
 
             # js injection to folium map (draw rectangle)
             map = self._folium_map.map
@@ -376,7 +376,7 @@ class UIApp(QWidget):
             rectangle_area.width = convert_distance(parms_area['area_width'], parms_area['unit'])
             rectangle_area.height = convert_distance(parms_area['area_height'], parms_area['unit'])
 
-            draw_rectangle(rectangle_area.bounds)
+            drawRectangle(rectangle_area.bounds)
 
     def __handleDownloadRequest(self, request) -> None:
 

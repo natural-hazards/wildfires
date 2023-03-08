@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from enum import Enum
+from typing import Union
 
 from osgeo import gdal
 
@@ -1121,7 +1122,7 @@ class DataAdapterTS(object):
         band_id = band_start + ModisReflectanceSpecralBands.GREEN.value - 1
         ref_green = self._ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
-        # get image
+        # get image in range 0 - 255 per channel
         img = np.zeros(shape=ref_red.shape + (3,), dtype=np.uint8)
         img[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
         img[:, :, 1] = (ref_green + 100.) / 16100. * 255.
@@ -1136,7 +1137,8 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    def __imshow_SATELLITE_IMG_REFLECTANCE(self, img_id) -> None:
+    def __showSatImage_REFLECTANCE(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
+                                   brightness_factors: Union[tuple[float, float], list[float, float]]) -> None:
 
         if not self._satimg_processed:
             try:
@@ -1144,24 +1146,26 @@ class DataAdapterTS(object):
             except IOError or ValueError:
                 raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
 
-        if img_id < 0:
+        if id_img < 0:
             raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
 
-        if self.nimgs - 1 < img_id:
+        if self.nimgs - 1 < id_img:
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nimgs))
 
-        img = self.__getSatelliteImageArray(img_id)
+        img = self.__getSatelliteImageArray(id_img)
         # increase image brightness
-        enhanced_img = opencv.convertScaleAbs(img, alpha=5., beta=5.)
+        enhanced_img = opencv.convertScaleAbs(img, alpha=brightness_factors[0], beta=brightness_factors[1])
 
-        str_title = 'MODIS Reflectance ({})'.format(self.satimg_dates.iloc[img_id]['Date'])
-        opencv.imshow(str_title, enhanced_img)
-        opencv.waitKey(0)
+        str_title = 'MODIS Reflectance ({})'.format(self.satimg_dates.iloc[id_img]['Date'])
 
-    def imshow(self, img_id: int) -> None:
+        # show labels and binary mask related to localization of wildfires (CCI labels)
+        imshow(src=enhanced_img, title=str_title, figsize=figsize, show=True)
+
+    def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                     brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__imshow_SATELLITE_IMG_REFLECTANCE(img_id)
+            self.__showSatImage_REFLECTANCE(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
         else:
             raise NotImplementedError
 
@@ -1169,7 +1173,7 @@ class DataAdapterTS(object):
     Display functionality (LABELS)
     """
 
-    def __imshow_label_CCI(self, band_id: int) -> None:
+    def __showFireLabels_CCI(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         PIXEL_NOT_BURNABLE = -1
 
@@ -1179,13 +1183,13 @@ class DataAdapterTS(object):
             except IOError or ValueError:
                 raise IOError('Cannot process the label file ({})!'.format(self.src_labels))
 
-        if band_id < 0:
+        if id_band < 0:
             raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
 
-        if self.nbands_labels - 1 < band_id:
+        if self.nbands_labels - 1 < id_band:
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_labels))
 
-        rs_band_id = self._map_band_id_label[band_id]
+        rs_band_id = self._map_band_id_label[id_band]
 
         # confidence level
         rs_cl = self._ds_labels.GetRasterBand(rs_band_id)
@@ -1214,13 +1218,13 @@ class DataAdapterTS(object):
         if np.max(mask) == 1:
             label[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
-        label_date = self.label_dates.iloc[band_id]['Date']
+        label_date = self.label_dates.iloc[id_band]['Date']
         str_title = 'CCI labels ({}, {})'.format(label_date.year, calendar.month_name[label_date.month])
 
-        opencv.imshow(str_title, label)
-        opencv.waitKey(0)
+        # show labels and binary mask related to localization of wildfires (CCI labels)
+        imshow(src=label, title=str_title, figsize=figsize, show=True)
 
-    def __imshow_label_MTBS(self, band_id: int) -> None:
+    def __showFireLabels_MTBS(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         if not self._labels_processed:
             try:
@@ -1228,14 +1232,14 @@ class DataAdapterTS(object):
             except IOError:
                 raise IOError('Cannot load a label file ({})!'.format(self.src_labels))
 
-        if band_id < 0:
+        if id_band < 0:
             raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
 
-        if self.nbands_labels - 1 < band_id:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(band_id))
+        if self.nbands_labels - 1 < id_band:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(id_band))
 
         # read band as raster image
-        rs_band_id = self._map_band_id_label[band_id]
+        rs_band_id = self._map_band_id_label[id_band]
         img = self._ds_labels.GetRasterBand(rs_band_id).ReadAsArray()
 
         # create mask for non-mapping areas
@@ -1253,18 +1257,18 @@ class DataAdapterTS(object):
             img[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
         # display labels
-        label_date = self.label_dates.iloc[band_id]['Date']
+        label_date = self.label_dates.iloc[id_band]['Date']
         str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, label_date.year)
 
-        opencv.imshow(str_title, img)
-        opencv.waitKey(0)
+        # show labels and binary mask related to localization of wildfires (MTBS labels)
+        imshow(src=img, title=str_title, figsize=figsize, show=True)
 
-    def imshow_label(self, band_id: int) -> None:
+    def showFireLabels(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
 
         if self.label_collection == FireLabelsCollection.CCI:
-            self.__imshow_label_CCI(band_id)
+            self.__showFireLabels_CCI(id_band=id_band, figsize=figsize)
         elif self.label_collection == FireLabelsCollection.MTBS:
-            self.__imshow_label_MTBS(band_id)
+            self.__showFireLabels_MTBS(id_band=id_band, figsize=figsize)
         else:
             raise NotImplementedError
 
@@ -1313,7 +1317,8 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    def __imshow_SATELLITE_IMG_REFLECTANCE_WITH_LABELS(self, img_id: int):
+    def __showSatImage_REFLECTANCE_WITH_LABELS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
+                                               brightness_factors: Union[tuple[float, float], list[float, float]]):
 
         if not self._labels_processed:
             try:
@@ -1327,74 +1332,74 @@ class DataAdapterTS(object):
             except IOError or ValueError:
                 raise IOError('Cannot process the satellite image ({})'.format(self.src_satimg))
 
-        satimg = self.__getSatelliteImageArray(img_id)
-        # increase image brightness
-        satimg = opencv.convertScaleAbs(satimg, alpha=5., beta=5.)
+        satimg = self.__getSatelliteImageArray(id_img)
 
-        labels = self.__getLabelsForSource(img_id)
+        # increase image brightness
+        satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
+
+        labels = self.__getLabelsForSource(id_img)
         satimg[labels == 1, 0:2] = 0; satimg[labels == 1, 2] = 255
 
-        ref_date = self.satimg_dates.iloc[img_id]['Date']
+        ref_date = self.satimg_dates.iloc[id_img]['Date']
         str_title = 'MODIS Reflectance ({}, labels={})'.format(ref_date, self.label_collection.name)
 
-        imshow(src=satimg, title=str_title, figsize=(6.5, 6.5), show=True)
+        # show multi spectral image as RGB with additional information about localization of wildfires
+        imshow(src=satimg, title=str_title, figsize=figsize, show=True)
 
-    def imshow_with_labels(self, img_id: int) -> None:
+    def showSatImageWithFireLabels(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                                   brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__imshow_SATELLITE_IMG_REFLECTANCE_WITH_LABELS(img_id)
+            self.__showSatImage_REFLECTANCE_WITH_LABELS(
+                id_img=id_img,
+                figsize=figsize,
+                brightness_factors=brightness_factors
+            )
         else:
             raise NotImplementedError
 
 
 if __name__ == '__main__':
 
-    DATA_DIR = 'pipelines/ts/data/'
+    DATA_DIR = 'data/tifs'
 
-    # fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_500_epsg3338_area_0.tif')
-    # fn_labels_cci = os.path.join(DATA_DIR, 'ak_april_july_2004_500_epsg3338_area_0_cci_labels.tif')
-    # fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_500_epsg3338_area_0_mtbs_labels.tif')
-    # fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2004_850_850_km_epsg3338_area_0.tif')
-    # fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_mtbs_labels.tif')
-    # fn_labels_cci = os.path.join(DATA_DIR, 'ak_january_december_2004_850_850_km_epsg3338_area_0_cci_labels.tif')
+    fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2005_100km_epsg3338_area_0.tif')
+    fn_labels_cci = os.path.join(DATA_DIR, 'ak_reflec_january_december_2005_100km_epsg3338_area_0_cci_labels.tif')
+    fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_reflec_january_december_2005_100km_epsg3338_area_0_mtbs_labels.tif')
 
-    # # adapter
-    # adapter = DataAdapterTS(
-    #     src_satimg=fn_satimg,
-    #     src_labels=fn_labels_cci,
-    #     label_collection=FireLabelsCollection.CCI,
-    #     cci_confidence_level=70
-    # )
-    #
-    # label_dates = adapter.label_dates
-    # print(label_dates)
-    # satimg_dates = adapter.satimg_dates
-    # print(satimg_dates)
-    #
-    # print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
-    # adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
-    # print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
-    # adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
-    #
-    # adapter.getDataset()
+    # setup adapter
+    adapter = DataAdapterTS(
+        src_satimg=fn_satimg,
+        src_labels=fn_labels_mtbs,
+        mtbs_region=MTBSRegion.ALASKA,
+        label_collection=FireLabelsCollection.MTBS,
+        cci_confidence_level=70
+    )
 
-    # adapter = DataAdapterTS(
-    #     src_satimg=fn_satimg,
-    #     src_labels=fn_labels_cci,
-    #     label_collection=FireLabelsCollection.CCI,
-    #     mtbs_region=MTBSRegion.ALASKA,
-    #     cci_confidence_level=70,
-    #     verbose=True
-    # )
-    #
-    # print('start date {}'.format(adapter.satimg_dates.iloc[0]['Date']))
-    # adapter.ds_start_date = adapter.satimg_dates.iloc[0]['Date']
-    # print('end date {}'.format(adapter.satimg_dates.iloc[14]['Date']))
-    # adapter.ds_end_date = adapter.satimg_dates.iloc[14]['Date']
-    #
-    # print(adapter.satimg_dates)
-    # print(adapter.label_dates)
-    # adapter.getDataset()
+    with elapsed_timer('Get dates related to wildfire labels ({})'.format(FireLabelsCollection.MTBS.name)):
+        label_dates = adapter.label_dates
+        print('Label dates\n', label_dates)
 
-    # for i in range(20, 40):
-    #     adapter.imshow_with_labels(i)
+    with elapsed_timer('Get dates related to multispectral images'):
+        satimg_dates = adapter.satimg_dates
+        print('Sources dates\n', satimg_dates)
+
+    index_begin_date = 0
+    index_end_date = -1
+
+    print('Data set start date {}'.format(adapter.satimg_dates.iloc[index_begin_date]['Date']))
+    adapter.ds_start_date = adapter.satimg_dates.iloc[index_begin_date]['Date']
+
+    print('Data set end date {}'.format(adapter.satimg_dates.iloc[index_end_date]['Date']))
+    adapter.ds_end_date = adapter.satimg_dates.iloc[index_end_date]['Date']
+
+    with elapsed_timer('Get training/test data sets'):
+        ds_training = adapter.ds_training
+        ds_test = adapter.ds_test
+
+    adapter.showFireLabels(0)
+    adapter.showSatImage(id_img=20)
+
+    # show images with labels
+    for i in range(20, 30):
+        adapter.showSatImageWithFireLabels(i)
