@@ -860,28 +860,22 @@ class DataAdapterTS(object):
         else:
             raise NotImplementedError
 
-    def __loadTimeSeries_REFLECTANCE(self, mask: np.ndarray = None) -> np.ndarray:
+    def __loadTimeSeries_REFLECTANCE_ALL_BANDS(self) -> np.ndarray:
 
-        start_date = self.ds_start_date
-        if start_date not in self._df_dates_satimg['Date'].values:
-            raise AttributeError('Start date does not correspond any band!')
+        with elapsed_timer('Load geotiff image to numpy array'):
+            np_bands = self._ds_satimg.ReadAsArray()
+            # TODO process nan values
 
-        end_date = self.ds_end_date
-        if end_date not in self._df_dates_satimg['Date'].values:
-            raise AttributeError('End date does not correspont any band!')
+        return np_bands
 
-        start_band_id = self._df_dates_satimg['Date'].index[self._df_dates_satimg['Date'] == start_date][0]
-        start_band_id = self._map_start_satimgs[start_band_id]
+    def __loadTimeSeries_REFLECTANCE_SELECTED_RANGE(self, start_band_id: int, end_band_id: int) -> np.ndarray:
 
-        end_band_id = self._df_dates_satimg['Date'].index[self._df_dates_satimg['Date'] == end_date][0]
-        end_band_id = self._map_start_satimgs[end_band_id]
-
+        NBANDS = 7
         lst_bands = []
 
-        for img_start in range(start_band_id, end_band_id + 1, 7):
+        for img_start in range(start_band_id, end_band_id + 1, NBANDS):
             # getting reflectance bands
-            for band_id in range(img_start, img_start + 7):
-
+            for band_id in range(img_start, img_start + NBANDS):
                 rs_band = self._ds_satimg.GetRasterBand(band_id)
                 band_dsc = rs_band.GetDescription()
 
@@ -894,6 +888,30 @@ class DataAdapterTS(object):
         img_ts = np.array(lst_bands)
         del lst_bands; gc.collect()
 
+        return img_ts
+
+    def __loadTimeSeries_REFLECTANCE(self, mask: np.ndarray = None) -> np.ndarray:
+
+        start_date = self.ds_start_date
+        if start_date not in self._df_dates_satimg['Date'].values:
+            raise AttributeError('Start date does not correspond any band!')
+
+        end_date = self.ds_end_date
+        if end_date not in self._df_dates_satimg['Date'].values:
+            raise AttributeError('End date does not correspont any band!')
+
+        start_band_id = self._df_dates_satimg.index[self._df_dates_satimg['Date'] == self.ds_start_date][0]
+        end_band_id = self._df_dates_satimg.index[self._df_dates_satimg['Date'] == self.ds_end_date][0]
+
+        if end_band_id - start_band_id + 1 == len(self._df_dates_satimg['Date']):
+            img_ts = self.__loadTimeSeries_REFLECTANCE_ALL_BANDS()
+        else:
+            start_band_id = self._map_start_satimgs[start_band_id]
+            end_band_id = self._map_start_satimgs[end_band_id]
+
+            img_ts = self.__loadTimeSeries_REFLECTANCE_SELECTED_RANGE(start_band_id=start_band_id, end_band_id=end_band_id)
+
+        # convert to 3D image to time series related to pixels
         img_ts = img_ts.reshape((img_ts.shape[0], -1)).T
         ts_reflectance = img_ts[mask.reshape(-1) == 1, :].astype(np.float32)
 
@@ -914,23 +932,23 @@ class DataAdapterTS(object):
 
     def __transformTimeSeries_REFLECTANCE(self, ts: np.ndarray) -> np.ndarray:
 
-        nbands = 7
+        NBANDS = 7
 
         # standardize data using z-score
         if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
 
             with elapsed_timer('Standardizing data'):
-                for band_id in range(nbands):
+                for band_id in range(NBANDS):
                     # TODO avoid time series with std = 0
-                    ts[:, band_id::nbands] = stats.zscore(ts[:, band_id::nbands], axis=1)
+                    ts[:, band_id::NBANDS] = stats.zscore(ts[:, band_id::NBANDS], axis=1)
 
         if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
 
             with elapsed_timer('Smoothing time series using Savitzky Golay filter'):
 
-                for band_id in range(nbands):
-                    ts[:, band_id::nbands] = savgol_filter(
-                        ts[:, band_id::nbands],
+                for band_id in range(NBANDS):
+                    ts[:, band_id::NBANDS] = savgol_filter(
+                        ts[:, band_id::NBANDS],
                         window_length=self.savgol_winlen,
                         polyorder=self.savgol_polyorder
                     )
@@ -942,13 +960,13 @@ class DataAdapterTS(object):
 
                 mod_ts = np.zeros(shape=(ts.shape[0], 7 * self.fft_nfeatures))
 
-                for band_id in range(nbands):
+                for band_id in range(NBANDS):
                     # transforming data to frequency domain
-                    ts_band = ts[:, band_id::nbands]
+                    ts_band = ts[:, band_id::NBANDS]
                     transformer_fft = TransformFFT(
                         nfeatures=self.fft_nfeatures
                     )
-                    mod_ts[:, band_id::nbands] = transformer_fft.transform(ts_band)
+                    mod_ts[:, band_id::NBANDS] = transformer_fft.transform(ts_band)
 
                     # invoke garbage collector
                     gc.collect()
