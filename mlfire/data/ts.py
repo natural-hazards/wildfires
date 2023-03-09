@@ -958,7 +958,7 @@ class DataAdapterTS(object):
 
             with elapsed_timer('Transforming time series to frequency domain'):
 
-                mod_ts = np.zeros(shape=(ts.shape[0], 7 * self.fft_nfeatures))
+                mod_ts = np.zeros(shape=(ts.shape[0], NBANDS * self.fft_nfeatures))
 
                 for band_id in range(NBANDS):
                     # transforming data to frequency domain
@@ -1379,7 +1379,11 @@ class DataAdapterTS(object):
 
 if __name__ == '__main__':
 
+    from mlfire.utils.io import saveDatasetToHDF5
+
     DATA_DIR = 'data/tifs'
+    OUTPUT_H5_DIR = 'data/h5/mtbs'
+    DS_PREFIX = 'ak_modis_2005_100km_'
 
     fn_satimg = os.path.join(DATA_DIR, 'ak_reflec_january_december_2005_100km_epsg3338_area_0.tif')
     fn_labels_cci = os.path.join(DATA_DIR, 'ak_reflec_january_december_2005_100km_epsg3338_area_0_cci_labels.tif')
@@ -1389,6 +1393,7 @@ if __name__ == '__main__':
     adapter = DataAdapterTS(
         src_satimg=fn_satimg,
         src_labels=fn_labels_mtbs,
+        transform_ops=[DatasetTransformOP.STANDARTIZE_ZSCORE],
         mtbs_region=MTBSRegion.ALASKA,
         label_collection=FireLabelsCollection.MTBS,
         cci_confidence_level=70
@@ -1421,3 +1426,11 @@ if __name__ == '__main__':
     # show images with labels
     for i in range(20, 30):
         adapter.showSatImageWithFireLabels(i)
+
+    with elapsed_timer('Save training data set'):
+        fn_training = os.path.join(OUTPUT_H5_DIR, '{}training.h5'.format(DS_PREFIX))
+        saveDatasetToHDF5(ds_training, fn_training)
+
+    with elapsed_timer('Save test data set'):
+        fn_test = os.path.join(OUTPUT_H5_DIR, '{}test.h5'.format(DS_PREFIX))
+        saveDatasetToHDF5(ds_test, fn_test)
