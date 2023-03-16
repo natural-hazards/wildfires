@@ -3,7 +3,7 @@ import ee as earthengine
 from enum import Enum
 
 
-class ModisReflectanceSpecralBands(Enum):
+class ModisReflectanceSpectralBands(Enum):
 
     RED = 1  # visible (wave length 620–670nm)
     NIR = 2  # near infra-red (wave length 841–876nm)
