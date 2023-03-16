@@ -1,11 +1,10 @@
 import os
 
-import numpy as np
-
 from typing import Union
 
 from mlfire.data.loader import DatasetLoader
 from mlfire.earthengine.collections import ModisIndex, ModisReflectanceSpectralBands
+from mlfire.earthengine.collections import FireLabelsCollection, MTBSSeverity
 
 # utils imports
 from mlfire.utils.functool import lazy_import
@@ -27,7 +26,9 @@ class DatasetView(DatasetLoader):
     Display functionality (MULTISPECTRAL SATELLITE IMAGE, MODIS)
     """
 
-    def __getSatelliteImageArray_REFLECTANCE(self, img_id: int) -> np.ndarray:
+    def __getSatelliteImageArray_REFLECTANCE(self, img_id: int) -> lazy_import('numpy.ndarray'):
+
+        np = lazy_import('numpy')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
         ds_satimg = self._ds_satimgs[id_ds]
@@ -46,7 +47,7 @@ class DatasetView(DatasetLoader):
 
         return img
 
-    def __getSatelliteImageArray(self, img_id: int) -> np.ndarray:
+    def __getSatelliteImageArray(self, img_id: int) -> lazy_import('numpy.ndarray'):
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
             return self.__getSatelliteImageArray_REFLECTANCE(img_id)
@@ -61,7 +62,7 @@ class DatasetView(DatasetLoader):
 
         if not self._satimgs_processed:
             try:
-                super()._processMetaData_SATELLITE_IMG()
+                self._processMetaData_SATELLITE_IMG()
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to satellite images!')
 
@@ -85,6 +86,60 @@ class DatasetView(DatasetLoader):
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
             self.__showSatImage_REFLECTANCE(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
+        else:
+            raise NotImplementedError
+
+    """
+    Display functionality (LABELS)
+    """
+
+    def __showFireLabels_MTBS(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
+
+        np = lazy_import('numpy')
+
+        if not self._labels_processed:
+            try:
+                self._processMetaData_LABELS()
+            except IOError or ValueError:
+                raise IOError('Cannot process meta data related to labels!')
+
+        if id_band < 0:
+            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+
+        if self.nbands_label - 1 < id_band:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(id_band))
+
+        # read band as raster image
+        id_ds, band_id = self._map_band_id_label[id_band]
+        rs = self._ds_labels[id_ds].GetRasterBand(band_id).ReadAsArray()
+
+        # create mask for non-mapping areas
+        mask = np.zeros(shape=rs.shape)
+        mask[rs == MTBSSeverity.NON_MAPPING_AREA.value] = 1
+
+        # create label mask
+        label = np.zeros(shape=rs.shape)
+        label[np.logical_and(rs >= self.mtbs_severity_from.value, rs <= MTBSSeverity.HIGH.value)] = 1
+
+        # create image for visualizing labels
+        img = np.ones(shape=rs.shape + (3,), dtype=np.float32)
+        img[label == 1, 0:2] = 0; img[label == 1, 2] = 1  # display area affected by a fire in a red colour
+        if np.max(mask) == 1:
+            img[mask == 1, :] = 0  # display non-mapping areas in a black colour
+
+        # display labels
+        label_date = self.label_dates.iloc[id_band]['Date']
+        str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, label_date.year)
+
+        # show labels and binary mask related to localization of wildfires (MTBS labels)
+        imshow(src=img, title=str_title, figsize=figsize, show=True)
+
+    def showFireLabels(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
+
+        if self.label_collection == FireLabelsCollection.CCI:
+            raise NotImplementedError
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            self.__showFireLabels_MTBS(id_band=id_band, figsize=figsize)
         else:
             raise NotImplementedError
 
@@ -115,4 +170,7 @@ if __name__ == '__main__':
     )
 
     print(len(dataset_view))
+    print(dataset_view.label_dates)
+
     dataset_view.showSatImage(70)
+    dataset_view.showFireLabels(0)

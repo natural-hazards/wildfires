@@ -3,13 +3,14 @@ import os
 
 from typing import Union
 
-# TODO move to lazy loader
-import pandas as pd
-from osgeo import gdal
-
+# collections
 from mlfire.earthengine.collections import FireLabelsCollection, ModisIndex
+from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
+
+# import utils
+from mlfire.utils.functool import lazy_import
 from mlfire.utils.time import elapsed_timer
-from mlfire.utils.utils_string import band2data_reflectance
+from mlfire.utils.utils_string import band2date_reflectance, band2date_mtbs
 
 
 class DatasetLoader(object):
@@ -19,7 +20,9 @@ class DatasetLoader(object):
                  lst_labels: Union[tuple[str], list[str]],
                  test_ratio: float = .33,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
-                 label_collection: FireLabelsCollection = FireLabelsCollection.MTBS):
+                 label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA):
 
         self._ds_satimgs = None
         self._df_dates_satimgs = None
@@ -28,7 +31,10 @@ class DatasetLoader(object):
         self._df_dates_labels = None
 
         self._map_start_satimgs = None
-        self._nimgs = -1
+        self._map_band_id_label = None
+
+        self._nimgs = 0
+        self._nbands_label = 0
 
         # training and test data set
 
@@ -55,6 +61,12 @@ class DatasetLoader(object):
 
         self._label_collection = None
         self.label_collection = label_collection
+
+        self._mtbs_region = None
+        if label_collection == FireLabelsCollection.MTBS: self.mtbs_region = mtbs_region
+
+        self._mtbs_severity_from = None
+        if label_collection == FireLabelsCollection.MTBS: self.mtbs_severity_from = mtbs_severity_from
 
         self._labels_processed = False
 
@@ -95,6 +107,38 @@ class DatasetLoader(object):
         self._modis_collection = collection
 
     """
+    MTBS labels properties
+    """
+
+    @property
+    def mtbs_region(self) -> MTBSRegion:
+
+        return self._mtbs_region
+
+    @mtbs_region.setter
+    def mtbs_region(self, region: MTBSRegion) -> None:
+
+        if self._mtbs_region == region:
+            return
+
+        self.__reset()
+        self._mtbs_region = region
+
+    @property
+    def mtbs_severity_from(self) -> MTBSSeverity:
+
+        return self._mtbs_severity_from
+
+    @mtbs_severity_from.setter
+    def mtbs_severity_from(self, severity: MTBSSeverity) -> None:
+
+        if self._mtbs_severity_from == severity:
+            return
+
+        self.__reset()
+        self._mtbs_severity_from = severity
+
+    """
     Labels related to multispectral images
     """
 
@@ -130,6 +174,22 @@ class DatasetLoader(object):
         self.__reset()  # clean up
         self._label_collection = collection
 
+    @property
+    def nbands_label(self) -> int:
+
+        if not self._labels_processed:
+            self._processMetaData_LABELS()
+
+        return self._nbands_label
+
+    @property
+    def label_dates(self) -> lazy_import('pandas.DataFrame'):
+
+        if self._df_dates_labels is None:
+            self.__processBandDates_LABEL()
+
+        return self._df_dates_labels
+
     """
     Training and test data sets
     """
@@ -156,9 +216,13 @@ class DatasetLoader(object):
         del self._df_dates_satimgs; self._df_dates_satimgs = None
         del self._map_start_satimgs; self._map_start_satimgs = None
 
+        del self._df_dates_labels; self._df_dates_labels = None
+        del self._map_band_id_label; self._map_band_id_label = None
+
         gc.collect()  # invoke garbage collector
 
-        self._nimgs = -1
+        self._nimgs = 0
+        self._nbands_label = 0
 
         # set flags to false
         self._satimgs_processed = False
@@ -170,10 +234,13 @@ class DatasetLoader(object):
 
     def __loadGeoTIFF_SATELLITE_IMGS(self) -> None:
 
+        # lazy import
+        gdal = lazy_import('osgeo.gdal')
+
         if self._lst_satimgs is None:
             raise IOError('Multispectral satellite data is not set!')
 
-        del self._ds_satimgs
+        del self._ds_satimgs; gc.collect()
         self._ds_satimgs = []
 
         for fn in self._lst_satimgs:
@@ -186,13 +253,38 @@ class DatasetLoader(object):
             self._ds_satimgs.append(ds)
 
         if len(self._ds_satimgs) == 0:
-            raise IOError('Cannot load any of following sources {}!'.format(self._ds_satimgs))
+            raise IOError('Cannot load any of following sources {}!'.format(self._lst_satimgs))
+
+    def __loadGeoTIFF_LABELS(self) -> None:
+
+        # lazy import
+        gdal = lazy_import('osgeo.gdal')
+
+        if self._lst_labels is None:
+            raise IOError('Labels related to satellite images are not set!')
+
+        del self._ds_labels; gc.collect()
+        self._ds_labels = []
+
+        for fn in self._lst_labels:
+            try:
+                ds = gdal.Open(fn)
+            except IOError:
+                IOError('Cannot load source {}!'.format(fn))
+                continue
+
+            self._ds_labels.append(ds)
+
+        if len(self._ds_labels) == 0:
+            raise IOError('Cannot load any of following sources {}!'.format(self._lst_labels))
 
     """
-    Process meta data
+    Process meta data (MULTISPECTRAL SATELLITE IMAGE, MODIS)
     """
 
     def __processBandDates_SATIMG_MODIS_REFLECTANCE(self) -> None:
+
+        pd = lazy_import('pandas')
 
         nbands = 0
         unique_dates = set()
@@ -211,7 +303,7 @@ class DatasetLoader(object):
                     band_dsc = rs_band.GetDescription()
 
                     if '_sur_refl_' in band_dsc:
-                        band_date = band2data_reflectance(rs_band.GetDescription())
+                        band_date = band2date_reflectance(rs_band.GetDescription())
                         unique_dates.add((band_date, id_ds))
 
             if not unique_dates:
@@ -232,6 +324,7 @@ class DatasetLoader(object):
             except IOError:
                 raise IOError('Cannot load any of following satellite images: {}'.format(self.lst_satimgs))
 
+        # TODO try-except
         if self.modis_collection == ModisIndex.REFLECTANCE:
             self.__processBandDates_SATIMG_MODIS_REFLECTANCE()
         else:
@@ -257,7 +350,7 @@ class DatasetLoader(object):
 
                     rs_band = ds.GetRasterBand(band_id + 1)
                     band_dsc = rs_band.GetDescription()
-                    band_date = band2data_reflectance(band_dsc)
+                    band_date = band2date_reflectance(band_dsc)
 
                     # determine where a multi spectral image begins
                     if '_sur_refl_' in band_dsc and last_date != band_date:
@@ -265,7 +358,7 @@ class DatasetLoader(object):
                         last_date = band_date
 
         if not map_start_satimg:
-            raise ValueError('Sattelite image file does not contain any useful data!')
+            raise ValueError('Any satellite image do not contain any useful data!')
 
         self._map_start_satimgs = map_start_satimg
         self._nimgs = pos
@@ -285,12 +378,121 @@ class DatasetLoader(object):
                 msg = 'Cannot process band dates of any following satellite images: {}'
                 raise ValueError(msg.format(self.lst_satimgs))
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE()
-        else:
-            raise NotImplementedError
+        try:
+            if self.modis_collection == ModisIndex.REFLECTANCE:
+                self.__processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE()
+            else:
+                raise NotImplementedError
+        except ValueError or NotImplementedError:
+            raise ValueError('Cannot process multi spectral bands meta data!')
 
         self._satimgs_processed = True
+
+    """
+    Process meta data (LABELS)
+    """
+
+    def __processBandDates_LABEL_MTBS(self) -> None:
+
+        # lazy imports
+        pd = lazy_import('pandas')
+
+        lst = []
+
+        with elapsed_timer('Processing band dates (labels, MTBS)'):
+
+            for id_ds, ds in enumerate(self._ds_labels):
+                for band_id in range(ds.RasterCount):
+
+                    rs_band = ds.GetRasterBand(band_id + 1)
+                    dsc_band = rs_band.GetDescription()
+
+                    if self.mtbs_region.value in dsc_band:
+                        band_date = band2date_mtbs(dsc_band)
+                        lst.append((band_date, id_ds))
+
+        if not lst:
+            raise ValueError('Label file does not contain any useful data!')
+
+        df_dates = pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
+        del lst; gc.collect()
+
+        self._df_dates_labels = df_dates
+
+    def __processBandDates_LABEL(self) -> None:
+
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load any following label sources: {}'.format(self.lst_labels))
+
+        try:
+            if self.label_collection == FireLabelsCollection.CCI:
+                raise NotImplementedError
+            elif self.label_collection == FireLabelsCollection.MTBS:
+                self.__processBandDates_LABEL_MTBS()
+            else:
+                raise NotImplementedError
+        except ValueError or NotImplementedError:
+            raise ValueError('Cannot process band dates related to labels ({})!'.format(self.label_collection.name))
+
+    def __processLabels_MTBS(self) -> None:
+
+        # determine bands and their ids for region selection
+        if self._map_band_id_label is None:
+            del self._map_band_id_label; self._map_band_id_label = None
+            gc.collect()  # invoke garbage collector
+
+        map_band_ids = {}
+        pos = 0
+
+        with elapsed_timer('Processing fire labels ({})'.format(self.label_collection.name)):
+
+            for id_ds, ds in enumerate(self._ds_labels):
+                for band_id in range(ds.RasterCount):
+
+                    rs_band = ds.GetRasterBand(band_id + 1)
+                    dsc_band = rs_band.GetDescription()
+
+                    # map id data set for selected region to band id
+                    if self.mtbs_region.value in dsc_band:
+                        map_band_ids[pos] = (id_ds, band_id + 1); pos += 1
+
+        if not map_band_ids:
+            msg = 'Any labels ({}) do not contain any useful information: {}'.format(self.label_collection.name, self._lst_labels)
+            raise ValueError(msg)
+
+        self._map_band_id_label = map_band_ids
+        self._nbands_label = pos
+
+    def _processMetaData_LABELS(self) -> None:
+
+        if self._ds_labels is None:
+            try:
+                self.__loadGeoTIFF_LABELS()
+            except IOError:
+                raise IOError('Cannot load any following label sources: {}'.format(self.lst_labels))
+
+        if self._df_dates_labels is None:
+            try:
+                self.__processBandDates_LABEL()
+            except ValueError or AttributeError:
+                raise ValueError('Cannot process band dates related labels ({})!'.format(self.label_collection.name))
+
+        try:
+            if self.label_collection == FireLabelsCollection.CCI:
+                raise NotImplementedError
+            elif self.label_collection == FireLabelsCollection.MTBS:
+                self.__processLabels_MTBS()
+            else:
+                raise NotImplementedError
+        except ValueError or NotImplementedError:
+            msg = 'Cannot process labels meta data!'
+            raise ValueError(msg)
+
+        # set that everything is done
+        self._labels_processed = True
 
     """
     Magic methods
