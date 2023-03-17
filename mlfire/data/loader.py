@@ -10,7 +10,8 @@ from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 # import utils
 from mlfire.utils.functool import lazy_import
 from mlfire.utils.time import elapsed_timer
-from mlfire.utils.utils_string import band2date_reflectance, band2date_mtbs
+from mlfire.utils.utils_string import band2date_reflectance
+from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 
 
 class DatasetLoader(object):
@@ -21,6 +22,7 @@ class DatasetLoader(object):
                  test_ratio: float = .33,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA):
 
@@ -68,6 +70,9 @@ class DatasetLoader(object):
         self._mtbs_severity_from = None
         if label_collection == FireLabelsCollection.MTBS: self.mtbs_severity_from = mtbs_severity_from
 
+        self._cci_confidence_level = -1
+        if label_collection == FireLabelsCollection.CCI: self.cci_confidence_level = cci_confidence_level
+
         self._labels_processed = False
 
     """
@@ -105,6 +110,26 @@ class DatasetLoader(object):
 
         self.__reset()  # clean up
         self._modis_collection = collection
+
+    """
+    FireCII properties
+    """
+
+    @property
+    def cci_confidence_level(self) -> int:
+
+        return self._cci_confidence_level
+
+    @cci_confidence_level.setter
+    def cci_confidence_level(self, level: int) -> None:
+
+        if self._cci_confidence_level == level:
+            return
+
+        if level < 0 or level > 100:
+            raise ValueError('Confidence level for FireCCI labels must be positive int between 0 and 100!')
+
+        self._cci_confidence_level = level
 
     """
     MTBS labels properties
@@ -392,10 +417,45 @@ class DatasetLoader(object):
     Process meta data (LABELS)
     """
 
+    def __processBandDates_LABEL_CCI(self) -> None:
+
+        # lazy imports
+        pd = lazy_import('pandas')
+
+        if self._df_dates_labels is not None:
+            del self._df_dates_labels; self._df_dates_satimgs = None
+            gc.collect()
+
+        lst = []
+
+        with elapsed_timer('Processing band dates (labels, CCI)'):
+
+            for id_ds, ds in enumerate(self._ds_labels):
+                for band_id in range(ds.RasterCount):
+
+                    rs_band = ds.GetRasterBand(band_id + 1)
+                    dsc_band = rs_band.GetDescription()
+
+                    if 'ConfidenceLevel' in dsc_band:
+                        band_date = band2date_firecci(dsc_band)
+                        lst.append((band_date, id_ds))
+
+        if not lst:
+            raise ValueError('Label file does not contain any useful data!')
+
+        df_dates = pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
+        del lst; gc.collect()
+
+        self._df_dates_labels = df_dates
+
     def __processBandDates_LABEL_MTBS(self) -> None:
 
         # lazy imports
         pd = lazy_import('pandas')
+
+        if self._df_dates_labels is not None:
+            del self._df_dates_labels; self._df_dates_satimgs = None
+            gc.collect()
 
         lst = []
 
@@ -429,13 +489,40 @@ class DatasetLoader(object):
 
         try:
             if self.label_collection == FireLabelsCollection.CCI:
-                raise NotImplementedError
+                self.__processBandDates_LABEL_CCI()
             elif self.label_collection == FireLabelsCollection.MTBS:
                 self.__processBandDates_LABEL_MTBS()
             else:
                 raise NotImplementedError
         except ValueError or NotImplementedError:
             raise ValueError('Cannot process band dates related to labels ({})!'.format(self.label_collection.name))
+
+    def __processLabels_CCI(self) -> None:
+
+        if self._map_band_id_label is None:
+            del self._map_band_id_label; self._map_band_id_label = None
+            gc.collect()
+
+        map_band_ids = {}
+        pos = 0
+
+        with elapsed_timer('Processing fire labels ({})'.format(self.label_collection.name)):
+
+            for id_ds, ds in enumerate(self._ds_labels):
+                for band_id in range(ds.RasterCount):
+
+                    rs_band = ds.GetRasterBand(band_id + 1)
+                    dsc_band = rs_band.GetDescription()
+
+                    # map id data set for selected region to band id
+                    if 'ConfidenceLevel' in dsc_band:
+                        map_band_ids[pos] = (id_ds, band_id + 1); pos += 1
+
+        if not map_band_ids:
+            raise ValueError('Label file {} does not contain any useful information for a selected region.')
+
+        self._map_band_id_label = map_band_ids
+        self._nbands_label = pos
 
     def __processLabels_MTBS(self) -> None:
 
@@ -482,7 +569,7 @@ class DatasetLoader(object):
 
         try:
             if self.label_collection == FireLabelsCollection.CCI:
-                raise NotImplementedError
+                self.__processLabels_CCI()
             elif self.label_collection == FireLabelsCollection.MTBS:
                 self.__processLabels_MTBS()
             else:

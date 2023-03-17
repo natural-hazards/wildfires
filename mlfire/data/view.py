@@ -4,10 +4,12 @@ from typing import Union
 
 from mlfire.data.loader import DatasetLoader
 from mlfire.earthengine.collections import ModisIndex, ModisReflectanceSpectralBands
-from mlfire.earthengine.collections import FireLabelsCollection, MTBSSeverity
+from mlfire.earthengine.collections import FireLabelsCollection
+from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 
 # utils imports
 from mlfire.utils.functool import lazy_import
+from mlfire.utils.utils_string import band2date_firecci
 from mlfire.utils.plots import imshow
 
 
@@ -15,11 +17,19 @@ class DatasetView(DatasetLoader):
 
     def __init__(self,
                  lst_satimgs: Union[tuple[str], list[str]],
-                 lst_labels: Union[tuple[str], list[str]]):
+                 lst_labels: Union[tuple[str], list[str]],
+                 modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
+                 label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA):
 
         super().__init__(
-            lst_satimgs,
-            lst_labels
+            lst_satimgs=lst_satimgs,
+            lst_labels=lst_labels,
+            modis_collection=modis_collection,
+            label_collection=label_collection,
+            mtbs_severity_from=mtbs_severity_from,
+            mtbs_region=mtbs_region
         )
 
     """
@@ -93,25 +103,62 @@ class DatasetView(DatasetLoader):
     Display functionality (LABELS)
     """
 
+    def __showFireLabels_CCI(self, id_band: int,  figsize: Union[tuple[float, float], list[float, float]]) -> None:
+
+        # lazy imports
+        np = lazy_import('numpy')
+        calendar = lazy_import('calendar')
+
+        colors = lazy_import('mlfire.utils.colors')
+
+        PIXEL_NOT_BURNABLE = -1
+
+        # read band as raster image
+        id_ds, id_rs = self._map_band_id_label[id_band]
+
+        # confidence level
+        rs_cl = self._ds_labels[id_ds].GetRasterBand(id_rs)
+        dsc_cl = rs_cl.GetDescription()
+
+        # observed flag
+        rs_mask = self._ds_labels[id_ds].GetRasterBand(id_rs + 1)
+        dsc_mask = rs_mask.GetDescription()
+
+        # checking for sure to avoid problems in subsequent processing
+        if band2date_firecci(dsc_cl) != band2date_firecci(dsc_mask):
+            raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+
+        confidence_level = rs_cl.ReadAsArray()
+        mask = rs_mask.ReadAsArray()
+
+        confidence_level[confidence_level < self.cci_confidence_level] = 0
+        confidence_level[confidence_level >= self.cci_confidence_level] = 1
+
+        # set mask
+        mask[mask == PIXEL_NOT_BURNABLE] = 1
+
+        # label
+        label = np.ones(shape=confidence_level.shape + (3,), dtype=np.float32)
+        label[:, :] = colors.Colors.GRAY_COLOR.value
+        label[confidence_level == 1, :3] = colors.Colors.RED_COLOR.value  # display area affected by a fire in a red colour
+
+        if np.max(mask) == 1:
+            label[mask == 1, :] = 0  # display non-mapping areas in a black colour
+
+        label_date = self.label_dates.iloc[id_band]['Date']
+        str_title = 'CCI labels ({}, {})'.format(label_date.year, calendar.month_name[label_date.month])
+
+        # show labels and binary mask related to localization of wildfires (CCI labels)
+        imshow(src=label, title=str_title, figsize=figsize, show=True)
+
     def __showFireLabels_MTBS(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         np = lazy_import('numpy')
-
-        if not self._labels_processed:
-            try:
-                self._processMetaData_LABELS()
-            except IOError or ValueError:
-                raise IOError('Cannot process meta data related to labels!')
-
-        if id_band < 0:
-            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-
-        if self.nbands_label - 1 < id_band:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(id_band))
+        colors = lazy_import('mlfire.utils.colors')
 
         # read band as raster image
-        id_ds, band_id = self._map_band_id_label[id_band]
-        rs = self._ds_labels[id_ds].GetRasterBand(band_id).ReadAsArray()
+        id_ds, ds_rs = self._map_band_id_label[id_band]
+        rs = self._ds_labels[id_ds].GetRasterBand(ds_rs).ReadAsArray()
 
         # create mask for non-mapping areas
         mask = np.zeros(shape=rs.shape)
@@ -123,7 +170,10 @@ class DatasetView(DatasetLoader):
 
         # create image for visualizing labels
         img = np.ones(shape=rs.shape + (3,), dtype=np.float32)
-        img[label == 1, 0:2] = 0; img[label == 1, 2] = 1  # display area affected by a fire in a red colour
+
+        img[:, :] = colors.Colors.GRAY_COLOR.value
+        img[label == 1, :] = colors.Colors.RED_COLOR.value
+
         if np.max(mask) == 1:
             img[mask == 1, :] = 0  # display non-mapping areas in a black colour
 
@@ -136,8 +186,20 @@ class DatasetView(DatasetLoader):
 
     def showFireLabels(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
 
+        if not self._labels_processed:
+            try:
+                self._processMetaData_LABELS()
+            except IOError or ValueError:
+                raise IOError('Cannot process meta data related to labels!')
+
+        if id_band < 0:
+            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+
+        if self.nbands_label - 1 < id_band:
+            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
+
         if self.label_collection == FireLabelsCollection.CCI:
-            raise NotImplementedError
+            self.__showFireLabels_CCI(id_band=id_band, figsize=figsize)
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__showFireLabels_MTBS(id_band=id_band, figsize=figsize)
         else:
@@ -150,8 +212,11 @@ if __name__ == '__main__':
     DATA_DIR = 'data/tifs'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
+    LABEL_COLLECTION = FireLabelsCollection.CCI
+    STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
+
     lst_satimgs = []
-    lst_labels_mtbs = []
+    lst_labels = []
 
     for year in range(2004, 2006):
 
@@ -160,17 +225,18 @@ if __name__ == '__main__':
         fn_satimg = os.path.join(DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
         lst_satimgs.append(fn_satimg)
 
-        fn_labels_mtbs = os.path.join(DATA_DIR, '{}_epsg3338_area_0_mtbs_labels.tif'.format(PREFIX_IMG_YEAR))
-        lst_labels_mtbs.append(fn_labels_mtbs)
+        fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
+        lst_labels.append(fn_labels)
 
     # setup of data set loader
     dataset_view = DatasetView(
         lst_satimgs=lst_satimgs,
-        lst_labels=lst_labels_mtbs
+        lst_labels=lst_labels,
+        label_collection=LABEL_COLLECTION
     )
 
     print(len(dataset_view))
     print(dataset_view.label_dates)
 
     dataset_view.showSatImage(70)
-    dataset_view.showFireLabels(0)
+    dataset_view.showFireLabels(6)
