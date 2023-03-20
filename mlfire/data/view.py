@@ -86,7 +86,7 @@ class DatasetView(DatasetLoader):
         enhanced_img = opencv.convertScaleAbs(img, alpha=brightness_factors[0], beta=brightness_factors[1])
 
         # figure title
-        str_title = 'MODIS Reflectance ({})'.format(self._df_dates_satimgs.iloc[id_img]['Date'])
+        str_title = 'MODIS Reflectance ({})'.format(self.satimg_dates.iloc[id_img]['Date'])
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=enhanced_img, title=str_title, figsize=figsize, show=True)
@@ -106,10 +106,9 @@ class DatasetView(DatasetLoader):
     def __showFireLabels_CCI(self, id_band: int,  figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         # lazy imports
-        np = lazy_import('numpy')
         calendar = lazy_import('calendar')
-
         colors = lazy_import('mlfire.utils.colors')
+        np = lazy_import('numpy')
 
         PIXEL_NOT_BURNABLE = -1
 
@@ -138,7 +137,7 @@ class DatasetView(DatasetLoader):
         mask[mask == PIXEL_NOT_BURNABLE] = 1
 
         # label
-        label = np.ones(shape=confidence_level.shape + (3,), dtype=np.float32)
+        label = np.ones(shape=confidence_level.shape + (3,), dtype=np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
         label[confidence_level == 1, :3] = colors.Colors.RED_COLOR.value  # display area affected by a fire in a red colour
 
@@ -157,8 +156,8 @@ class DatasetView(DatasetLoader):
         colors = lazy_import('mlfire.utils.colors')
 
         # read band as raster image
-        id_ds, ds_rs = self._map_band_id_label[id_band]
-        rs = self._ds_labels[id_ds].GetRasterBand(ds_rs).ReadAsArray()
+        id_ds, id_rs = self._map_band_id_label[id_band]
+        rs = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
 
         # create mask for non-mapping areas
         mask = np.zeros(shape=rs.shape)
@@ -169,7 +168,7 @@ class DatasetView(DatasetLoader):
         label[np.logical_and(rs >= self.mtbs_severity_from.value, rs <= MTBSSeverity.HIGH.value)] = 1
 
         # create image for visualizing labels
-        img = np.ones(shape=rs.shape + (3,), dtype=np.float32)
+        img = np.ones(shape=rs.shape + (3,), dtype=np.uint8)
 
         img[:, :] = colors.Colors.GRAY_COLOR.value
         img[label == 1, :] = colors.Colors.RED_COLOR.value
@@ -205,6 +204,98 @@ class DatasetView(DatasetLoader):
         else:
             raise NotImplementedError
 
+    """
+    Display functionality (MULTISPECTRAL SATELLITE IMAGE + LABELS)
+    """
+
+    def __getLabelsForSatImgDate_CCI(self, id_img: int) -> lazy_import('numpy.ndarray'):
+
+        datetime = lazy_import('datetime')
+
+        # get label date time
+        date_satimg = self.satimg_dates.iloc[id_img]['Date']
+        date_satimg = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
+
+        # get index of corresponding labels
+        label_index = self.label_dates.index[self._df_dates_labels['Date'] == date_satimg][0]
+        id_ds, id_rs = self._map_band_id_label[label_index]
+
+        rs_cl = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
+        rs_cl[rs_cl < self.cci_confidence_level] = 0
+        rs_cl[rs_cl >= self.cci_confidence_level] = 1
+
+        return rs_cl
+
+    def __getLabelsForSatImgDate_MTBS(self, id_img: int) -> lazy_import('numpy.ndarray'):
+
+        datetime = lazy_import('datetime')
+        np = lazy_import('numpy')
+
+        date_satimg = self.satimg_dates.iloc[id_img]['Date']
+        date_satimg = datetime.date(year=date_satimg.year, month=1, day=1)
+
+        # get index of corresponding labels
+        label_index = self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0]
+        id_ds, id_rs = self._map_band_id_label[label_index]
+
+        # get severity
+        severity_fire = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
+        label = np.zeros(shape=severity_fire.shape)
+        label[np.logical_and(severity_fire >= self.mtbs_severity_from.value, severity_fire <= MTBSSeverity.HIGH.value)] = 1
+
+        return label
+
+    def __getLabelsForSource(self, id_img: int) -> lazy_import('numpy.ndarray'):
+
+        if self.label_collection == FireLabelsCollection.CCI:
+            return self.__getLabelsForSatImgDate_CCI(id_img)
+        elif self.label_collection == FireLabelsCollection.MTBS:
+            return self.__getLabelsForSatImgDate_MTBS(id_img)
+        else:
+            raise NotImplementedError
+
+    def __showSatImageWithFireLabels_REFLECTANCE(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                                                 brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
+
+        opencv = lazy_import('cv2')
+        colors = lazy_import('mlfire.utils.colors')
+
+        # get
+        satimg = self.__getSatelliteImageArray(id_img)
+
+        # increase image brightness
+        satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
+
+        # get labels
+        labels = self.__getLabelsForSource(id_img)
+        satimg[labels == 1, :] = colors.Colors.RED_COLOR.value
+
+        ref_date = self.satimg_dates.iloc[id_img]['Date']
+        str_title = 'MODIS Reflectance ({}, labels={})'.format(ref_date, self.label_collection.name)
+
+        # show multi spectral image as RGB with additional information about localization of wildfires
+        imshow(src=satimg, title=str_title, figsize=figsize, show=True)
+
+    def showSatImageWithFireLabels(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                                   brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)):
+
+        if not self._labels_processed:
+            try:
+                self._processMetaData_LABELS()
+            except IOError or ValueError:
+                raise IOError('Cannot process meta data related to labels!')
+
+        if not self._satimgs_processed:
+            try:
+                self._processMetaData_SATELLITE_IMG()
+            except IOError or ValueError:
+                raise IOError('Cannot process meta data related to satellite images!')
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            self.__showSatImageWithFireLabels_REFLECTANCE(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
+        else:
+            raise NotImplementedError
+
 
 #
 if __name__ == '__main__':
@@ -212,7 +303,8 @@ if __name__ == '__main__':
     DATA_DIR = 'data/tifs'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    LABEL_COLLECTION = FireLabelsCollection.CCI
+    LABEL_COLLECTION = FireLabelsCollection.MTBS
+    # LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
     lst_satimgs = []
@@ -238,5 +330,6 @@ if __name__ == '__main__':
     print(len(dataset_view))
     print(dataset_view.label_dates)
 
+    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     dataset_view.showSatImage(70)
-    dataset_view.showFireLabels(6)
+    dataset_view.showSatImageWithFireLabels(70)

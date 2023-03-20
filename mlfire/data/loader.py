@@ -111,6 +111,14 @@ class DatasetLoader(object):
         self.__reset()  # clean up
         self._modis_collection = collection
 
+    @property
+    def satimg_dates(self) -> lazy_import('pandas.DataFrame'):
+
+        if self._df_dates_labels is None:
+            self.__processBandDates_SATELLITE_IMGS()
+
+        return self._df_dates_satimgs
+
     """
     FireCII properties
     """
