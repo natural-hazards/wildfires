@@ -24,7 +24,7 @@ class DatasetLoader(object):
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
-                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA):
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA) -> None:
 
         self._ds_satimgs = None
         self._df_dates_satimgs = None

@@ -1,5 +1,6 @@
 import os
 
+from enum import Enum
 from typing import Union
 
 from mlfire.data.loader import DatasetLoader
@@ -13,6 +14,13 @@ from mlfire.utils.utils_string import band2date_firecci
 from mlfire.utils.plots import imshow
 
 
+class FireLabelsViewOpt(Enum):
+
+    LABEL = 1
+    CONFIDENCE_LEVEL = 2
+    SEVERITY = 3
+
+
 class DatasetView(DatasetLoader):
 
     def __init__(self,
@@ -20,17 +28,36 @@ class DatasetView(DatasetLoader):
                  lst_labels: Union[tuple[str], list[str]],
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
-                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA):
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
         super().__init__(
             lst_satimgs=lst_satimgs,
             lst_labels=lst_labels,
             modis_collection=modis_collection,
             label_collection=label_collection,
+            cci_confidence_level=cci_confidence_level,
             mtbs_severity_from=mtbs_severity_from,
             mtbs_region=mtbs_region
         )
+
+        self._labels_view_opt = None
+        self.labels_view_opt = labels_view_opt
+
+    @property
+    def labels_view_opt(self) -> FireLabelsViewOpt:
+
+        return self._labels_view_opt
+
+    @labels_view_opt.setter
+    def labels_view_opt(self, opt: FireLabelsViewOpt) -> None:
+
+        if self._labels_view_opt == opt:
+            return
+
+        self._labels_view_opt = opt
 
     """
     Display functionality (MULTISPECTRAL SATELLITE IMAGE, MODIS)
@@ -103,11 +130,37 @@ class DatasetView(DatasetLoader):
     Display functionality (LABELS)
     """
 
+    def __getFireLabels_CCI(self, confidence_level: lazy_import('numpy.ndarray')) -> lazy_import('numpy.ndarray'):
+
+        colors = lazy_import('mlfire.utils.colors')
+        np = lazy_import('numpy')
+
+        label = np.ones(shape=confidence_level.shape + (3,), dtype=np.uint8)
+        label[:, :] = colors.Colors.GRAY_COLOR.value
+
+        if self.labels_view_opt == FireLabelsViewOpt.LABEL:
+            label[confidence_level >= self.cci_confidence_level, :3] = colors.Colors.RED_COLOR.value
+        elif self.labels_view_opt == FireLabelsViewOpt.CONFIDENCE_LEVEL:
+            cmap = lazy_import('mlfire.utils.cmap')
+
+            lst_colors = ['#ff0000', '#ff5a00', '#ffff00']
+            cl_min = 50
+            cl_max = 100
+
+            cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=cl_min, vmax=cl_max)
+
+            for v in range(cl_min, cl_max + 1):
+                c = [int(v * 255) for v in cmap_helper.getRGB(v)[::-1]]
+                label[confidence_level == v, :] = c
+        else:
+            raise AttributeError('Not supported option for viewing labels!')
+
+        return label
+
     def __showFireLabels_CCI(self, id_band: int,  figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         # lazy imports
         calendar = lazy_import('calendar')
-        colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
         PIXEL_NOT_BURNABLE = -1
@@ -130,25 +183,19 @@ class DatasetView(DatasetLoader):
         confidence_level = rs_cl.ReadAsArray()
         mask = rs_mask.ReadAsArray()
 
-        confidence_level[confidence_level < self.cci_confidence_level] = 0
-        confidence_level[confidence_level >= self.cci_confidence_level] = 1
-
-        # set mask
-        mask[mask == PIXEL_NOT_BURNABLE] = 1
-
-        # label
-        label = np.ones(shape=confidence_level.shape + (3,), dtype=np.uint8)
-        label[:, :] = colors.Colors.GRAY_COLOR.value
-        label[confidence_level == 1, :3] = colors.Colors.RED_COLOR.value  # display area affected by a fire in a red colour
-
+        label = self.__getFireLabels_CCI(confidence_level=confidence_level)
         if np.max(mask) == 1:
-            label[mask == 1, :] = 0  # display non-mapping areas in a black colour
+            label[mask == PIXEL_NOT_BURNABLE, :] = 0  # display non-mapping areas in a black colour
 
         label_date = self.label_dates.iloc[id_band]['Date']
         str_title = 'CCI labels ({}, {})'.format(label_date.year, calendar.month_name[label_date.month])
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=label, title=str_title, figsize=figsize, show=True)
+
+    def __getFireLabels_MTBS(self, confidence_level: lazy_import('numpy.ndarray')) -> lazy_import('numpy.ndarray'):
+
+        pass
 
     def __showFireLabels_MTBS(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
@@ -208,7 +255,7 @@ class DatasetView(DatasetLoader):
     Display functionality (MULTISPECTRAL SATELLITE IMAGE + LABELS)
     """
 
-    def __getLabelsForSatImgDate_CCI(self, id_img: int) -> lazy_import('numpy.ndarray'):
+    def __getLabelsForSatImgDate_CCI(self, id_img: int) -> (lazy_import('numpy.ndarray'), lazy_import('numpy.ndarray')):
 
         datetime = lazy_import('datetime')
 
@@ -220,11 +267,10 @@ class DatasetView(DatasetLoader):
         label_index = self.label_dates.index[self._df_dates_labels['Date'] == date_satimg][0]
         id_ds, id_rs = self._map_band_id_label[label_index]
 
-        rs_cl = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
-        rs_cl[rs_cl < self.cci_confidence_level] = 0
-        rs_cl[rs_cl >= self.cci_confidence_level] = 1
+        confidence_level = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
+        label = self.__getFireLabels_CCI(confidence_level=confidence_level)
 
-        return rs_cl
+        return label, confidence_level
 
     def __getLabelsForSatImgDate_MTBS(self, id_img: int) -> lazy_import('numpy.ndarray'):
 
@@ -260,15 +306,15 @@ class DatasetView(DatasetLoader):
         opencv = lazy_import('cv2')
         colors = lazy_import('mlfire.utils.colors')
 
-        # get
+        # get image numpy array
         satimg = self.__getSatelliteImageArray(id_img)
 
         # increase image brightness
         satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
         # get labels
-        labels = self.__getLabelsForSource(id_img)
-        satimg[labels == 1, :] = colors.Colors.RED_COLOR.value
+        labels, confidence_level = self.__getLabelsForSource(id_img)
+        satimg[confidence_level >= self.cci_confidence_level, :] = labels[confidence_level >= self.cci_confidence_level, :]
 
         ref_date = self.satimg_dates.iloc[id_img]['Date']
         str_title = 'MODIS Reflectance ({}, labels={})'.format(ref_date, self.label_collection.name)
@@ -303,8 +349,8 @@ if __name__ == '__main__':
     DATA_DIR = 'data/tifs'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    LABEL_COLLECTION = FireLabelsCollection.MTBS
-    # LABEL_COLLECTION = FireLabelsCollection.CCI
+    # LABEL_COLLECTION = FireLabelsCollection.MTBS
+    LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
     lst_satimgs = []
@@ -320,11 +366,15 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
+    labels_view_opt = FireLabelsViewOpt.LABEL
+    # labels_view_opt = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
+
     # setup of data set loader
     dataset_view = DatasetView(
         lst_satimgs=lst_satimgs,
         lst_labels=lst_labels,
-        label_collection=LABEL_COLLECTION
+        label_collection=LABEL_COLLECTION,
+        labels_view_opt=labels_view_opt
     )
 
     print(len(dataset_view))

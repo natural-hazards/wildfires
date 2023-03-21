@@ -7,4 +7,4 @@ np = lazy_import('numpy')
 class Colors(Enum):
 
     GRAY_COLOR = [85., 90., 90.]
-    RED_COLOR = [43., 75., 238.]
+    RED_COLOR = [43, 75, 238]
