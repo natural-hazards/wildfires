@@ -1,3 +1,4 @@
+import gc
 import os
 
 from enum import Enum
@@ -63,7 +64,7 @@ class DatasetView(DatasetLoader):
     Display functionality (MULTISPECTRAL SATELLITE IMAGE, MODIS)
     """
 
-    def __getSatelliteImageArray_REFLECTANCE(self, img_id: int) -> lazy_import('numpy.ndarray'):
+    def __getSatelliteImageArray_REFLECTANCE(self, img_id: int) -> lazy_import('numpy').ndarray:
 
         np = lazy_import('numpy')
 
@@ -84,7 +85,7 @@ class DatasetView(DatasetLoader):
 
         return img
 
-    def __getSatelliteImageArray(self, img_id: int) -> lazy_import('numpy.ndarray'):
+    def __getSatelliteImageArray(self, img_id: int) -> lazy_import('numpy').ndarray:
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
             return self.__getSatelliteImageArray_REFLECTANCE(img_id)
@@ -130,17 +131,25 @@ class DatasetView(DatasetLoader):
     Display functionality (LABELS)
     """
 
-    def __getFireLabels_CCI(self, confidence_level: lazy_import('numpy.ndarray')) -> lazy_import('numpy.ndarray'):
+    def __getFireLabels_CCI(self, confidence_level: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
+            Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
 
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
         label = np.empty(shape=confidence_level.shape + (3,), dtype=np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
+        mask_fires = None
+
+        if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.CONFIDENCE_LEVEL:
+            mask_fires = confidence_level >= self.cci_confidence_level
 
         if self.labels_view_opt == FireLabelsViewOpt.LABEL:
-            label[confidence_level >= self.cci_confidence_level, :3] = colors.Colors.RED_COLOR.value
+
+            label[mask_fires, :3] = colors.Colors.RED_COLOR.value
+
         elif self.labels_view_opt == FireLabelsViewOpt.CONFIDENCE_LEVEL:
+
             cmap = lazy_import('mlfire.utils.cmap')
 
             lst_colors = ['#ff0000', '#ff5a00', '#ffff00']
@@ -152,10 +161,15 @@ class DatasetView(DatasetLoader):
             for v in range(self.cci_confidence_level, cl_max + 1):
                 c = [int(v * 255) for v in cmap_helper.getRGB(v)[::-1]]
                 label[confidence_level == v, :] = c
+
         else:
             raise AttributeError('Not supported option for viewing labels!')
 
-        return label
+        if mask_fires is not None:
+            return label, mask_fires
+        else:
+            del mask_fires; gc.collect()
+            return label
 
     def __showFireLabels_CCI(self, id_band: int,  figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
@@ -193,18 +207,26 @@ class DatasetView(DatasetLoader):
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=label, title=str_title, figsize=figsize, show=True)
 
-    def __getFireLabels_MTBS(self, fire_severity: lazy_import('numpy.ndarray')) -> lazy_import('numpy.ndarray'):
+    def __getFireLabels_MTBS(self, fire_severity: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
+            Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
 
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
         label = np.empty(shape=fire_severity.shape + (3,), dtype=np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
+        mask_fires = None
+
+        if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
+            c1 = fire_severity >= self.mtbs_severity_from.value; c2 = fire_severity <= MTBSSeverity.HIGH.value
+            mask_fires = np.logical_and(c1, c2)
 
         if self.labels_view_opt == FireLabelsViewOpt.LABEL:
-            condition = np.logical_and(fire_severity >= self.mtbs_severity_from.value, fire_severity <= MTBSSeverity.HIGH.value)
-            label[condition, :] = colors.Colors.RED_COLOR.value
+
+            label[mask_fires, :] = colors.Colors.RED_COLOR.value
+
         elif self.labels_view_opt == FireLabelsViewOpt.SEVERITY:
+
             cmap = lazy_import('mlfire.utils.cmap')
 
             lst_colors = ['#ff0000', '#ffff00']
@@ -215,36 +237,42 @@ class DatasetView(DatasetLoader):
             for v in range(self.mtbs_severity_from.value, severity_max + 1):
                 c = [int(v * 255) for v in cmap_helper.getRGB(v)[::-1]]
                 label[fire_severity == v, :] = c
-        else:
-            raise NotImplementedError
 
-        return label
+        else:
+            raise ArithmeticError
+
+        # return
+        if mask_fires is not None:
+            return label, mask_fires
+        else:
+            del mask_fires; gc.collect()
+            return label
 
     def __showFireLabels_MTBS(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         np = lazy_import('numpy')
-        colors = lazy_import('mlfire.utils.colors')
 
         # read band as raster image
         id_ds, id_rs = self._map_band_id_label[id_band]
         rs_severity = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
 
-        label = self.__getFireLabels_MTBS(rs_severity)
+        label = self.__getFireLabels_MTBS(rs_severity, with_fire_mask=False)
 
-        # display non-mapping areas in a black colour
-        idx_mask = np.array(rs_severity == MTBSSeverity.NON_MAPPING_AREA.value)
-        if len(idx_mask) != 0: label[idx_mask, :] = 0
+        # show up non-mapped areas as black
+        mask_non_mapped = np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
+        if len(mask_non_mapped) != 0: label[mask_non_mapped, :] = 0
 
-        # display labels
+        # get date
         label_date = self.label_dates.iloc[id_band]['Date']
         str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, label_date.year)
 
-        # show labels and binary mask related to localization of wildfires (MTBS labels)
+        # show up labels and binary mask (non-) related to localization of wildfires (MTBS labels)
         imshow(src=label, title=str_title, figsize=figsize, show=True)
 
     def showFireLabels(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
 
         if not self._labels_processed:
+            # process descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_LABELS()
             except IOError or ValueError:
@@ -267,7 +295,7 @@ class DatasetView(DatasetLoader):
     Display functionality (MULTISPECTRAL SATELLITE IMAGE + LABELS)
     """
 
-    def __getLabelsForSatImg_CCI(self, id_img: int) -> (lazy_import('numpy.ndarray'), lazy_import('numpy.ndarray')):
+    def __getLabelsForSatImg_CCI(self, id_img: int) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
 
         datetime = lazy_import('datetime')
 
@@ -280,11 +308,11 @@ class DatasetView(DatasetLoader):
         id_ds, id_rs = self._map_band_id_label[label_index]
 
         confidence_level = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
-        label = self.__getFireLabels_CCI(confidence_level=confidence_level)
+        label, mask_fires = self.__getFireLabels_CCI(confidence_level=confidence_level, with_fire_mask=True)
 
-        return label, confidence_level
+        return label, mask_fires
 
-    def __getLabelsForSatImg_MTBS(self, id_img: int) -> lazy_import('numpy.ndarray'):
+    def __getLabelsForSatImg_MTBS(self, id_img: int) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
 
         datetime = lazy_import('datetime')
 
@@ -297,11 +325,11 @@ class DatasetView(DatasetLoader):
 
         # get severity
         severity_fire = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
-        label = self.__getFireLabels_MTBS(fire_severity=severity_fire)
+        label, mask_fires = self.__getFireLabels_MTBS(fire_severity=severity_fire, with_fire_mask=True)
 
-        return label, severity_fire
+        return label, mask_fires
 
-    def __getLabelsForSatImg(self, id_img: int) -> lazy_import('numpy.ndarray'):
+    def __getLabelsForSatImg(self, id_img: int) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
 
         if self.label_collection == FireLabelsCollection.CCI:
             return self.__getLabelsForSatImg_CCI(id_img)
@@ -314,7 +342,6 @@ class DatasetView(DatasetLoader):
                                                  brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
 
         opencv = lazy_import('cv2')
-        np = lazy_import('numpy')
 
         # get image numpy array
         satimg = self.__getSatelliteImageArray(id_img)
@@ -323,17 +350,8 @@ class DatasetView(DatasetLoader):
         satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
         # get labels and confidence level/severity
-        labels, probs = self.__getLabelsForSatImg(id_img)  # TODO return mask
-
-        # set labels to
-        if self.label_collection == FireLabelsCollection.CCI:
-            selected_idx = probs >= self.cci_confidence_level
-            satimg[selected_idx, :] = labels[selected_idx, :]
-        elif self.label_collection == FireLabelsCollection.MTBS:
-            selected_idx = np.logical_and(probs >= self.mtbs_severity_from.value, probs <= MTBSSeverity.HIGH.value)
-            satimg[selected_idx, :] = labels[selected_idx, :]
-        else:
-            raise NotImplementedError
+        labels, mask = self.__getLabelsForSatImg(id_img)
+        satimg[mask, :] = labels[mask, :]
 
         ref_date = self.satimg_dates.iloc[id_img]['Date']
         str_title = 'MODIS Reflectance ({}, labels={})'.format(ref_date, self.label_collection.name)
@@ -345,12 +363,14 @@ class DatasetView(DatasetLoader):
                                    brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)):
 
         if not self._labels_processed:
+            # process descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_LABELS()
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
         if not self._satimgs_processed:
+            # process descriptions of bands related to satellite images and obtain dates from them
             try:
                 self._processMetaData_SATELLITE_IMG()
             except IOError or ValueError:
@@ -368,8 +388,8 @@ if __name__ == '__main__':
     DATA_DIR = 'data/tifs'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    # LABEL_COLLECTION = FireLabelsCollection.MTBS
-    LABEL_COLLECTION = FireLabelsCollection.CCI
+    LABEL_COLLECTION = FireLabelsCollection.MTBS
+    # LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
     lst_satimgs = []
@@ -394,7 +414,7 @@ if __name__ == '__main__':
         lst_labels=lst_labels,
         label_collection=LABEL_COLLECTION,
         labels_view_opt=labels_view_opt,
-        mtbs_severity_from=MTBSSeverity.HIGH
+        mtbs_severity_from=MTBSSeverity.LOW
     )
 
     print(len(dataset_view))

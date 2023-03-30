@@ -21,7 +21,7 @@ if __name__ == '__main__':
     fn_labels_mtbs = os.path.join(DATA_DIR, 'ak_reflec_january_december_2005_100km_epsg3338_area_0_mtbs_labels.tif')
 
     """
-        Setup adapter (time series)
+    Setup adapter (time series)
     """
     adapter = DataAdapterTS(
         src_satimg=fn_satimg,
@@ -42,14 +42,14 @@ if __name__ == '__main__':
     adapter.ds_end_date = adapter.satimg_dates.iloc[index_end_date]['Date']
 
     """
-        Get training and test data set
+    Get training and test data set
     """
     with elapsed_timer('Get training/test data sets'):
         ds_training = adapter.ds_training
         ds_test = adapter.ds_test
 
     """
-       Saving data to HDF5
+    Saving data to HDF5
     """
     with elapsed_timer('Save training data set'):
         fn_training = os.path.join(OUTPUT_H5_DIR, '{}training.h5'.format(DS_PREFIX))
@@ -60,14 +60,14 @@ if __name__ == '__main__':
         saveDatasetToHDF5(ds_test, fn_test)
 
     """
-        Training and test model using XGBoost
+    Training and test model using XGBoost
     """
     with elapsed_timer('Training model using XGBoost'):
         xgb = XGBClassifier(objective='binary:logistic')
         xgb.fit(ds_training[0], ds_training[1])
 
     """
-        Inference using trained model
+    Inference using trained model
     """
     labels_pred = xgb.predict(ds_test[0])
 
