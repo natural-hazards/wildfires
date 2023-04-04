@@ -322,7 +322,7 @@ class DatasetLoader(object):
         nbands = 0
         unique_dates = set()
 
-        with elapsed_timer('Processing band dates (satellite images, reflectance index)'):
+        with elapsed_timer('Processing band dates (satellite images, modis, reflectance)'):
 
             for id_ds, ds in enumerate(self._ds_satimgs):
 
@@ -372,7 +372,7 @@ class DatasetLoader(object):
         map_start_satimg = {}
         pos = 0
 
-        with elapsed_timer('Processing multi spectral bands (satellite images, reflectance index)'):
+        with elapsed_timer('Processing multi spectral bands (satellite images, modis, reflectance)'):
 
             for id_ds, ds in enumerate(self._ds_satimgs):
 

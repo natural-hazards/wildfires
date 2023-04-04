@@ -15,6 +15,14 @@ from mlfire.utils.utils_string import band2date_firecci
 from mlfire.utils.plots import imshow
 
 
+class SatImgViewOpt(Enum):
+
+    CIR = 'Color Infrared, Vegetation'
+    NATURAL_COLOR = 'Natural Color'
+    SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
+    SHORTWAVE_INFRARED2 = 'Shortwave Infrared using SWIR2'
+
+
 class FireLabelsViewOpt(Enum):
 
     LABEL = 1
@@ -32,6 +40,7 @@ class DatasetView(DatasetLoader):
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
         super().__init__(
@@ -44,8 +53,24 @@ class DatasetView(DatasetLoader):
             mtbs_region=mtbs_region
         )
 
+        self._satimg_view_opt = None
+        self.satimg_view_opt = satimg_view_opt
+
         self._labels_view_opt = None
         self.labels_view_opt = labels_view_opt
+
+    @property
+    def satimg_view_opt(self) -> SatImgViewOpt:
+
+        return self._satimg_view_opt
+
+    @satimg_view_opt.setter
+    def satimg_view_opt(self, opt: SatImgViewOpt) -> None:
+
+        if self._satimg_view_opt == opt:
+            return
+
+        self._satimg_view_opt = opt
 
     @property
     def labels_view_opt(self) -> FireLabelsViewOpt:
@@ -64,7 +89,33 @@ class DatasetView(DatasetLoader):
     Display functionality (MULTISPECTRAL SATELLITE IMAGE, MODIS)
     """
 
-    def __getSatelliteImageArray_REFLECTANCE(self, img_id: int) -> lazy_import('numpy').ndarray:
+    def __getSatelliteImageArray_MODIS_CIR(self, img_id: int) -> lazy_import('numpy').ndarray:
+
+        np = lazy_import('numpy')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        # display as CIR image (color infrared - vegetation)
+        # https://eos.com/make-an-analysis/color-infrared/
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
+        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.GREEN.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        # get image in range 0 - 255 per channel
+        cir_img = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
+        cir_img[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
+        cir_img[:, :, 1] = (ref_green + 100.) / 16100. * 255.
+        cir_img[:, :, 2] = (ref_red + 100.) / 16100. * 255.
+
+        return cir_img
+
+    def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> lazy_import('numpy').ndarray:
 
         np = lazy_import('numpy')
 
@@ -72,10 +123,12 @@ class DatasetView(DatasetLoader):
         ds_satimg = self._ds_satimgs[id_ds]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
-        band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
-        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
         band_id = start_band_id + ModisReflectanceSpectralBands.GREEN.value - 1
         ref_green = self._ds_satimgs[id_ds].GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         # get image in range 0 - 255 per channel
         img = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
@@ -85,16 +138,76 @@ class DatasetView(DatasetLoader):
 
         return img
 
-    def __getSatelliteImageArray(self, img_id: int) -> lazy_import('numpy').ndarray:
+    def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(self, img_id: int) -> lazy_import('numpy').ndarray:
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
-            return self.__getSatelliteImageArray_REFLECTANCE(img_id)
+        np = lazy_import('numpy')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.SWIR1.value - 1
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        # get image in range 0 - 255 per channel
+        shortwave_ir1 = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
+        shortwave_ir1[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
+        shortwave_ir1[:, :, 1] = (ref_green + 100.) / 16100. * 255.
+        shortwave_ir1[:, :, 2] = (ref_red + 100.) / 16100. * 255.
+
+        return shortwave_ir1
+
+    def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR2(self, img_id: int) -> lazy_import('numpy').ndarray:
+
+        np = lazy_import('numpy')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.SWIR2.value - 1
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        # get image in range 0 - 255 per channel
+        shortwave_ir2 = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
+        shortwave_ir2[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
+        shortwave_ir2[:, :, 1] = (ref_green + 100.) / 16100. * 255.
+        shortwave_ir2[:, :, 2] = (ref_red + 100.) / 16100. * 255.
+
+        return shortwave_ir2
+
+    def __getSatelliteImageArray_MODIS(self, img_id: int) -> lazy_import('numpy').ndarray:
+
+        if self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+            return self.__getSatelliteImageArray_MODIS_NATURAL_COLOR(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.CIR:
+            return self.__getSatelliteImageArray_MODIS_CIR(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED1:
+            return self.__getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED2:
+            return self.__getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR2(img_id=img_id)
         else:
             raise NotImplementedError
 
-    def __showSatImage_REFLECTANCE(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
-                                   brightness_factors: Union[tuple[float, float], list[float, float]]) -> None:
+    def __getSatelliteImageArray(self, img_id: int) -> lazy_import('numpy').ndarray:
 
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            return self.__getSatelliteImageArray_MODIS(img_id)
+        else:
+            raise NotImplementedError
+
+    def __showSatImage_MODIS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
+                             brightness_factors: Union[tuple[float, float], list[float, float]]) -> None:
         # lazy imports
         opencv = lazy_import('cv2')
 
@@ -110,20 +223,23 @@ class DatasetView(DatasetLoader):
         if len(self) - 1 < id_img:
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
 
-        img = self.__getSatelliteImageArray(id_img)  # increase image brightness
-        enhanced_img = opencv.convertScaleAbs(img, alpha=brightness_factors[0], beta=brightness_factors[1])
+        satimg = self.__getSatelliteImageArray(id_img)
+        if brightness_factors is not None or self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+            # increase image brightness
+            satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
         # figure title
-        str_title = 'MODIS Reflectance ({})'.format(self.satimg_dates.iloc[id_img]['Date'])
+        img_type = self.satimg_view_opt.value
+        str_title = 'MODIS ({}, {})'.format(img_type, self.satimg_dates.iloc[id_img]['Date'])
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
-        imshow(src=enhanced_img, title=str_title, figsize=figsize, show=True)
+        imshow(src=satimg, title=str_title, figsize=figsize, show=True)
 
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                      brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__showSatImage_REFLECTANCE(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
+            self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
         else:
             raise NotImplementedError
 
@@ -133,7 +249,7 @@ class DatasetView(DatasetLoader):
 
     def __getFireLabels_CCI(self, confidence_level: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
             Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
-
+        # lazy imports
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
@@ -190,7 +306,7 @@ class DatasetView(DatasetLoader):
         rs_mask = self._ds_labels[id_ds].GetRasterBand(id_rs + 1)
         dsc_mask = rs_mask.GetDescription()
 
-        # checking for sure to avoid problems in subsequent processing
+        # check to avoid issues in following processing
         if band2date_firecci(dsc_cl) != band2date_firecci(dsc_mask):
             raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
 
@@ -198,7 +314,7 @@ class DatasetView(DatasetLoader):
         mask = rs_mask.ReadAsArray()
 
         label = self.__getFireLabels_CCI(confidence_level=confidence_level)
-        # display non-mapping areas in a black colour
+        # show non-mapped areas in a black colour
         if np.max(mask) == 1: label[mask == PIXEL_NOT_BURNABLE, :] = 0
 
         label_date = self.label_dates.iloc[id_band]['Date']
@@ -210,6 +326,7 @@ class DatasetView(DatasetLoader):
     def __getFireLabels_MTBS(self, fire_severity: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
             Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
 
+        # lazy imports
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
@@ -218,6 +335,7 @@ class DatasetView(DatasetLoader):
         mask_fires = None
 
         if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
+
             c1 = fire_severity >= self.mtbs_severity_from.value; c2 = fire_severity <= MTBSSeverity.HIGH.value
             mask_fires = np.logical_and(c1, c2)
 
@@ -272,7 +390,7 @@ class DatasetView(DatasetLoader):
     def showFireLabels(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
 
         if not self._labels_processed:
-            # process descriptions of bands related to fire labels and obtain dates from them
+            # processing descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_LABELS()
             except IOError or ValueError:
@@ -297,6 +415,7 @@ class DatasetView(DatasetLoader):
 
     def __getLabelsForSatImg_CCI(self, id_img: int) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
 
+        # lazy import
         datetime = lazy_import('datetime')
 
         # get label date time
@@ -314,6 +433,7 @@ class DatasetView(DatasetLoader):
 
     def __getLabelsForSatImg_MTBS(self, id_img: int) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
 
+        # lazy import
         datetime = lazy_import('datetime')
 
         date_satimg = self.satimg_dates.iloc[id_img]['Date']
@@ -340,21 +460,24 @@ class DatasetView(DatasetLoader):
 
     def __showSatImageWithFireLabels_REFLECTANCE(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                                                  brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
-
+        # lazy import
         opencv = lazy_import('cv2')
 
         # get image numpy array
         satimg = self.__getSatelliteImageArray(id_img)
 
         # increase image brightness
-        satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
+        if brightness_factors is not None or self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+            # increase image brightness
+            satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
         # get labels and confidence level/severity
         labels, mask = self.__getLabelsForSatImg(id_img)
         satimg[mask, :] = labels[mask, :]
 
         ref_date = self.satimg_dates.iloc[id_img]['Date']
-        str_title = 'MODIS Reflectance ({}, labels={})'.format(ref_date, self.label_collection.name)
+        img_type = self.satimg_view_opt.value
+        str_title = 'MODIS ({}, {}, labels={})'.format(img_type, ref_date, self.label_collection.name)
 
         # show multi spectral image as RGB with additional information about localization of wildfires
         imshow(src=satimg, title=str_title, figsize=figsize, show=True)
@@ -363,7 +486,7 @@ class DatasetView(DatasetLoader):
                                    brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)):
 
         if not self._labels_processed:
-            # process descriptions of bands related to fire labels and obtain dates from them
+            # processing descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_LABELS()
             except IOError or ValueError:
@@ -386,7 +509,8 @@ class DatasetView(DatasetLoader):
 if __name__ == '__main__':
 
     DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    # PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    PREFIX_IMG = 'ak_reflec_january_december_{}_850'
 
     LABEL_COLLECTION = FireLabelsCollection.MTBS
     # LABEL_COLLECTION = FireLabelsCollection.CCI
@@ -395,7 +519,7 @@ if __name__ == '__main__':
     lst_satimgs = []
     lst_labels = []
 
-    for year in range(2004, 2006):
+    for year in range(2004, 2005):
 
         PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
 
@@ -405,21 +529,26 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
-    labels_view_opt = FireLabelsViewOpt.LABEL
-    labels_view_opt = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
+    SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
+
+    LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL
+    LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
 
     # setup of data set loader
     dataset_view = DatasetView(
         lst_satimgs=lst_satimgs,
         lst_labels=lst_labels,
+        satimg_view_opt=SATIMG_VIEW_OPT,
         label_collection=LABEL_COLLECTION,
-        labels_view_opt=labels_view_opt,
+        labels_view_opt=LABELS_VIEW_OPT,
         mtbs_severity_from=MTBSSeverity.LOW
     )
 
-    print(len(dataset_view))
+    print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.label_dates)
 
-    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
-    dataset_view.showSatImage(70)
-    dataset_view.showSatImageWithFireLabels(70)
+    dataset_view.showSatImage(30)
+
+    # dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    # dataset_view.showSatImage(70)
+    # dataset_view.showSatImageWithFireLabels(70)
