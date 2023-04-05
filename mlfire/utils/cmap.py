@@ -16,7 +16,7 @@ class CMapHelper(object):
         _lst_colors = ['#{}'.format(colour_hex) if colour_hex[0] != '#' else colour_hex for colour_hex in lst_colors]
 
         self._norm = plt_colors.Normalize(vmin=vmin, vmax=vmax)
-        self._cmap = plt_colors.ListedColormap(_lst_colors)
+        self._cmap = plt_colors.LinearSegmentedColormap.from_list('CMap', colors=_lst_colors)
         self._scalar_map = plt_cmap.ScalarMappable(norm=self._norm, cmap=self._cmap)
 
         self._vmin = vmin

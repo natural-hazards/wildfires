@@ -357,9 +357,11 @@ class DatasetLoader(object):
             except IOError:
                 raise IOError('Cannot load any of following satellite images: {}'.format(self.lst_satimgs))
 
-        # TODO try-except
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__processBandDates_SATIMG_MODIS_REFLECTANCE()
+            try:
+                self.__processBandDates_SATIMG_MODIS_REFLECTANCE()
+            except ValueError:
+                raise ValueError('')
         else:
             raise NotImplementedError
 

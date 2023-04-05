@@ -19,6 +19,7 @@ class SatImgViewOpt(Enum):
 
     CIR = 'Color Infrared, Vegetation'
     NATURAL_COLOR = 'Natural Color'
+    NDVI = 'NVDI'
     SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
     SHORTWAVE_INFRARED2 = 'Shortwave Infrared using SWIR2'
 
@@ -138,6 +139,29 @@ class DatasetView(DatasetLoader):
 
         return img
 
+    def __getSatelliteImageArray_NDVI(self, img_id: int) -> lazy_import('numpy').ndarray:
+
+        np = lazy_import('numpy')
+        mpl = lazy_import('matplotlib')
+        plt = lazy_import('matplotlib.pylab')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        # computing Normalized Difference Vegetation Index (NDVI)
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        cmap = plt.get_cmap(name='RdYlGn')
+        norm = mpl.colors.Normalize(vmin=-1, vmax=1)
+
+        ndvi = (ref_nir - ref_red) / (ref_nir + ref_red)
+        img_ndvi = np.uint8(cmap(norm(ndvi))[:, :, :-1] * 255)[:, :, ::-1]
+
+        return img_ndvi
+
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(self, img_id: int) -> lazy_import('numpy').ndarray:
 
         np = lazy_import('numpy')
@@ -145,6 +169,7 @@ class DatasetView(DatasetLoader):
         id_ds, start_band_id = self._map_start_satimgs[img_id]
         ds_satimg = self._ds_satimgs[id_ds]
 
+        # https://eos.com/make-an-analysis/vegetation-analysis/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR1.value - 1
         ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
@@ -169,6 +194,7 @@ class DatasetView(DatasetLoader):
         id_ds, start_band_id = self._map_start_satimgs[img_id]
         ds_satimg = self._ds_satimgs[id_ds]
 
+        # https://eos.com/make-an-analysis/shortwave-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR2.value - 1
         ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
@@ -192,6 +218,8 @@ class DatasetView(DatasetLoader):
             return self.__getSatelliteImageArray_MODIS_NATURAL_COLOR(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.CIR:
             return self.__getSatelliteImageArray_MODIS_CIR(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.NDVI:
+            return self.__getSatelliteImageArray_NDVI(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED1:
             return self.__getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED2:
@@ -224,7 +252,7 @@ class DatasetView(DatasetLoader):
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
 
         satimg = self.__getSatelliteImageArray(id_img)
-        if brightness_factors is not None or self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+        if brightness_factors is not None and self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
@@ -249,6 +277,7 @@ class DatasetView(DatasetLoader):
 
     def __getFireLabels_CCI(self, confidence_level: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
             Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
+
         # lazy imports
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
@@ -467,7 +496,7 @@ class DatasetView(DatasetLoader):
         satimg = self.__getSatelliteImageArray(id_img)
 
         # increase image brightness
-        if brightness_factors is not None or self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+        if brightness_factors is not None and self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
@@ -529,7 +558,7 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
-    SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
+    SATIMG_VIEW_OPT = SatImgViewOpt.NDVI
 
     LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL
     LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
