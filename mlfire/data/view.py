@@ -100,19 +100,19 @@ class DatasetView(DatasetLoader):
         # display as CIR image (color infrared - vegetation)
         # https://eos.com/make-an-analysis/color-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
-        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
-        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.GREEN.value - 1
-        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         # get image in range 0 - 255 per channel
-        cir_img = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
-        cir_img[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
-        cir_img[:, :, 1] = (ref_green + 100.) / 16100. * 255.
-        cir_img[:, :, 2] = (ref_red + 100.) / 16100. * 255.
+        cir_img = np.empty(shape=ref_nir.shape + (3,), dtype=np.uint8)
+        cir_img[:, :, 0] = (ref_nir + 100.) / 16100. * 255.
+        cir_img[:, :, 1] = (ref_red + 100.) / 16100. * 255.
+        cir_img[:, :, 2] = (ref_green + 100.) / 16100. * 255.
 
         return cir_img
 
@@ -133,9 +133,9 @@ class DatasetView(DatasetLoader):
 
         # get image in range 0 - 255 per channel
         img = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
-        img[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
+        img[:, :, 0] = (ref_red + 100.) / 16100. * 255.
         img[:, :, 1] = (ref_green + 100.) / 16100. * 255.
-        img[:, :, 2] = (ref_red + 100.) / 16100. * 255.
+        img[:, :, 2] = (ref_blue + 100.) / 16100. * 255.
 
         return img
 
@@ -158,7 +158,7 @@ class DatasetView(DatasetLoader):
         norm = mpl.colors.Normalize(vmin=-1, vmax=1)
 
         ndvi = (ref_nir - ref_red) / (ref_nir + ref_red)
-        img_ndvi = np.uint8(cmap(norm(ndvi))[:, :, :-1] * 255)[:, :, ::-1]
+        img_ndvi = np.uint8(cmap(norm(ndvi))[:, :, :-1] * 255)
 
         return img_ndvi
 
@@ -171,18 +171,17 @@ class DatasetView(DatasetLoader):
 
         # https://eos.com/make-an-analysis/vegetation-analysis/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR1.value - 1
-        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_swir1 = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
-        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
-        band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
-        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
 
         # get image in range 0 - 255 per channel
-        shortwave_ir1 = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
-        shortwave_ir1[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
-        shortwave_ir1[:, :, 1] = (ref_green + 100.) / 16100. * 255.
+        shortwave_ir1 = np.empty(shape=ref_swir1.shape + (3,), dtype=np.uint8)
+        shortwave_ir1[:, :, 0] = (ref_swir1 + 100.) / 16100. * 255.
+        shortwave_ir1[:, :, 1] = (ref_nir + 100.) / 16100. * 255.
         shortwave_ir1[:, :, 2] = (ref_red + 100.) / 16100. * 255.
 
         return shortwave_ir1
@@ -196,18 +195,18 @@ class DatasetView(DatasetLoader):
 
         # https://eos.com/make-an-analysis/shortwave-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR2.value - 1
-        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_swir2 = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
-        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
-        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         # get image in range 0 - 255 per channel
-        shortwave_ir2 = np.empty(shape=ref_red.shape + (3,), dtype=np.uint8)
-        shortwave_ir2[:, :, 0] = (ref_blue + 100.) / 16100. * 255.
-        shortwave_ir2[:, :, 1] = (ref_green + 100.) / 16100. * 255.
+        shortwave_ir2 = np.empty(shape=ref_swir2.shape + (3,), dtype=np.uint8)
+        shortwave_ir2[:, :, 0] = (ref_swir2 + 100.) / 16100. * 255.
+        shortwave_ir2[:, :, 1] = (ref_nir + 100.) / 16100. * 255.
         shortwave_ir2[:, :, 2] = (ref_red + 100.) / 16100. * 255.
 
         return shortwave_ir2
@@ -252,7 +251,7 @@ class DatasetView(DatasetLoader):
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
 
         satimg = self.__getSatelliteImageArray(id_img)
-        if brightness_factors is not None and self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+        if brightness_factors is not None and self.satimg_view_opt != SatImgViewOpt.NDVI:
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
@@ -286,7 +285,7 @@ class DatasetView(DatasetLoader):
         label[:, :] = colors.Colors.GRAY_COLOR.value
         mask_fires = None
 
-        if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.CONFIDENCE_LEVEL:
+        if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
             mask_fires = confidence_level >= self.cci_confidence_level
 
         if self.labels_view_opt == FireLabelsViewOpt.LABEL:
@@ -304,7 +303,7 @@ class DatasetView(DatasetLoader):
             cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=cl_min, vmax=cl_max)
 
             for v in range(self.cci_confidence_level, cl_max + 1):
-                c = [int(v * 255) for v in cmap_helper.getRGB(v)[::-1]]
+                c = [int(v * 255) for v in cmap_helper.getRGB(v)]
                 label[confidence_level == v, :] = c
 
         else:
@@ -342,7 +341,7 @@ class DatasetView(DatasetLoader):
         confidence_level = rs_cl.ReadAsArray()
         mask = rs_mask.ReadAsArray()
 
-        label = self.__getFireLabels_CCI(confidence_level=confidence_level)
+        label = self.__getFireLabels_CCI(confidence_level=confidence_level, with_fire_mask=False)
         # show non-mapped areas in a black colour
         if np.max(mask) == 1: label[mask == PIXEL_NOT_BURNABLE, :] = 0
 
@@ -376,13 +375,13 @@ class DatasetView(DatasetLoader):
 
             cmap = lazy_import('mlfire.utils.cmap')
 
-            lst_colors = ['#ff0000', '#ffff00']
+            lst_colors = ['#ff0000', '#ff5a00', '#ffff00']
             severity_min = MTBSSeverity.LOW.value
             severity_max = MTBSSeverity.HIGH.value
 
             cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=severity_min, vmax=severity_max)
             for v in range(self.mtbs_severity_from.value, severity_max + 1):
-                c = [int(v * 255) for v in cmap_helper.getRGB(v)[::-1]]
+                c = [int(v * 255) for v in cmap_helper.getRGB(v)]
                 label[fire_severity == v, :] = c
 
         else:
@@ -496,7 +495,7 @@ class DatasetView(DatasetLoader):
         satimg = self.__getSatelliteImageArray(id_img)
 
         # increase image brightness
-        if brightness_factors is not None and self.satimg_view_opt == SatImgViewOpt.NATURAL_COLOR:
+        if brightness_factors is not None and self.satimg_view_opt != SatImgViewOpt.NDVI:
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
@@ -558,7 +557,7 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
-    SATIMG_VIEW_OPT = SatImgViewOpt.NDVI
+    SATIMG_VIEW_OPT = SatImgViewOpt.CIR
 
     LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL
     LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
@@ -576,7 +575,9 @@ if __name__ == '__main__':
     print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.label_dates)
 
+    dataset_view.showFireLabels(0)
     dataset_view.showSatImage(30)
+    dataset_view.showSatImageWithFireLabels(30)
 
     # dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     # dataset_view.showSatImage(70)
