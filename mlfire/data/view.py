@@ -41,6 +41,7 @@ class DatasetView(DatasetLoader):
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 ndvi_view_threshold: float = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
@@ -59,6 +60,9 @@ class DatasetView(DatasetLoader):
 
         self._labels_view_opt = None
         self.labels_view_opt = labels_view_opt
+
+        self._ndvi_view_thrs = None
+        self.ndvi_view_threshold = ndvi_view_threshold
 
     @property
     def satimg_view_opt(self) -> SatImgViewOpt:
@@ -85,6 +89,23 @@ class DatasetView(DatasetLoader):
             return
 
         self._labels_view_opt = opt
+
+    @property
+    def ndvi_view_threshold(self) -> float:
+
+        return self._ndvi_view_thrs
+
+    @ndvi_view_threshold.setter
+    def ndvi_view_threshold(self, thrs: float) -> None:
+
+        if thrs is None:
+            self._ndvi_view_thrs = -1
+            return
+
+        if thrs < 0 or thrs > 1:
+            raise ValueError('Threshold value must be between 0 and 1')
+
+        self._ndvi_view_thrs = thrs
 
     """
     Display functionality (MULTISPECTRAL SATELLITE IMAGE, MODIS)
@@ -140,9 +161,9 @@ class DatasetView(DatasetLoader):
         return img
 
     def __getSatelliteImageArray_NDVI(self, img_id: int) -> lazy_import('numpy').ndarray:
-
-        np = lazy_import('numpy')
+        # lazy imports
         mpl = lazy_import('matplotlib')
+        np = lazy_import('numpy')
         plt = lazy_import('matplotlib.pylab')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
@@ -154,11 +175,21 @@ class DatasetView(DatasetLoader):
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
         ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
-        cmap = plt.get_cmap(name='RdYlGn')
-        norm = mpl.colors.Normalize(vmin=-1, vmax=1)
+        # Colour palette and thresholding inspired by
+        # https://www.neonscience.org/resources/learning-hub/tutorials/calc-ndvi-tiles-py
+        # Credit: Zachary Langford
+        cmap = plt.get_cmap(name='RdYlGn') if self.ndvi_view_threshold > -1. else plt.get_cmap(name='seismic')
+        norm = mpl.colors.Normalize(vmin=self.ndvi_view_threshold, vmax=1)
 
-        ndvi = (ref_nir - ref_red) / (ref_nir + ref_red)
+        ndvi = None
+        try:
+            ndvi = np.divide(ref_nir - ref_red, ref_nir + ref_red)
+        except ZeroDivisionError:
+            ndvi = np.where(ndvi == np.inf, -99, ndvi)
+
         img_ndvi = np.uint8(cmap(norm(ndvi))[:, :, :-1] * 255)
+        if self.ndvi_view_threshold > -1: img_ndvi[ndvi < self.ndvi_view_threshold] = [255, 255, 255]
+        img_ndvi[ndvi == -99] = [0, 0, 0]
 
         return img_ndvi
 
@@ -258,6 +289,9 @@ class DatasetView(DatasetLoader):
         # figure title
         img_type = self.satimg_view_opt.value
         str_title = 'MODIS ({}, {})'.format(img_type, self.satimg_dates.iloc[id_img]['Date'])
+
+        if self.satimg_view_opt == SatImgViewOpt.NDVI and self.ndvi_view_threshold > -1:
+            str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=satimg, title=str_title, figsize=figsize, show=True)
@@ -486,8 +520,8 @@ class DatasetView(DatasetLoader):
         else:
             raise NotImplementedError
 
-    def __showSatImageWithFireLabels_REFLECTANCE(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
-                                                 brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
+    def __showSatImageWithFireLabels_MODIS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                                           brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
         # lazy import
         opencv = lazy_import('cv2')
 
@@ -528,7 +562,7 @@ class DatasetView(DatasetLoader):
                 raise IOError('Cannot process meta data related to satellite images!')
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__showSatImageWithFireLabels_REFLECTANCE(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
+            self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
         else:
             raise NotImplementedError
 
@@ -538,7 +572,7 @@ if __name__ == '__main__':
 
     DATA_DIR = 'data/tifs'
     # PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_850'
+    PREFIX_IMG = 'ak_reflec_january_december_{}_850'  # TODO remove
 
     LABEL_COLLECTION = FireLabelsCollection.MTBS
     # LABEL_COLLECTION = FireLabelsCollection.CCI
@@ -557,7 +591,7 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
-    SATIMG_VIEW_OPT = SatImgViewOpt.CIR
+    SATIMG_VIEW_OPT = SatImgViewOpt.NDVI
 
     LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL
     LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
@@ -575,9 +609,11 @@ if __name__ == '__main__':
     print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.label_dates)
 
-    dataset_view.showFireLabels(0)
-    dataset_view.showSatImage(30)
-    dataset_view.showSatImageWithFireLabels(30)
+    # TODO remove
+    # dataset_view.showFireLabels(0)
+    # dataset_view.ndvi_view_threshold = 0.5
+    dataset_view.showSatImage(24)
+    # dataset_view.showSatImageWithFireLabels(30)
 
     # dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     # dataset_view.showSatImage(70)
