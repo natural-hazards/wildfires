@@ -177,7 +177,7 @@ class DatasetView(DatasetLoader):
 
         # Colour palette and thresholding inspired by
         # https://www.neonscience.org/resources/learning-hub/tutorials/calc-ndvi-tiles-py
-        # Credit: Zachary Langford
+        # Credit: Zachary Langford @langfordzl
         cmap = plt.get_cmap(name='RdYlGn') if self.ndvi_view_threshold > -1. else plt.get_cmap(name='seismic')
         norm = mpl.colors.Normalize(vmin=self.ndvi_view_threshold, vmax=1)
 
@@ -385,20 +385,59 @@ class DatasetView(DatasetLoader):
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=label, title=str_title, figsize=figsize, show=True)
 
-    def __getFireLabels_MTBS(self, fire_severity: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
+    def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> lazy_import('numpy').ndarray:
+
+        np = lazy_import('numpy')
+
+        lst_severity = []
+
+        for id_band in id_bands:
+
+            id_ds, id_rs = self._map_band_id_label[id_band]
+            rs_severity = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
+
+            lst_severity.append(rs_severity)
+
+        np_severity = np.array(lst_severity)
+        del lst_severity; gc.collect()  # invoke garbage collector
+
+        np_severity_agg = np.max(np_severity, axis=0)
+        np_non_mapped = np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=0)
+        np_severity_agg[np_non_mapped] = MTBSSeverity.NON_MAPPED_AREA.value
+
+        # invoke garbage collector
+        del np_severity, np_non_mapped
+        gc.collect()
+
+        return np_severity_agg
+
+    def __readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:
+
+        if isinstance(id_bands, range):
+            return self.__readFireSeverity_RANGE_MTBS(id_bands)
+        elif isinstance(id_bands, int):
+            id_ds, id_rs = self._map_band_id_label[id_bands]
+            return self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
+        else:
+            raise AttributeError
+
+    def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_non_mapped_areas: bool = True) -> \
             Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
 
         # lazy imports
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
-        label = np.empty(shape=fire_severity.shape + (3,), dtype=np.uint8)
+        # get fire severity
+        rs_severity = self.__readFireSeverity_MTBS(id_bands=id_bands)
+
+        label = np.empty(shape=rs_severity.shape + (3,), dtype=np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
         mask_fires = None
 
         if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
 
-            c1 = fire_severity >= self.mtbs_severity_from.value; c2 = fire_severity <= MTBSSeverity.HIGH.value
+            c1 = rs_severity >= self.mtbs_severity_from.value; c2 = rs_severity <= MTBSSeverity.HIGH.value
             mask_fires = np.logical_and(c1, c2)
 
         if self.labels_view_opt == FireLabelsViewOpt.LABEL:
@@ -416,10 +455,15 @@ class DatasetView(DatasetLoader):
             cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=severity_min, vmax=severity_max)
             for v in range(self.mtbs_severity_from.value, severity_max + 1):
                 c = [int(v * 255) for v in cmap_helper.getRGB(v)]
-                label[fire_severity == v, :] = c
+                label[rs_severity == v, :] = c
 
         else:
-            raise ArithmeticError
+            raise AttributeError
+
+        if with_non_mapped_areas:
+
+            mask_non_mapped = np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
+            if len(mask_non_mapped) != 0: label[mask_non_mapped, :] = 0
 
         # return
         if mask_fires is not None:
@@ -428,28 +472,32 @@ class DatasetView(DatasetLoader):
             del mask_fires; gc.collect()
             return label
 
-    def __showFireLabels_MTBS(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]]) -> None:
+    def __showFireLabels_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
-        np = lazy_import('numpy')
+        # get fire labels
+        labels = self.__getFireLabels_MTBS(id_bands)
 
-        # read band as raster image
-        id_ds, id_rs = self._map_band_id_label[id_band]
-        rs_severity = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
+        # put a region name to a figure title
+        str_title = 'MTBS labels ({}'.format(self.mtbs_region.name)
 
-        label = self.__getFireLabels_MTBS(rs_severity, with_fire_mask=False)
+        # get date or start/end dates
+        if isinstance(id_bands, range):
+            first_date = self.label_dates.iloc[id_bands[0]]['Date']
+            last_date = self.label_dates.iloc[id_bands[-1]]['Date']
+            str_date = '{}-{}'.format(first_date.year, last_date.year)
+        elif isinstance(id_bands, int):
+            label_date = self.label_dates.iloc[id_bands]['Date']
+            str_date = str(label_date.year)
+        else:
+            raise AttributeError
 
-        # show up non-mapped areas as black
-        mask_non_mapped = np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
-        if len(mask_non_mapped) != 0: label[mask_non_mapped, :] = 0
-
-        # get date
-        label_date = self.label_dates.iloc[id_band]['Date']
-        str_title = 'MTBS labels ({} {})'.format(self.mtbs_region.name, label_date.year)
+        # put date to a figure title
+        str_title = '{} {})'.format(str_title, str_date)
 
         # show up labels and binary mask (non-) related to localization of wildfires (MTBS labels)
-        imshow(src=label, title=str_title, figsize=figsize, show=True)
+        imshow(src=labels, title=str_title, figsize=figsize, show=True)
 
-    def showFireLabels(self, id_band: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
+    def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
 
         if not self._labels_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
@@ -458,16 +506,17 @@ class DatasetView(DatasetLoader):
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
-        if id_band < 0:
-            raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-
-        if self.nbands_label - 1 < id_band:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
+        # if id_band < 0:
+        #     raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+        #
+        # if self.nbands_label - 1 < id_band:
+        #     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
 
         if self.label_collection == FireLabelsCollection.CCI:
-            self.__showFireLabels_CCI(id_band=id_band, figsize=figsize)
+            raise NotImplementedError
+            # self.__showFireLabels_CCI(id_band=id_bands, figsize=figsize)
         elif self.label_collection == FireLabelsCollection.MTBS:
-            self.__showFireLabels_MTBS(id_band=id_band, figsize=figsize)
+            self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize)
         else:
             raise NotImplementedError
 
@@ -502,12 +551,8 @@ class DatasetView(DatasetLoader):
         date_satimg = datetime.date(year=date_satimg.year, month=1, day=1)
 
         # get index of corresponding labels
-        label_index = self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0]
-        id_ds, id_rs = self._map_band_id_label[label_index]
-
-        # get severity
-        severity_fire = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
-        label, mask_fires = self.__getFireLabels_MTBS(fire_severity=severity_fire, with_fire_mask=True)
+        label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0])
+        label, mask_fires = self.__getFireLabels_MTBS(id_bands=label_index, with_fire_mask=True, with_non_mapped_areas=False)
 
         return label, mask_fires
 
@@ -571,8 +616,8 @@ class DatasetView(DatasetLoader):
 if __name__ == '__main__':
 
     DATA_DIR = 'data/tifs'
-    # PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_850'  # TODO remove
+    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    # PREFIX_IMG = 'ak_reflec_january_december_{}_850'  # TODO remove
 
     LABEL_COLLECTION = FireLabelsCollection.MTBS
     # LABEL_COLLECTION = FireLabelsCollection.CCI
@@ -581,7 +626,7 @@ if __name__ == '__main__':
     lst_satimgs = []
     lst_labels = []
 
-    for year in range(2004, 2005):
+    for year in range(2004, 2006):
 
         PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
 
@@ -591,7 +636,7 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
-    SATIMG_VIEW_OPT = SatImgViewOpt.NDVI
+    SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
 
     LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL
     LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
@@ -610,10 +655,12 @@ if __name__ == '__main__':
     print(dataset_view.label_dates)
 
     # TODO remove
-    # dataset_view.showFireLabels(0)
-    # dataset_view.ndvi_view_threshold = 0.5
+    dataset_view.showFireLabels(0)
+    dataset_view.showFireLabels(1)
+    dataset_view.showFireLabels(range(0, 2))
+    dataset_view.ndvi_view_threshold = 0.5
     dataset_view.showSatImage(24)
-    # dataset_view.showSatImageWithFireLabels(30)
+    dataset_view.showSatImageWithFireLabels(30)
 
     # dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     # dataset_view.showSatImage(70)
