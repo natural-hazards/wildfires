@@ -308,19 +308,87 @@ class DatasetView(DatasetLoader):
     Display functionality (LABELS)
     """
 
-    def __getFireLabels_CCI(self, confidence_level: lazy_import('numpy').ndarray, with_fire_mask=False) -> \
+    def __readFireConfidenceLevel_RANGE_CCI(self, id_bands: range) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
+
+        # lazy imports
+        np = lazy_import('numpy')
+
+        lst_cl = []
+        lst_flags = []
+
+        for id_band in id_bands:
+
+            id_ds, id_rs = self._map_band_id_label[id_band]
+
+            # get bands
+            rs_cl = self._ds_labels[id_ds].GetRasterBand(id_rs)
+            rs_flags = self._ds_labels[id_ds].GetRasterBand(id_rs + 1)
+
+            # get descriptions
+            dsc_cl = rs_cl.GetDescription()
+            dsc_flags = rs_flags.GetDescription()
+
+            if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
+                raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+
+            lst_flags.append(rs_flags.ReadAsArray())
+            lst_cl.append(rs_cl.ReadAsArray())
+
+        np_cl = np.array(lst_cl)
+        del lst_cl; gc.collect()  # invoke garbage collector
+
+        np_cl_agg = np.max(np_cl, axis=0)
+        del np_cl; gc.collect()  # invoke garbage collector
+
+        np_flags = np.array(lst_flags)
+        del lst_flags; gc.collect()  # invoke garbage collector
+
+        np_flags_agg = np.max(np_flags, axis=0)
+        np_flags_agg[np.any(np_flags == -1, axis=0)] = -1
+        del np_flags; gc.collect()
+
+        return np_cl_agg, np_flags_agg
+
+    def __readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (lazy_import('numpy').ndarray, lazy_import('numpy').ndarray):
+
+        if isinstance(id_bands, range):
+
+            return self.__readFireConfidenceLevel_RANGE_CCI(id_bands)
+
+        elif isinstance(id_bands, int):
+
+            id_ds, id_rs = self._map_band_id_label[id_bands]
+
+            # get bands
+            rs_cl = self._ds_labels[id_ds].GetRasterBand(id_rs)
+            rs_flags = self._ds_labels[id_ds].GetRasterBand(id_rs + 1)
+
+            # get descriptions
+            dsc_cl = rs_cl.GetDescription()
+            dsc_flags = rs_flags.GetDescription()
+
+            if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
+                raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+
+            return rs_cl.ReadAsArray(), rs_flags.ReadAsArray()
+        else:
+            raise NotImplementedError
+
+    def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_non_mapped_areas: bool = True) -> \
             Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
 
         # lazy imports
         colors = lazy_import('mlfire.utils.colors')
         np = lazy_import('numpy')
 
-        label = np.empty(shape=confidence_level.shape + (3,), dtype=np.uint8)
+        rs_cl, rs_flags = self.__readFireConfidenceLevel_CCI(id_bands=id_bands)
+
+        label = np.empty(shape=rs_cl.shape + (3,), dtype=np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
         mask_fires = None
 
         if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
-            mask_fires = confidence_level >= self.cci_confidence_level
+            mask_fires = rs_cl >= self.cci_confidence_level
 
         if self.labels_view_opt == FireLabelsViewOpt.LABEL:
 
@@ -338,52 +406,55 @@ class DatasetView(DatasetLoader):
 
             for v in range(self.cci_confidence_level, cl_max + 1):
                 c = [int(v * 255) for v in cmap_helper.getRGB(v)]
-                label[confidence_level == v, :] = c
-
+                label[rs_cl == v, :] = c
         else:
             raise AttributeError('Not supported option for viewing labels!')
 
-        if mask_fires is not None:
+        if with_non_mapped_areas:
+            PIXEL_NOT_OBSERVED = -1
+            label[rs_flags == PIXEL_NOT_OBSERVED, :] = 0
+
+        if with_fire_mask:
             return label, mask_fires
         else:
             del mask_fires; gc.collect()
             return label
 
-    def __showFireLabels_CCI(self, id_band: int,  figsize: Union[tuple[float, float], list[float, float]]) -> None:
+    def __showFireLabels_CCI(self, id_bands: Union[int, range],  figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
         # lazy imports
         calendar = lazy_import('calendar')
-        np = lazy_import('numpy')
 
-        PIXEL_NOT_BURNABLE = -1
+        # put a region name to a plot title
+        str_title = 'CCI labels'
 
-        # read band as raster image
-        id_ds, id_rs = self._map_band_id_label[id_band]
+        # get date or start/end dates
+        if isinstance(id_bands, range):
+            first_date = self.label_dates.iloc[id_bands[0]]['Date']
+            last_date = self.label_dates.iloc[id_bands[-1]]['Date']
 
-        # confidence level
-        rs_cl = self._ds_labels[id_ds].GetRasterBand(id_rs)
-        dsc_cl = rs_cl.GetDescription()
+            if first_date.year == last_date.year:
+                str_first_date = f'{calendar.month_name[first_date.month]}'
+                str_last_date = f'{calendar.month_name[last_date.month]} {last_date.year}'
+            else:
+                str_first_date = f'{calendar.month_name[first_date.month]} {first_date.year}'
+                str_last_date = f'{calendar.month_name[last_date.month]} {last_date.year}'
 
-        # observed flag
-        rs_mask = self._ds_labels[id_ds].GetRasterBand(id_rs + 1)
-        dsc_mask = rs_mask.GetDescription()
+            str_date = '{} - {}'.format(str_first_date, str_last_date)
+        elif isinstance(id_bands, int):
+            label_date = self.label_dates.iloc[id_bands]['Date']
+            str_date = f'{calendar.month_name[label_date.month]} {label_date.year}'
+        else:
+            raise NotImplementedError
 
-        # check to avoid issues in following processing
-        if band2date_firecci(dsc_cl) != band2date_firecci(dsc_mask):
-            raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+        # put date to a figure title
+        str_title = '{} ({})'.format(str_title, str_date)
 
-        confidence_level = rs_cl.ReadAsArray()
-        mask = rs_mask.ReadAsArray()
-
-        label = self.__getFireLabels_CCI(confidence_level=confidence_level, with_fire_mask=False)
-        # show non-mapped areas in a black colour
-        if np.max(mask) == 1: label[mask == PIXEL_NOT_BURNABLE, :] = 0
-
-        label_date = self.label_dates.iloc[id_band]['Date']
-        str_title = 'CCI labels ({}, {})'.format(label_date.year, calendar.month_name[label_date.month])
+        # get fire labels
+        labels = self.__getFireLabels_CCI(id_bands=id_bands)
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
-        imshow(src=label, title=str_title, figsize=figsize, show=True)
+        imshow(src=labels, title=str_title, figsize=figsize, show=True)
 
     def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> lazy_import('numpy').ndarray:
 
@@ -419,7 +490,7 @@ class DatasetView(DatasetLoader):
             id_ds, id_rs = self._map_band_id_label[id_bands]
             return self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
         else:
-            raise AttributeError
+            raise NotImplementedError
 
     def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_non_mapped_areas: bool = True) -> \
             Union[lazy_import('numpy').ndarray, tuple[lazy_import('numpy').ndarray]]:
@@ -466,7 +537,7 @@ class DatasetView(DatasetLoader):
             if len(mask_non_mapped) != 0: label[mask_non_mapped, :] = 0
 
         # return
-        if mask_fires is not None:
+        if with_fire_mask:
             return label, mask_fires
         else:
             del mask_fires; gc.collect()
@@ -474,10 +545,7 @@ class DatasetView(DatasetLoader):
 
     def __showFireLabels_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]]) -> None:
 
-        # get fire labels
-        labels = self.__getFireLabels_MTBS(id_bands)
-
-        # put a region name to a figure title
+        # put a region name to a plot title
         str_title = 'MTBS labels ({}'.format(self.mtbs_region.name)
 
         # get date or start/end dates
@@ -489,10 +557,13 @@ class DatasetView(DatasetLoader):
             label_date = self.label_dates.iloc[id_bands]['Date']
             str_date = str(label_date.year)
         else:
-            raise AttributeError
+            raise NotImplementedError
 
         # put date to a figure title
         str_title = '{} {})'.format(str_title, str_date)
+
+        # get fire labels
+        labels = self.__getFireLabels_MTBS(id_bands)
 
         # show up labels and binary mask (non-) related to localization of wildfires (MTBS labels)
         imshow(src=labels, title=str_title, figsize=figsize, show=True)
@@ -506,6 +577,7 @@ class DatasetView(DatasetLoader):
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
+        # TODO check
         # if id_band < 0:
         #     raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
         #
@@ -513,7 +585,7 @@ class DatasetView(DatasetLoader):
         #     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
 
         if self.label_collection == FireLabelsCollection.CCI:
-            raise NotImplementedError
+            self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize)
             # self.__showFireLabels_CCI(id_band=id_bands, figsize=figsize)
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize)
@@ -534,11 +606,8 @@ class DatasetView(DatasetLoader):
         date_satimg = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
 
         # get index of corresponding labels
-        label_index = self.label_dates.index[self._df_dates_labels['Date'] == date_satimg][0]
-        id_ds, id_rs = self._map_band_id_label[label_index]
-
-        confidence_level = self._ds_labels[id_ds].GetRasterBand(id_rs).ReadAsArray()
-        label, mask_fires = self.__getFireLabels_CCI(confidence_level=confidence_level, with_fire_mask=True)
+        label_index = int(self.label_dates.index[self._df_dates_labels['Date'] == date_satimg][0])
+        label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_non_mapped_areas=False)
 
         return label, mask_fires
 
@@ -619,8 +688,8 @@ if __name__ == '__main__':
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
     # PREFIX_IMG = 'ak_reflec_january_december_{}_850'  # TODO remove
 
-    LABEL_COLLECTION = FireLabelsCollection.MTBS
-    # LABEL_COLLECTION = FireLabelsCollection.CCI
+    # LABEL_COLLECTION = FireLabelsCollection.MTBS
+    LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
     lst_satimgs = []
@@ -654,12 +723,16 @@ if __name__ == '__main__':
     print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.label_dates)
 
+    dataset_view.showFireLabels(18)
+    dataset_view.showFireLabels(19)
+    dataset_view.showFireLabels(range(18, 20))
+
     # TODO remove
-    dataset_view.showFireLabels(0)
-    dataset_view.showFireLabels(1)
-    dataset_view.showFireLabels(range(0, 2))
-    dataset_view.ndvi_view_threshold = 0.5
-    dataset_view.showSatImage(24)
+    # dataset_view.showFireLabels(0)
+    # dataset_view.showFireLabels(1)
+    # dataset_view.showFireLabels(range(0, 2))
+    # dataset_view.ndvi_view_threshold = 0.5
+    # dataset_view.showSatImage(24)
     dataset_view.showSatImageWithFireLabels(30)
 
     # dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
