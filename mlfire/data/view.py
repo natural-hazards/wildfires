@@ -577,16 +577,24 @@ class DatasetView(DatasetLoader):
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
-        # TODO check
-        # if id_band < 0:
-        #     raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-        #
-        # if self.nbands_label - 1 < id_band:
-        #     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
+        if isinstance(id_bands, int):
+
+            if id_bands < 0:
+                raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+            elif self.nbands_label - 1 < id_bands:
+                raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
+
+        elif isinstance(id_bands, range):
+
+            for id_band in (id_bands[0], id_bands[-1]):
+
+                if id_band < 0:
+                    raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
+                elif self.nbands_label - 1 < id_band:
+                    raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
 
         if self.label_collection == FireLabelsCollection.CCI:
             self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize)
-            # self.__showFireLabels_CCI(id_band=id_bands, figsize=figsize)
         elif self.label_collection == FireLabelsCollection.MTBS:
             self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize)
         else:
