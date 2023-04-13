@@ -75,9 +75,7 @@ class DatasetView(DatasetLoader):
     @satimg_view_opt.setter
     def satimg_view_opt(self, opt: SatImgViewOpt) -> None:
 
-        if self._satimg_view_opt == opt:
-            return
-
+        if self._satimg_view_opt == opt: return
         self._satimg_view_opt = opt
 
     @property
@@ -88,9 +86,7 @@ class DatasetView(DatasetLoader):
     @labels_view_opt.setter
     def labels_view_opt(self, opt: FireLabelsViewOpt) -> None:
 
-        if self._labels_view_opt == opt:
-            return
-
+        if self._labels_view_opt == opt: return
         self._labels_view_opt = opt
 
     @property
@@ -419,20 +415,27 @@ class DatasetView(DatasetLoader):
 
         # get date or start/end dates
         if isinstance(id_bands, range):
+
             first_date = self.label_dates.iloc[id_bands[0]]['Date']
             last_date = self.label_dates.iloc[id_bands[-1]]['Date']
 
             if first_date.year == last_date.year:
+
                 str_first_date = f'{calendar.month_name[first_date.month]}'
                 str_last_date = f'{calendar.month_name[last_date.month]} {last_date.year}'
+
             else:
+
                 str_first_date = f'{calendar.month_name[first_date.month]} {first_date.year}'
                 str_last_date = f'{calendar.month_name[last_date.month]} {last_date.year}'
 
             str_date = '{} - {}'.format(str_first_date, str_last_date)
+
         elif isinstance(id_bands, int):
+
             label_date = self.label_dates.iloc[id_bands]['Date']
             str_date = f'{calendar.month_name[label_date.month]} {label_date.year}'
+
         else:
             raise NotImplementedError
 
@@ -675,7 +678,7 @@ class DatasetView(DatasetLoader):
             raise NotImplementedError
 
 
-#
+# use case examples
 if __name__ == '__main__':
 
     DATA_DIR = 'data/tifs'
@@ -699,9 +702,16 @@ if __name__ == '__main__':
         lst_labels.append(fn_labels)
 
     SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
+    # SATIMG_VIEW_OPT = SatImgViewOpt.CIR  # uncomment this line for viewing a satellite image in infrared
+    # SATIMG_VIEW_OPT = SatImgViewOpt.NDVI  # uncomment this line for displaying NDVI using information from satellite image
+    # SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED1  # uncomment this line for viewing a satellite image in infrared using SWIR1 band
+    # SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED2  # uncomment this line for viewing a satellite image in infrared using SWIR2 band
+
+    NDVI_THRESHOLD = 0.5
+    CCI_CONFIDENCE_LEVEL = 70
 
     LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
-    # LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL
+    # LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
 
     # setup of data set loader
     dataset_view = DatasetView(
@@ -710,24 +720,20 @@ if __name__ == '__main__':
         satimg_view_opt=SATIMG_VIEW_OPT,
         label_collection=LABEL_COLLECTION,
         labels_view_opt=LABELS_VIEW_OPT,
-        mtbs_severity_from=MTBSSeverity.LOW
+        mtbs_severity_from=MTBSSeverity.LOW,
+        cci_confidence_level=CCI_CONFIDENCE_LEVEL,
+        ndvi_view_threshold=NDVI_THRESHOLD if SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None
     )
 
     print('#ts = {}'.format(len(dataset_view)))
+    print(dataset_view.satimg_dates)
     print(dataset_view.label_dates)
 
-    # dataset_view.showFireLabels(18)
-    # dataset_view.showFireLabels(19)
-    # dataset_view.showFireLabels(range(18, 20))
+    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    dataset_view.showSatImage(70)
+    dataset_view.showSatImageWithFireLabels(70)
 
-    # TODO remove
-    # dataset_view.showFireLabels(0)
-    # dataset_view.showFireLabels(1)
-    # dataset_view.showFireLabels(range(0, 2))
-    # dataset_view.ndvi_view_threshold = 0.5
-    # dataset_view.showSatImage(24)
-    dataset_view.showSatImageWithFireLabels(30)
-
-    # dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
-    # dataset_view.showSatImage(70)
-    # dataset_view.showSatImageWithFireLabels(70)
+    # labels aggregation
+    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 0)
+    dataset_view.showFireLabels(19 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    dataset_view.showFireLabels(range(18, 20) if LABEL_COLLECTION == FireLabelsCollection.CCI else range(0, 2))
