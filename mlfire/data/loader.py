@@ -94,7 +94,7 @@ class DatasetLoader(object):
             if not os.path.exists(fn):
                 raise IOError('File {} does not exist!'.format(fn))
 
-        self.__reset()  # clean up
+        self._reset()  # clean up
         self._lst_satimgs = lst_fn
 
     @property
@@ -108,7 +108,7 @@ class DatasetLoader(object):
         if self.modis_collection == collection:
             return
 
-        self.__reset()  # clean up
+        self._reset()  # clean up
         self._modis_collection = collection
 
     @property
@@ -154,7 +154,7 @@ class DatasetLoader(object):
         if self._mtbs_region == region:
             return
 
-        self.__reset()
+        self._reset()
         self._mtbs_region = region
 
     @property
@@ -168,7 +168,7 @@ class DatasetLoader(object):
         if self._mtbs_severity_from == severity:
             return
 
-        self.__reset()
+        self._reset()
         self._mtbs_severity_from = severity
 
     """
@@ -190,7 +190,7 @@ class DatasetLoader(object):
             if not os.path.exists(fn):
                 raise IOError('File {} does not exist!'.format(fn))
 
-        self.__reset()  # clean up
+        self._reset()  # clean up
         self._lst_labels = lst_labels
 
     @property
@@ -204,7 +204,7 @@ class DatasetLoader(object):
         if self.label_collection == collection:
             return
 
-        self.__reset()  # clean up
+        self._reset()  # clean up
         self._label_collection = collection
 
     @property
@@ -238,10 +238,10 @@ class DatasetLoader(object):
         if self.test_ratio == ratio:
             return
 
-        self.__reset()  # clean up
+        self._reset()  # clean up
         self._test_ratio = ratio
 
-    def __reset(self):
+    def _reset(self):
 
         del self._ds_training; self._ds_training = None
         del self._ds_test; self._ds_test = None
