@@ -33,6 +33,8 @@ class FireLabelsViewOpt(Enum):
     CONFIDENCE_LEVEL = 2
     SEVERITY = 3
 
+# TODO other types of aggregation
+
 
 class DatasetView(DatasetLoader):
 
@@ -336,7 +338,9 @@ class DatasetView(DatasetLoader):
 
         return np_cl_agg, np_flags_agg
 
-    def __readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray):
+    def _readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray):
+
+        # TODO move to loader
 
         if isinstance(id_bands, range):
 
@@ -367,7 +371,7 @@ class DatasetView(DatasetLoader):
         # lazy imports
         colors = lazy_import('mlfire.utils.colors')
 
-        rs_cl, rs_flags = self.__readFireConfidenceLevel_CCI(id_bands=id_bands)
+        rs_cl, rs_flags = self._readFireConfidenceLevel_CCI(id_bands=id_bands)
         mask_fires = None
 
         label = _np.empty(shape=rs_cl.shape + (3,), dtype=_np.uint8)
@@ -472,7 +476,7 @@ class DatasetView(DatasetLoader):
 
         return np_severity_agg
 
-    def __readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:
+    def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:
 
         if isinstance(id_bands, range):
             return self.__readFireSeverity_RANGE_MTBS(id_bands)
@@ -489,7 +493,7 @@ class DatasetView(DatasetLoader):
         colors = lazy_import('mlfire.utils.colors')
 
         # get fire severity
-        rs_severity = self.__readFireSeverity_MTBS(id_bands=id_bands)
+        rs_severity = self._readFireSeverity_MTBS(id_bands=id_bands)
         mask_fires = None
 
         label = _np.empty(shape=rs_severity.shape + (3,), dtype=_np.uint8)
@@ -600,10 +604,10 @@ class DatasetView(DatasetLoader):
 
         # get label date time
         date_satimg = self.satimg_dates.iloc[id_img]['Date']
-        date_satimg = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
+        date_label = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
 
         # get index of corresponding labels
-        label_index = int(self.label_dates.index[self._df_dates_labels['Date'] == date_satimg][0])
+        label_index = int(self.label_dates.index[self._df_dates_labels['Date'] == date_label][0])
         label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_non_mapped_areas=False)
 
         return label, mask_fires
@@ -614,10 +618,10 @@ class DatasetView(DatasetLoader):
         datetime = lazy_import('datetime')
 
         date_satimg = self.satimg_dates.iloc[id_img]['Date']
-        date_satimg = datetime.date(year=date_satimg.year, month=1, day=1)
+        date_label = datetime.date(year=date_satimg.year, month=1, day=1)
 
         # get index of corresponding labels
-        label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == date_satimg][0])
+        label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == date_label][0])
         label, mask_fires = self.__getFireLabels_MTBS(id_bands=label_index, with_fire_mask=True, with_non_mapped_areas=False)
 
         return label, mask_fires

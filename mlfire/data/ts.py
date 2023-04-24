@@ -168,13 +168,15 @@ class DataAdapterTS(DatasetView):
 
         datetime = lazy_import('datetime')
 
+        # TODO check start and end date
+
         start_label_date = datetime.date(year=self.ds_start_date.year, month=1, day=1)
         start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
             end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
             end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
-            id_bands = (start_label_index, end_label_index)
+            id_bands = range(start_label_index, end_label_index + 1)
         else:
             id_bands = start_label_index
 
@@ -192,6 +194,8 @@ class DataAdapterTS(DatasetView):
     def __loadLabels_CCI(self) -> _np.ndarray:
 
         datetime = lazy_import('datetime')
+
+        # TODO check start and end date
 
         start_label_date = datetime.date(year=self.ds_start_date.year, month=self.ds_start_date.month, day=1)
         start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
@@ -212,6 +216,9 @@ class DataAdapterTS(DatasetView):
         PIXEL_NOT_OBSERVED = -1
         labels[rs_flags == PIXEL_NOT_OBSERVED] = _np.nan
 
+        del rs_cl, rs_flags
+        gc.collect()
+
         return labels
 
     def __loadLabels(self) -> _np.ndarray:
@@ -223,9 +230,75 @@ class DataAdapterTS(DatasetView):
         else:
             raise NotImplementedError
 
+    def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:
+
+        len_ds = len(self._ds_satimgs)
+
+        if len_ds > 1:
+
+            lst_img_ts = []
+            for band_id in range(len_ds):
+                lst_img_ts.append(self._ds_satimgs[band_id].ReadAsArray())
+            img_ts = _np.concatenate(lst_img_ts)
+
+            del lst_img_ts
+            gc.collect()
+
+        else:
+
+            img_ts = self._ds_satimgs[0].ReadAsArray()
+
+        return img_ts
+
+    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_img_id: int, end_img_id: int) -> _np.ndarray:
+
+        NBANDS_MODIS = 7
+        lst_img_ts = []
+
+        for img_id in range(start_img_id, end_img_id + 1):
+
+            gc.collect()
+
+            id_ds, start_band_id = self._map_start_satimgs[img_id]
+            ds_satimg = self._ds_satimgs[id_ds]
+
+            for band_id in range(0, NBANDS_MODIS):
+                lst_img_ts.append(ds_satimg.GetRasterBand(start_band_id + band_id).ReadAsArray())
+
+        img_ts = _np.array(lst_img_ts)
+        del lst_img_ts; gc.collect()
+
+        return img_ts
+
+    def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:
+
+        start_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_start_date][0]
+        end_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_end_date][0]
+
+        if end_img_id - start_img_id + 1 == len(self._df_dates_satimgs['Date']):
+
+            img_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
+
+        else:
+
+            img_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_img_id=start_img_id, end_img_id=end_img_id)
+
+        return img_ts
+
     def __loadSatImg_TS(self) -> _np.ndarray:
 
-        pass
+        start_date = self.ds_start_date
+        if start_date not in self._df_dates_satimgs['Date'].values:
+            raise AttributeError('Start date does not correspond any band!')
+
+        end_date = self.ds_end_date
+        if end_date not in self._df_dates_satimgs['Date'].values:
+            raise AttributeError('End date does not correspond any band!')
+
+        if self.modis_collection == ModisIndex.REFLECTANCE:
+            return self.__loadSatImg_REFLECTANCE()
+        else:
+            raise NotImplementedError
 
     # time series transformation
     def __transformTimeseries(self) -> None:
@@ -242,24 +315,24 @@ class DataAdapterTS(DatasetView):
             try:
                 self._processMetaData_LABELS()
             except IOError or ValueError:
-                raise IOError('Cannot process meta data related to labels!')
+                raise RuntimeError('Cannot process meta data related to labels!')
 
         if not self._satimgs_processed:
             # process descriptions of bands related to satellite images and obtain dates from them
             try:
                 self._processMetaData_SATELLITE_IMG()
             except IOError or ValueError:
-                raise IOError('Cannot process meta data related to satellite images!')
+                raise RuntimeError('Cannot process meta data related to satellite images!')
 
         try:
             labels = self.__loadLabels()
-        except IOError or ValueError:
-            pass
+        except IOError or ValueError or NotImplementedError:
+            raise RuntimeError
 
         try:
-            ts_satimgs = self.__loadSatImg_TS()
-        except IOError or ValueError:
-            pass
+            ts_imgs = self.__loadSatImg_TS()
+        except IOError or ValueError or NotImplementedError:
+            raise RuntimeError
 
         # TODO split data set to training and test (if required)
 
@@ -305,7 +378,7 @@ if __name__ == '__main__':
         fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
         lst_labels.append(fn_labels)
 
-    transformer_ts = DataAdapterTS(
+    adapter_ts = DataAdapterTS(
         lst_satimgs=lst_satimgs,
         lst_labels=lst_labels,
         label_collection=LABEL_COLLECTION,
@@ -317,9 +390,11 @@ if __name__ == '__main__':
     index_begin_date = 0
     index_end_date = -1
 
-    start_date = transformer_ts.satimg_dates.iloc[index_begin_date]['Date']
-    transformer_ts.ds_start_date = start_date
-    end_date = transformer_ts.satimg_dates.iloc[index_begin_date]['Date']
-    transformer_ts.ds_end_date = end_date
+    print(adapter_ts.satimg_dates)
 
-    transformer_ts.createDataset()
+    start_date = adapter_ts.satimg_dates.iloc[index_begin_date]['Date']
+    adapter_ts.ds_start_date = start_date
+    end_date = adapter_ts.satimg_dates.iloc[index_end_date]['Date']
+    adapter_ts.ds_end_date = end_date
+
+    adapter_ts.createDataset()
