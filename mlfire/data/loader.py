@@ -14,12 +14,13 @@ from mlfire.utils.utils_string import band2date_reflectance
 from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 
 
-class DatasetLoader(object):
+class DatasetLoader(object):  # TODO rename to data set base
 
     def __init__(self,
                  lst_satimgs: Union[tuple[str], list[str]],
                  lst_labels: Union[tuple[str], list[str]],
                  test_ratio: float = .33,
+                 val_ratio: float = .0,
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
@@ -42,9 +43,13 @@ class DatasetLoader(object):
 
         self._ds_training = None
         self._ds_test = None
+        self._ds_val = None
 
         self._test_ratio = None
         self.test_ratio = test_ratio
+
+        self._val_ratio = None
+        self.val_ratio = val_ratio
 
         # properties (multi spectral images - MODIS)
 
@@ -112,9 +117,9 @@ class DatasetLoader(object):
         self._modis_collection = collection
 
     @property
-    def satimg_dates(self) -> lazy_import('pandas.DataFrame'):
+    def satimg_dates(self) -> lazy_import('pandas').DataFrame:
 
-        if self._df_dates_labels is None:
+        if self._df_dates_satimgs is None:
             self.__processBandDates_SATELLITE_IMGS()
 
         return self._df_dates_satimgs
@@ -224,7 +229,7 @@ class DatasetLoader(object):
         return self._df_dates_labels
 
     """
-    Training and test data sets
+    Training, test and validation data sets
     """
 
     @property
@@ -241,10 +246,25 @@ class DatasetLoader(object):
         self._reset()  # clean up
         self._test_ratio = ratio
 
+    @property
+    def val_ratio(self) -> float:
+
+        return self._val_ratio
+
+    @val_ratio.setter
+    def val_ratio(self, ratio: float) -> None:
+
+        if self.val_ratio == ratio:
+            return
+
+        self._reset()
+        self._val_ratio = ratio
+
     def _reset(self):
 
         del self._ds_training; self._ds_training = None
         del self._ds_test; self._ds_test = None
+        del self._ds_val; self._ds_val = None
 
         del self._df_dates_satimgs; self._df_dates_satimgs = None
         del self._map_start_satimgs; self._map_start_satimgs = None
