@@ -2,9 +2,7 @@ import gc
 import os
 
 from enum import Enum
-from typing import Union
-
-import numpy as np
+from typing import Union, Optional
 
 from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
 from mlfire.earthengine.collections import ModisIndex
@@ -18,7 +16,7 @@ from mlfire.utils.functool import lazy_import
 _np = lazy_import('numpy')
 
 
-class TrainTestValSplitOpt(Enum):
+class DatasetSplitOpt(Enum):
 
     SHUFFLE_SPLIT = 0
     IMG_HORIZONTAL_SPLIT = 1
@@ -33,9 +31,9 @@ class DataAdapterTS(DatasetView):
                  ds_start_date: lazy_import('datetime').date = None,
                  ds_end_date: lazy_import('datetime').date = None,
                  # transformer options
-                 train_test_val_opt: TrainTestValSplitOpt = TrainTestValSplitOpt.SHUFFLE_SPLIT,
+                 ds_split_opt: DatasetSplitOpt = DatasetSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = 0.33,
-                 val_ratio: float = None,
+                 val_ratio: float = 0.,
                  # view options
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
@@ -67,7 +65,7 @@ class DataAdapterTS(DatasetView):
 
         # transformer options
         self._train_test_val_opt = None
-        self.train_test_val_opt = train_test_val_opt
+        self.train_test_val_opt = ds_split_opt
 
         # test data set options
         self._test_ratio = None
@@ -83,12 +81,12 @@ class DataAdapterTS(DatasetView):
 
     # properties
     @property
-    def train_test_val_opt(self) -> TrainTestValSplitOpt:
+    def train_test_val_opt(self) -> DatasetSplitOpt:
 
         return self._train_test_val_opt
 
     @train_test_val_opt.setter
-    def train_test_val_opt(self, flg: TrainTestValSplitOpt) -> None:
+    def train_test_val_opt(self, flg: DatasetSplitOpt) -> None:
 
         if flg == self._train_test_val_opt:
             return
@@ -174,10 +172,13 @@ class DataAdapterTS(DatasetView):
         start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
+
             end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
             end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
             id_bands = range(start_label_index, end_label_index + 1)
+
         else:
+
             id_bands = start_label_index
 
         # get fire severity
@@ -201,10 +202,13 @@ class DataAdapterTS(DatasetView):
         start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
+
             end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
             end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
             id_bands = (start_label_index, end_label_index)
+
         else:
+
             id_bands = start_label_index
 
         # get fire confidence level
@@ -305,6 +309,131 @@ class DataAdapterTS(DatasetView):
 
         pass
 
+    def __splitDataset_SHUFFLE_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+
+        # lazy import
+        model_selection = lazy_import('sklearn.model_selection')
+
+        # convert to 3D (spatial in time) multi-spectral image to time series related to pixels
+        ts_imgs = ts_imgs.reshape((ts_imgs.shape[0], -1)).T
+        # reshape labels to be 1D vector
+        labels = labels.reshape(-1)
+
+        if self.test_ratio > 0.:
+
+            ts_imgs_train, ts_imgs_test, labels_train, labels_test = model_selection.train_test_split(
+                ts_imgs,
+                labels,
+                test_size=self.test_ratio,
+                random_state=42
+            )
+
+        else:
+
+            ts_imgs_train = ts_imgs; labels_train = labels
+            ts_imgs_test = None; labels_test = None
+
+        if self.val_ratio > 0.:
+
+            ts_imgs_train, ts_imgs_val, labels_train, labels_val = model_selection.train_test_split(
+                ts_imgs_train,
+                labels_train,
+                test_size=self.val_ratio,
+                random_state=42
+            )
+
+        else:
+
+            ts_imgs_val = labels_val = None
+
+        if self.test_ratio > 0. and self.val_ratio > 0.:
+            return ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val
+        elif self.test_ratio > 0.:
+            return ts_imgs_train, ts_imgs_test, labels_train, labels_test
+        elif self.val_ratio > 0.:
+            return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+
+    def __splitDataset_HORIZONTAL_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+
+        if self.test_ratio > 0.:
+
+            _, rows, _ = ts_imgs.shape
+            hi_rows = int(rows * (1. - self.test_ratio))
+
+            ts_imgs_train = ts_imgs[:, :hi_rows, :]; labels_train = labels[:hi_rows, :]
+            ts_imgs_test = ts_imgs[:, hi_rows:, :]; labels_test = labels[hi_rows:, :]
+
+        else:
+
+            ts_imgs_train = ts_imgs; labels_train = labels
+            ts_imgs_test = None; labels_test = None
+
+        if self.val_ratio > 0.:
+
+            _, rows, _ = ts_imgs_train.shape
+            hi_rows = int(rows * (1. - self.val_ratio))
+
+            ts_imgs_train = ts_imgs_train[:, :hi_rows, :]; labels_train = labels_train[:hi_rows, :]
+            ts_imgs_val = ts_imgs_train[:, hi_rows:, :]; labels_val = labels_train[hi_rows:, :]
+
+        else:
+
+            ts_imgs_val = labels_val = None
+
+        if self.test_ratio > 0. and self.val_ratio > 0.:
+            return ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val
+        elif self.test_ratio > 0.:
+            return ts_imgs_train, ts_imgs_test, labels_train, labels_test
+        elif self.val_ratio > 0.:
+            return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+
+    def __splitDataset_VERTICAL_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+
+        if self.test_ratio > 0.:
+
+            _, _, cols = ts_imgs.shape
+            hi_cols = int(cols * (1. - self.test_ratio))
+
+            ts_imgs_train = ts_imgs[:, :, :hi_cols]; labels_train = labels[:, :hi_cols]
+            ts_imgs_test = ts_imgs[:, :, hi_cols:]; labels_test = labels[:, hi_cols:]
+
+        else:
+
+            ts_imgs_train = ts_imgs; labels_train = labels
+            ts_imgs_test = None; labels_test = None
+
+        if self.val_ratio > 0.:
+
+            _, _, cols = ts_imgs_train.shape
+            hi_cols = int(cols * (1. - self.val_ratio))
+
+            ts_imgs_train = ts_imgs_train[:, :, :hi_cols]; labels_train = labels_train[:, :hi_cols]
+            ts_imgs_val = ts_imgs_train[:, :, hi_cols:]; labels_val = labels_train[:, hi_cols:]
+
+        else:
+
+            ts_imgs_val = labels_val = None
+
+        if self.test_ratio > 0. and self.val_ratio > 0.:
+            return ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val
+        elif self.test_ratio > 0.:
+            return ts_imgs_train, ts_imgs_test, labels_train, labels_test
+        elif self.val_ratio > 0.:
+            return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+
+    def __splitDataset(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+
+        if self.train_test_val_opt == DatasetSplitOpt.SHUFFLE_SPLIT:
+            ds = self.__splitDataset_SHUFFLE_SPLIT(ts_imgs=ts_imgs, labels=labels)
+        elif self.train_test_val_opt == DatasetSplitOpt.IMG_HORIZONTAL_SPLIT:
+            ds = self.__splitDataset_HORIZONTAL_SPLIT(ts_imgs=ts_imgs, labels=labels)
+        elif self.train_test_val_opt == DatasetSplitOpt.IMG_VERTICAL_SPLIT:
+            ds = self.__splitDataset_VERTICAL_SPLIT(ts_imgs=ts_imgs, labels=labels)
+        else:
+            raise NotImplementedError
+
+        return ds
+
     def createDataset(self) -> None:
 
         if self._ds_training:
@@ -327,14 +456,17 @@ class DataAdapterTS(DatasetView):
         try:
             labels = self.__loadLabels()
         except IOError or ValueError or NotImplementedError:
-            raise RuntimeError
+            raise RuntimeError('Cannot load labels!')
 
         try:
             ts_imgs = self.__loadSatImg_TS()
         except IOError or ValueError or NotImplementedError:
-            raise RuntimeError
+            raise RuntimeError('Cannot load series of satellite images!')
 
-        # TODO split data set to training and test (if required)
+        # TODO add NDVI
+        # TODO clean data set
+        ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
+        # TODO test
 
         try:
             self.__transformTimeseries()
@@ -364,6 +496,8 @@ if __name__ == '__main__':
     # LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
+    DS_SPLIT_OPT = DatasetSplitOpt.IMG_HORIZONTAL_SPLIT
+
     lst_satimgs = []
     lst_labels = []
 
@@ -384,6 +518,7 @@ if __name__ == '__main__':
         label_collection=LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
         cci_confidence_level=CCI_CONFIDENCE_LEVEL,
+        ds_split_opt=DS_SPLIT_OPT
     )
 
     # set dates
