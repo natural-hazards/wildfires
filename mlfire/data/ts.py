@@ -23,6 +23,15 @@ class DatasetSplitOpt(Enum):
     IMG_VERTICAL_SPLIT = 2
 
 
+class DatasetTransformOP(Enum):
+
+    NONE = 0
+    SCALE = 1
+    STANDARTIZE_ZSCORE = 2
+    PCA = 4
+    SAVITZKY_GOLAY = 5
+
+
 class DataAdapterTS(DatasetView):
 
     def __init__(self,
@@ -34,6 +43,8 @@ class DataAdapterTS(DatasetView):
                  ds_split_opt: DatasetSplitOpt = DatasetSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = 0.33,
                  val_ratio: float = 0.,
+                 # transformation operation
+                 transform_ops: Union[tuple[DatasetTransformOP], list[DatasetTransformOP]] = (DatasetTransformOP.NONE,),
                  # view options
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
@@ -63,9 +74,13 @@ class DataAdapterTS(DatasetView):
         self._ds_end_date = None
         self.ds_end_date = ds_end_date
 
-        # transformer options
+        # transformation options
         self._train_test_val_opt = None
         self.train_test_val_opt = ds_split_opt
+
+        self._lst_transform_ops = None
+        self._transform_ops = DatasetTransformOP.NONE.value
+        self.transform_ops = transform_ops
 
         # test data set options
         self._test_ratio = None
@@ -159,6 +174,23 @@ class DataAdapterTS(DatasetView):
         gc.collect()
 
         self._ds_end_date = val_date
+
+    @property
+    def transform_ops(self) -> list[DatasetTransformOP]:
+
+        return self._lst_transform_ops
+
+    @transform_ops.setter
+    def transform_ops(self, lst_ops: list[DatasetTransformOP]) -> None:
+
+        if self._lst_transform_ops == lst_ops:
+            return
+
+        self._reset()
+
+        self._transform_ops = 0
+        self._lst_transform_ops = lst_ops
+        for op in lst_ops: self._transform_ops |= op.value
 
     # load labels
 
@@ -304,10 +336,45 @@ class DataAdapterTS(DatasetView):
         else:
             raise NotImplementedError
 
-    # time series transformation
-    def __transformTimeseries(self) -> None:
+    """
+    Time series transformation
+    """
 
-        pass
+    def __transformTimeseries(self, ts_imgs: _np.ndarray) -> _np.ndarray:
+
+        NBANDS = 7  # TODO implement for additional indexes such as NDVI and LST
+
+        # scale data using MODIS scale factor
+        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
+        if self._transform_ops & DatasetTransformOP.SCALE.value == DatasetTransformOP.SCALE.value:
+
+            ts_imgs /= 1e-4
+
+        # standardize data to have zero mean and unit standard deviation using z-score
+        if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
+
+            scipy_stats = lazy_import('scipy.stats')
+
+            for band_id in range(NBANDS):
+                # get band
+                img_band = ts_imgs[:, band_id::NBANDS]
+
+                # compute standard deviation
+                std_band = scipy_stats.std(img_band)
+                if std_band == 0.: continue
+
+                # standardizing series of satellite images per band
+                ts_imgs[:, band_id::NBANDS] = (img_band - scipy_stats.mean(img_band)) / std_band
+
+        if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
+
+            raise NotImplementedError
+
+        return ts_imgs
+
+    """
+    Data set split into training, test and validation
+    """
 
     def __splitDataset_SHUFFLE_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
 
@@ -373,8 +440,8 @@ class DataAdapterTS(DatasetView):
             _, rows, _ = ts_imgs_train.shape
             hi_rows = int(rows * (1. - self.val_ratio))
 
-            ts_imgs_train = ts_imgs_train[:, :hi_rows, :]; labels_train = labels_train[:hi_rows, :]
             ts_imgs_val = ts_imgs_train[:, hi_rows:, :]; labels_val = labels_train[hi_rows:, :]
+            ts_imgs_train = ts_imgs_train[:, :hi_rows, :]; labels_train = labels_train[:hi_rows, :]
 
         else:
 
@@ -407,8 +474,8 @@ class DataAdapterTS(DatasetView):
             _, _, cols = ts_imgs_train.shape
             hi_cols = int(cols * (1. - self.val_ratio))
 
-            ts_imgs_train = ts_imgs_train[:, :, :hi_cols]; labels_train = labels_train[:, :hi_cols]
             ts_imgs_val = ts_imgs_train[:, :, hi_cols:]; labels_val = labels_train[:, hi_cols:]
+            ts_imgs_train = ts_imgs_train[:, :, :hi_cols]; labels_train = labels_train[:, :hi_cols]
 
         else:
 
@@ -463,15 +530,32 @@ class DataAdapterTS(DatasetView):
         except IOError or ValueError or NotImplementedError:
             raise RuntimeError('Cannot load series of satellite images!')
 
-        # TODO add NDVI
-        # TODO clean data set
-        ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
-        # TODO test
+        # TODO add NDVI and land surface temperature
+        # TODO clean data set if needed
+        lst_ds = list(self.__splitDataset(ts_imgs=ts_imgs, labels=labels))
 
         try:
-            self.__transformTimeseries()
+            for id_ds in range(3 if len(lst_ds) // 6 else 2):
+                ts_img = lst_ds[id_ds]; tmp_shape = None
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    # save original shape of series
+                    tmp_shape = ts_img.shape
+                    # reshape image to time series related to pixels
+                    ts_img = ts_img.reshape((ts_img.shape[0], -1)).T
+
+                ts_img = self.__transformTimeseries(ts_img)
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    # reshape back to series of satellite images
+                    lst_ds[id_ds] = ts_img.T.reshape(tmp_shape)
+                    tmp_shape = None
+
+                gc.collect()  # invoke garbage collector
         except ValueError:
             pass
+
+        # TODO PCA
 
     def getTrainingDataset(self):
 
@@ -496,7 +580,7 @@ if __name__ == '__main__':
     # LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
-    DS_SPLIT_OPT = DatasetSplitOpt.IMG_HORIZONTAL_SPLIT
+    DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
 
     lst_satimgs = []
     lst_labels = []
@@ -518,7 +602,8 @@ if __name__ == '__main__':
         label_collection=LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
         cci_confidence_level=CCI_CONFIDENCE_LEVEL,
-        ds_split_opt=DS_SPLIT_OPT
+        ds_split_opt=DS_SPLIT_OPT,
+        val_ratio=0.3
     )
 
     # set dates
