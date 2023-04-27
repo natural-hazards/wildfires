@@ -29,7 +29,7 @@ class DatasetTransformOP(Enum):
     SCALE = 1
     STANDARTIZE_ZSCORE = 2
     PCA = 4
-    SAVITZKY_GOLAY = 5
+    SAVITZKY_GOLAY = 8
 
 
 class DataAdapterTS(DatasetView):
@@ -45,6 +45,8 @@ class DataAdapterTS(DatasetView):
                  val_ratio: float = 0.,
                  # transformation operation
                  transform_ops: Union[tuple[DatasetTransformOP], list[DatasetTransformOP]] = (DatasetTransformOP.NONE,),
+                 savgol_polyorder: int = 1,
+                 savgol_winlen: int = 5,
                  # view options
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
@@ -81,6 +83,12 @@ class DataAdapterTS(DatasetView):
         self._lst_transform_ops = None
         self._transform_ops = DatasetTransformOP.NONE.value
         self.transform_ops = transform_ops
+
+        self._savgol_polyorder = None
+        self.savgol_polyorder = savgol_polyorder
+
+        self._savgol_winlen = None
+        self.savgol_winlen = savgol_winlen
 
         # test data set options
         self._test_ratio = None
@@ -175,6 +183,10 @@ class DataAdapterTS(DatasetView):
 
         self._ds_end_date = val_date
 
+    """
+    Transform options
+    """
+
     @property
     def transform_ops(self) -> list[DatasetTransformOP]:
 
@@ -191,6 +203,34 @@ class DataAdapterTS(DatasetView):
         self._transform_ops = 0
         self._lst_transform_ops = lst_ops
         for op in lst_ops: self._transform_ops |= op.value
+
+    @property
+    def savgol_polyorder(self) -> int:
+
+        return self._savgol_polyorder
+
+    @savgol_polyorder.setter
+    def savgol_polyorder(self, order: int) -> None:
+
+        if self._savgol_polyorder == order:
+            return
+
+        self._reset()
+        self._savgol_polyorder = order
+
+    @property
+    def savgol_winlen(self) -> int:
+
+        return self._savgol_winlen
+
+    @savgol_winlen.setter
+    def savgol_winlen(self, winlen: int) -> None:
+
+        if self._savgol_winlen == winlen:
+            return
+
+        self._reset()
+        self._savgol_winlen = winlen
 
     # load labels
 
@@ -313,13 +353,15 @@ class DataAdapterTS(DatasetView):
 
         if end_img_id - start_img_id + 1 == len(self._df_dates_satimgs['Date']):
 
-            img_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
+            ts_imgs = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
 
         else:
 
-            img_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_img_id=start_img_id, end_img_id=end_img_id)
+            ts_imgs = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_img_id=start_img_id, end_img_id=end_img_id)
 
-        return img_ts
+        ts_imgs = ts_imgs.astype(_np.float32)
+
+        return ts_imgs
 
     def __loadSatImg_TS(self) -> _np.ndarray:
 
@@ -348,27 +390,33 @@ class DataAdapterTS(DatasetView):
         # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
         if self._transform_ops & DatasetTransformOP.SCALE.value == DatasetTransformOP.SCALE.value:
 
-            ts_imgs /= 1e-4
+            ts_imgs /= 1e-4  # same for LST?
 
         # standardize data to have zero mean and unit standard deviation using z-score
         if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
-
-            scipy_stats = lazy_import('scipy.stats')
 
             for band_id in range(NBANDS):
                 # get band
                 img_band = ts_imgs[:, band_id::NBANDS]
 
                 # compute standard deviation
-                std_band = scipy_stats.std(img_band)
+                std_band = _np.std(img_band)
                 if std_band == 0.: continue
 
                 # standardizing series of satellite images per band
-                ts_imgs[:, band_id::NBANDS] = (img_band - scipy_stats.mean(img_band)) / std_band
+                ts_imgs[:, band_id::NBANDS] = (img_band - _np.mean(img_band)) / std_band
 
         if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
 
-            raise NotImplementedError
+            scipy_signal = lazy_import('scipy.signal')
+
+            for band_id in range(NBANDS):
+                # apply Savitzky–Golay filter, parameters are user-specified
+                ts_imgs[:, band_id::NBANDS] = scipy_signal.savgol_filter(
+                    ts_imgs[:, band_id::NBANDS],
+                    window_length=self.savgol_winlen,
+                    polyorder=self.savgol_polyorder
+                )
 
         return ts_imgs
 
@@ -549,7 +597,6 @@ class DataAdapterTS(DatasetView):
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     # reshape back to series of satellite images
                     lst_ds[id_ds] = ts_img.T.reshape(tmp_shape)
-                    tmp_shape = None
 
                 gc.collect()  # invoke garbage collector
         except ValueError:
@@ -581,6 +628,10 @@ if __name__ == '__main__':
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
     DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
+    TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
+    VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
+
+    TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.SAVITZKY_GOLAY]
 
     lst_satimgs = []
     lst_labels = []
@@ -602,8 +653,12 @@ if __name__ == '__main__':
         label_collection=LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
         cci_confidence_level=CCI_CONFIDENCE_LEVEL,
+        # transformation options
+        transform_ops=TRANSFORM_OPS,
+        # data set split options
         ds_split_opt=DS_SPLIT_OPT,
-        val_ratio=0.3
+        test_ratio=TEST_RATIO,
+        val_ratio=VAL_RATIO
     )
 
     # set dates
