@@ -2,12 +2,13 @@ import gc
 import os
 
 from enum import Enum
-from typing import Union, Optional
+from typing import Union
 
 from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
 from mlfire.earthengine.collections import ModisIndex
 from mlfire.earthengine.collections import FireLabelsCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
+from mlfire.features.pca import FactorOP
 
 # utils imports
 from mlfire.utils.functool import lazy_import
@@ -47,6 +48,8 @@ class DataAdapterTS(DatasetView):
                  transform_ops: Union[tuple[DatasetTransformOP], list[DatasetTransformOP]] = (DatasetTransformOP.NONE,),
                  savgol_polyorder: int = 1,
                  savgol_winlen: int = 5,
+                 pca_nfactors: int = 2,
+                 pca_ops: list[FactorOP] = (FactorOP.USER_SET,),
                  # view options
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
@@ -89,6 +92,13 @@ class DataAdapterTS(DatasetView):
 
         self._savgol_winlen = None
         self.savgol_winlen = savgol_winlen
+
+        self._pca_nfactors = 0
+        self.pca_nfactors = pca_nfactors
+
+        self._lst_pca_ops = None
+        self._pca_ops = 0
+        self.pca_ops = pca_ops
 
         # test data set options
         self._test_ratio = None
@@ -231,6 +241,38 @@ class DataAdapterTS(DatasetView):
 
         self._reset()
         self._savgol_winlen = winlen
+
+    @property
+    def pca_nfactors(self) -> int:
+
+        return self._nfactors_pca
+
+    @pca_nfactors.setter
+    def pca_nfactors(self, n) -> None:
+
+        if self._pca_nfactors == n:
+            return
+
+        self._reset()
+        self._nfactors_pca = n
+
+    @property
+    def pca_ops(self) -> list[FactorOP]:
+
+        return self._lst_pca_ops
+
+    @pca_ops.setter
+    def pca_ops(self, lst_ops: list[FactorOP]) -> None:
+
+        if self._lst_pca_ops == lst_ops:
+            return
+
+        self._reset()
+
+        self._lst_pca_ops = lst_ops
+        self._pca_ops = 0
+        # set ops flag
+        for op in lst_ops: self._pca_ops |= op.value
 
     # load labels
 
@@ -381,6 +423,23 @@ class DataAdapterTS(DatasetView):
     """
     Time series transformation
     """
+    @staticmethod
+    def __transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs: _np.ndarray) -> _np.ndarray:
+
+        NBANDS = 7  # TODO implement for additional indexes such as NDVI and LST
+
+        for band_id in range(NBANDS):
+            # get band
+            img_band = ts_imgs[:, band_id::NBANDS]
+
+            # compute standard deviation
+            std_band = _np.std(img_band)
+            if std_band == 0.: continue
+
+            # standardizing series of satellite images per band
+            ts_imgs[:, band_id::NBANDS] = (img_band - _np.mean(img_band)) / std_band
+
+        return ts_imgs
 
     def __transformTimeseries(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
@@ -390,21 +449,12 @@ class DataAdapterTS(DatasetView):
         # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
         if self._transform_ops & DatasetTransformOP.SCALE.value == DatasetTransformOP.SCALE.value:
 
-            ts_imgs /= 1e-4  # same for LST?
+            ts_imgs /= 1e-4  # scale factor for LST is 0.02
 
         # standardize data to have zero mean and unit standard deviation using z-score
         if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
 
-            for band_id in range(NBANDS):
-                # get band
-                img_band = ts_imgs[:, band_id::NBANDS]
-
-                # compute standard deviation
-                std_band = _np.std(img_band)
-                if std_band == 0.: continue
-
-                # standardizing series of satellite images per band
-                ts_imgs[:, band_id::NBANDS] = (img_band - _np.mean(img_band)) / std_band
+            ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
 
         if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
 
@@ -419,6 +469,63 @@ class DataAdapterTS(DatasetView):
                 )
 
         return ts_imgs
+
+    def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> None:
+        
+        # lazy imports
+        features_pca = lazy_import('mlfire.features.pca')
+        copy = lazy_import('copy')
+
+        NBANDS = 7  # TODO as a class attribute
+
+        if DatasetTransformOP.STANDARTIZE_ZSCORE not in self._lst_transform_ops:
+            ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+
+        # build up PCA projection for each band
+
+        lst_extractors = []
+        nlatent_factors_found = 0
+
+        for band_id in range(NBANDS):
+
+            extractor_pca = features_pca.TransformPCA(
+                train_ds=ts_imgs[:, band_id::NBANDS],
+                factor_ops=self._lst_pca_ops,
+                nlatent_factors=self.pca_ops,
+                verbose=True
+            )
+
+            extractor_pca.fit()
+
+            nlatent_factors_found = max(nlatent_factors_found, extractor_pca.nlatent_factors)
+            lst_extractors.append(extractor_pca)
+
+        # retrain PCA feature extractors
+
+        for band_id in range(NBANDS):
+
+            extractor_pca = lst_extractors[band_id]
+
+            # retrain if required
+            if extractor_pca.nlatent_factors < nlatent_factors_found:
+                extractor_pca.nlatent_factors_user = nlatent_factors_found
+
+                # explicitly required number of latent factors
+                if isinstance(self._lst_transform_ops, tuple):
+                    mod_lst_pca_ops = list(self._lst_pca_ops)
+                else:
+                    mod_lst_pca_ops = copy.deepcopy(self._lst_transform_ops)
+                if FactorOP.TEST_CUMSUM in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_CUMSUM)
+                if FactorOP.TEST_BARTLETT in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_BARTLETT)
+                if FactorOP.USER_SET not in mod_lst_pca_ops: mod_lst_pca_ops.append(FactorOP.USER_SET)
+                extractor_pca.factor_ops = mod_lst_pca_ops
+
+                # set test
+                extractor_pca.fit()
+
+    def __transformTimeseries_PCA(self) -> None:
+
+        pass
 
     """
     Data set split into training, test and validation
@@ -584,25 +691,37 @@ class DataAdapterTS(DatasetView):
 
         try:
             for id_ds in range(3 if len(lst_ds) // 6 else 2):
-                ts_img = lst_ds[id_ds]; tmp_shape = None
+                ts_imgs = lst_ds[id_ds]; tmp_shape = None
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     # save original shape of series
-                    tmp_shape = ts_img.shape
+                    tmp_shape = ts_imgs.shape
                     # reshape image to time series related to pixels
-                    ts_img = ts_img.reshape((ts_img.shape[0], -1)).T
+                    ts_imgs = ts_imgs.reshape((ts_imgs.shape[0], -1)).T
 
-                ts_img = self.__transformTimeseries(ts_img)
+                ts_imgs = self.__transformTimeseries(ts_imgs)
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     # reshape back to series of satellite images
-                    lst_ds[id_ds] = ts_img.T.reshape(tmp_shape)
+                    lst_ds[id_ds] = ts_imgs.T.reshape(tmp_shape)
 
                 gc.collect()  # invoke garbage collector
         except ValueError:
             pass
 
-        # TODO PCA
+        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+
+            ts_imgs_train = lst_ds[0]
+
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                # save original shape of series
+                tmp_shape = ts_imgs_train.shape
+                # reshape image to time series related to pixels
+                ts_imgs_train = ts_imgs_train.reshape((ts_imgs_train.shape[0], -1)).T
+
+            self.__transformTimeseries_PCA_FIT(ts_imgs_train)
+            # TODO transforming
+
 
     def getTrainingDataset(self):
 
@@ -631,7 +750,8 @@ if __name__ == '__main__':
     TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
     VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
 
-    TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.SAVITZKY_GOLAY]
+    TRANSFORM_OPS = [DatasetTransformOP.PCA, DatasetTransformOP.SAVITZKY_GOLAY]
+    PCA_OPS = [FactorOP.TEST_CUMSUM]
 
     lst_satimgs = []
     lst_labels = []
@@ -655,6 +775,7 @@ if __name__ == '__main__':
         cci_confidence_level=CCI_CONFIDENCE_LEVEL,
         # transformation options
         transform_ops=TRANSFORM_OPS,
+        pca_ops=PCA_OPS,
         # data set split options
         ds_split_opt=DS_SPLIT_OPT,
         test_ratio=TEST_RATIO,
