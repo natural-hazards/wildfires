@@ -667,6 +667,8 @@ class DataAdapterTS(DatasetView):
             return ts_imgs_train, ts_imgs_test, labels_train, labels_test
         elif self.val_ratio > 0.:
             return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+        else:
+            return ts_imgs_train, labels_train
 
     def __splitDataset(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
 
@@ -753,6 +755,7 @@ class DataAdapterTS(DatasetView):
 
             # transform test and validation data set
             for id_ds in range(1, len(lst_ds) // 2):
+
                 # save original shape of series
                 ts_imgs_test = lst_ds[id_ds]
                 tmp_shape = None
@@ -766,17 +769,41 @@ class DataAdapterTS(DatasetView):
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     lst_ds[id_ds] = ts_imgs.T.reshape(ts_imgs.shape[1], tmp_shape[1], tmp_shape[2])
 
-    def getTrainingDataset(self):
+        if self.test_ratio > 0 and self.val_ratio > 0:
 
-        pass
+            self._ds_training = (lst_ds[0], lst_ds[3])
+            self._ds_test = (lst_ds[1], lst_ds[4])
+            self._ds_val = (lst_ds[2], lst_ds[5])
 
-    def getTestDataset(self):
+        else:
 
-        pass
+            self._ds_training = (lst_ds[0], lst_ds[2]) if len(lst_ds) > 2 else tuple(lst_ds)
 
-    def getValidationDataset(self):
+            if self.test_ratio > 0.:
+                self._ds_test = (lst_ds[1], lst_ds[3])
+            elif self.val_ratio > 0.:
+                self._ds_val = (lst_ds[1], lst_ds[3])
 
-        pass
+    def getTrainingDataset(self) -> _np.ndarray:
+
+        if not self._ds_training:
+            self.createDataset()
+
+        return self._ds_training
+
+    def getTestDataset(self) -> _np.ndarray:
+
+        if not self._ds_test and self.test_ratio > 0.:
+            self.createDataset()
+
+        return self._ds_test
+
+    def getValidationDataset(self) -> _np.ndarray:
+
+        if not self._ds_val and self.val_ratio > 0.:
+            self.createDataset()
+
+        return self._ds_val
 
 
 # use cases
