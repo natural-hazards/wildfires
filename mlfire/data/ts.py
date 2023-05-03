@@ -100,6 +100,8 @@ class DataAdapterTS(DatasetView):
         self._pca_ops = 0
         self.pca_ops = pca_ops
 
+        self._lst_extractors_pca = []
+
         # test data set options
         self._test_ratio = None
         self.test_ratio = test_ratio
@@ -111,6 +113,10 @@ class DataAdapterTS(DatasetView):
     def _reset(self):
 
         super()._reset()
+
+        if hasattr(self, '_lst_extractors_pca'):
+            del self._lst_extractors_pca; self._lst_extractors_pca = []
+            gc.collect()  # invoke garbage collector
 
     # properties
     @property
@@ -471,7 +477,7 @@ class DataAdapterTS(DatasetView):
         return ts_imgs
 
     def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> None:
-        
+
         # lazy imports
         features_pca = lazy_import('mlfire.features.pca')
         copy = lazy_import('copy')
@@ -520,12 +526,31 @@ class DataAdapterTS(DatasetView):
                 if FactorOP.USER_SET not in mod_lst_pca_ops: mod_lst_pca_ops.append(FactorOP.USER_SET)
                 extractor_pca.factor_ops = mod_lst_pca_ops
 
-                # set test
+                # retrain extractor
                 extractor_pca.fit()
 
-    def __transformTimeseries_PCA(self) -> None:
+        self._lst_extractors_pca = lst_extractors
 
-        pass
+    def __transformTimeseries_PCA(self, ts_imgs: _np.ndarray, standardize=False) -> _np.ndarray:
+
+        if standardize:
+
+            self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+
+        NBANDS = 7
+        NFACTORS = self._lst_extractors_pca[0].nlatent_factors
+
+        nsamples_test = ts_imgs.shape[0]
+        reduced_ts = _np.zeros(shape=(nsamples_test, NBANDS * NFACTORS), dtype=ts_imgs.dtype)
+
+        for band_id in range(NBANDS):
+            transformer_pca = self._lst_extractors_pca[band_id]
+            reduced_ts[:, band_id::NBANDS] = transformer_pca.transform(ts_imgs[:, band_id::NBANDS])
+
+        # clean up and invoke garbage collector
+        del ts_imgs; gc.collect()
+
+        return reduced_ts
 
     """
     Data set split into training, test and validation
@@ -690,7 +715,7 @@ class DataAdapterTS(DatasetView):
         lst_ds = list(self.__splitDataset(ts_imgs=ts_imgs, labels=labels))
 
         try:
-            for id_ds in range(3 if len(lst_ds) // 6 else 2):
+            for id_ds in range(len(lst_ds) // 2):
                 ts_imgs = lst_ds[id_ds]; tmp_shape = None
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
@@ -712,6 +737,7 @@ class DataAdapterTS(DatasetView):
         if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
 
             ts_imgs_train = lst_ds[0]
+            tmp_shape = None
 
             if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                 # save original shape of series
@@ -720,8 +746,25 @@ class DataAdapterTS(DatasetView):
                 ts_imgs_train = ts_imgs_train.reshape((ts_imgs_train.shape[0], -1)).T
 
             self.__transformTimeseries_PCA_FIT(ts_imgs_train)
-            # TODO transforming
+            ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs_train)
 
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                lst_ds[0] = ts_imgs.T.reshape(ts_imgs.shape[1], tmp_shape[1], tmp_shape[2])
+
+            # transform test and validation data set
+            for id_ds in range(1, len(lst_ds) // 2):
+                # save original shape of series
+                ts_imgs_test = lst_ds[id_ds]
+                tmp_shape = None
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    tmp_shape = ts_imgs_test.shape
+                    ts_imgs_test = ts_imgs_test.T.reshape((ts_imgs_test.shape[0], -1)).T
+
+                ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs_test)
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    lst_ds[id_ds] = ts_imgs.T.reshape(ts_imgs.shape[1], tmp_shape[1], tmp_shape[2])
 
     def getTrainingDataset(self):
 

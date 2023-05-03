@@ -686,7 +686,7 @@ class DatasetView(DatasetLoader):
 if __name__ == '__main__':
 
     DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    PREFIX_IMG = 'ak_reflec_january_december_{}_850'
 
     LABEL_COLLECTION = FireLabelsCollection.MTBS
     # LABEL_COLLECTION = FireLabelsCollection.CCI
@@ -714,8 +714,8 @@ if __name__ == '__main__':
     NDVI_THRESHOLD = 0.5
     CCI_CONFIDENCE_LEVEL = 70
 
-    LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
-    # LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
+    # LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
+    LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
 
     # setup of data set loader
     dataset_view = DatasetView(

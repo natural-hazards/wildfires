@@ -1,7 +1,9 @@
-import numpy as np
+import numpy as np  # TODO to lazy import
 
 from enum import Enum
 from sklearn.decomposition import PCA as learnPCA
+
+# lazy imports
 
 
 class FactorOP(Enum):
@@ -146,7 +148,9 @@ class TransformPCA(object):
             self._nlatent_factor = np.argmax(cs_variance_ratio >= 0.90)
 
             if self.verbose:
-                print('PCA cumsum test, found explainable latent factor {}'.format(self._nlatent_factor))
+                msg = 'PCA cumsum test, found explainable {} latent factor'.format(self._nlatent_factor)
+                if self._nlatent_factor > 1: msg = f'{msg}s'
+                print(msg)
         elif self._factor_ops & FactorOP.TEST_BARTLETT.value == FactorOP.TEST_BARTLETT.value:
             # TODO implement
             pass
