@@ -757,14 +757,15 @@ class DataAdapterTS(DatasetView):
             for id_ds in range(1, len(lst_ds) // 2):
 
                 # save original shape of series
-                ts_imgs_test = lst_ds[id_ds]
+                ts_imgs = lst_ds[id_ds]
                 tmp_shape = None
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    tmp_shape = ts_imgs_test.shape
-                    ts_imgs_test = ts_imgs_test.T.reshape((ts_imgs_test.shape[0], -1)).T
+                    tmp_shape = ts_imgs.shape
+                    ts_imgs = ts_imgs.T.reshape((ts_imgs.shape[0], -1)).T
 
-                ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs_test)
+                standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
+                ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs, standardize=standardize)
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     lst_ds[id_ds] = ts_imgs.T.reshape(ts_imgs.shape[1], tmp_shape[1], tmp_shape[2])

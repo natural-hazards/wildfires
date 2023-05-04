@@ -118,7 +118,9 @@ if __name__ == '__main__':
     label_train = label_train.reshape(-1)
     label_test = label_test.reshape(-1)
 
-    # remove NaN values
+    """
+    Remove NaN values    
+    """
 
     ts_train = tmp_ts_train[~_np.isnan(label_train)]
     label_train = label_train[~_np.isnan(label_train)]
@@ -151,6 +153,7 @@ if __name__ == '__main__':
     """
     Saving data to HDF5
     """
+
     with elapsed_timer('Save training data set'):
         fn_training = os.path.join(OUTPUT_H5_DIR, '{}training.h5'.format(DS_PREFIX))
         saveDatasetToHDF5((ts_train, label_train), fn_training)

@@ -33,7 +33,6 @@ class FireLabelsViewOpt(Enum):
     CONFIDENCE_LEVEL = 2
     SEVERITY = 3
 
-# TODO other types of aggregation
 
 
 class DatasetView(DatasetLoader):
