@@ -3,7 +3,7 @@ import ee as earthengine
 from enum import Enum
 
 
-class ModisReflectanceSpecralBands(Enum):
+class ModisReflectanceSpectralBands(Enum):
 
     RED = 1  # visible (wave length 620–670nm)
     NIR = 2  # near infra-red (wave length 841–876nm)
@@ -46,7 +46,7 @@ class MTBSSeverity(Enum):
     MODERATE = 3
     HIGH = 4
     INCREASE_GREENNESS = 5
-    NON_MAPPING_AREA = 6
+    NON_MAPPED_AREA = 6
 
 
 class MTBSRegion(Enum):

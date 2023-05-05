@@ -391,7 +391,7 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    fn_json = 'tutorials/ak_area_100km.geojson'
+    fn_json = 'data/jsons/ak_area_100km.geojson'
 
     for y in range(2005, 2006):
 
@@ -403,7 +403,7 @@ if __name__ == '__main__':
             startdate=start_date,
             enddate=end_date
         )
-        earthengine_batch.export_flag = ExportData.ALL
+        earthengine_batch.export_flag = ExportData.LABEL
 
         earthengine_batch.crs = CRS.ALASKA_ALBERS
         earthengine_batch.resolution_per_pixel = 500  # pixel corresponds to resolution 500x500 meters
@@ -411,15 +411,15 @@ if __name__ == '__main__':
         earthengine_batch.task_description = 'MODIS-REFLECTANCE-AK-{}-JANUARY-DECEMBER-EPSG3338'.format(y)
         earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_100km_epsg3338'.format(y)
 
-        earthengine_batch.labels_collection = FireLabelsCollection.MTBS
+        earthengine_batch.labels_collection = FireLabelsCollection.CCI
         earthengine_batch.modis_index = ModisIndex.REFLECTANCE
 
         earthengine_batch.gdrive_folder = 'AK_{}'.format(y)
         earthengine_batch.submit()
 
-        earthengine_batch.export_flag = ExportData.LABEL
-        earthengine_batch.labels_collection = FireLabelsCollection.CCI
-        earthengine_batch.submit()
+        # earthengine_batch.export_flag = ExportData.LABEL
+        # earthengine_batch.labels_collection = FireLabelsCollection.CCI
+        # earthengine_batch.submit()
 
         # print task list (running or ready)
         earthengine_batch.task_list()

@@ -12,7 +12,7 @@ def getRandomString(length: int) -> str:
     return result_str
 
 
-def band2data_reflectance(band_name) -> datetime.datetime.date:
+def band2date_reflectance(band_name) -> datetime.datetime.date:
 
     str_date = re.match(r'\d{4}_\d{2}_\d{2}', band_name).group(0)
     return datetime.datetime.strptime(str_date, '%Y_%m_%d').date()

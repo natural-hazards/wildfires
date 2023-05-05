@@ -1,27 +1,27 @@
-import cv2 as opencv
-import numpy as np
+from mlfire.utils.functool import lazy_import
 
-import matplotlib.pyplot as plt
+_np = lazy_import('numpy')
 
 
-def imshow(src: np.ndarray,
+def imshow(src: _np.ndarray,
            ax=None,
            title: str = None,
            figsize: tuple = None,
-           to_bgra: bool = True,
            tight_layout: bool = True,
            show: bool = False) -> None:
 
-    # matplot lib works with rgb order of channel so input image needs conversion
-    src_rgb = opencv.cvtColor(src, opencv.COLOR_BGR2RGB) if to_bgra and len(src.shape) == 3 else src
+    plt = lazy_import('matplotlib.pyplot')
 
     if ax is not None:
-        ax.imshow(src_rgb)
+
+        ax.imshow(src)
         ax.axis('off')
         if title is not None: ax.set_title(title)
+
     else:
+
         if figsize is not None: plt.rcParams['figure.figsize'] = figsize
-        plt.imshow(src_rgb)
+        plt.imshow(src)
         plt.axis('off')
         if title is not None: plt.title(title)
 
@@ -30,3 +30,5 @@ def imshow(src: np.ndarray,
 
     if show:
         plt.show()
+
+# TODO show labels
