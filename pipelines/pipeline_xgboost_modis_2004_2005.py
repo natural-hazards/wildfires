@@ -21,11 +21,11 @@ _np = lazy_import('numpy')
 
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
+    utils_plt = lazy_import('mlfire.utils.plots')
+
+    DATA_DIR = '../data/tifs'
     OUTPUT_H5_DIR = 'data/h5/mtbs'
     DS_PREFIX = 'ak_modis_2005_100km_'
-
-    DATA_DIR = 'data/tifs'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
     LABEL_COLLECTION = FireLabelsCollection.MTBS
@@ -37,7 +37,7 @@ if __name__ == '__main__':
     # DS_SPLIT_OPT = DatasetSplitOpt.IMG_HORIZONTAL_SPLIT
     TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
 
-    TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE]
+    TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.PCA]
     PCA_OPS = [FactorOP.TEST_CUMSUM]
 
     lst_satimgs = []
@@ -99,6 +99,17 @@ if __name__ == '__main__':
     ts_test = ds_test[0]; label_test = ds_test[1]
 
     """
+    """
+
+    if len(ts_train.shape) == 3:
+
+        utils_plt.imshow(ts_train[1], title='Satellite ', show=True)
+
+    else:
+
+        pass
+
+    """
     Reshape
     """
 
@@ -119,7 +130,7 @@ if __name__ == '__main__':
     label_test = label_test.reshape(-1)
 
     """
-    Remove NaN values    
+    Remove NaN values
     """
 
     ts_train = tmp_ts_train[~_np.isnan(label_train)]
@@ -149,15 +160,15 @@ if __name__ == '__main__':
     print(classification_report_imbalanced(label_test, labels_pred))
 
     # TODO visualization
-
-    """
-    Saving data to HDF5
-    """
-
-    with elapsed_timer('Save training data set'):
-        fn_training = os.path.join(OUTPUT_H5_DIR, '{}training.h5'.format(DS_PREFIX))
-        saveDatasetToHDF5((ts_train, label_train), fn_training)
-
-    with elapsed_timer('Save test data set'):
-        fn_test = os.path.join(OUTPUT_H5_DIR, '{}test.h5'.format(DS_PREFIX))
-        saveDatasetToHDF5((ts_test, label_test), fn_test)
+    #
+    # """
+    # Saving data to HDF5
+    # """
+    #
+    # with elapsed_timer('Save training data set'):
+    #     fn_training = os.path.join(OUTPUT_H5_DIR, '{}training.h5'.format(DS_PREFIX))
+    #     saveDatasetToHDF5((ts_train, label_train), fn_training)
+    #
+    # with elapsed_timer('Save test data set'):
+    #     fn_test = os.path.join(OUTPUT_H5_DIR, '{}test.h5'.format(DS_PREFIX))
+    #     saveDatasetToHDF5((ts_test, label_test), fn_test)

@@ -1,6 +1,6 @@
 from mlfire.utils.functool import lazy_import
 
-_np = lazy_import('matplotlib.pyplot')
+_np = lazy_import('numpy')
 
 
 def imshow(src: _np.ndarray,
