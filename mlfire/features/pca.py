@@ -139,7 +139,7 @@ class TransformPCA(object):
         self._pca = learnPCA(n_components=n_components, svd_solver='full')
         self._pca.fit(self.training_dataset)
 
-        # determine number of explained factors
+        #
         if self._factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value:
             self._nlatent_factor = self.nlatent_factors_user
         elif self._factor_ops & FactorOP.TEST_CUMSUM.value == FactorOP.TEST_CUMSUM.value:
@@ -152,6 +152,7 @@ class TransformPCA(object):
                 if self._nlatent_factor > 1: msg = f'{msg}s'
                 print(msg)
         elif self._factor_ops & FactorOP.TEST_BARTLETT.value == FactorOP.TEST_BARTLETT.value:
+            # https://www.sciencedirect.com/science/article/pii/S0047259X05000813?ref=cra_js_challenge&fr=RR-1
             # TODO implement
             pass
 
