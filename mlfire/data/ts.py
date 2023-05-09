@@ -599,6 +599,8 @@ class DataAdapterTS(DatasetView):
             return ts_imgs_train, ts_imgs_test, labels_train, labels_test
         elif self.val_ratio > 0.:
             return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+        else:
+            return ts_imgs, labels
 
     def __splitDataset_HORIZONTAL_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
 
@@ -633,6 +635,8 @@ class DataAdapterTS(DatasetView):
             return ts_imgs_train, ts_imgs_test, labels_train, labels_test
         elif self.val_ratio > 0.:
             return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+        else:
+            return ts_imgs_train, labels_train
 
     def __splitDataset_VERTICAL_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
 
