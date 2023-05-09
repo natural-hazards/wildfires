@@ -432,18 +432,21 @@ class DataAdapterTS(DatasetView):
     @staticmethod
     def __transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs: _np.ndarray) -> _np.ndarray:
 
+        from scipy import stats
+
         NBANDS = 7  # TODO implement for additional indexes such as NDVI and LST
 
+        print(ts_imgs.shape)
+
         for band_id in range(NBANDS):
-            # get band
+
             img_band = ts_imgs[:, band_id::NBANDS]
 
-            # compute standard deviation
+            # check if standard deviation is greater than 0
             std_band = _np.std(img_band)
             if std_band == 0.: continue
 
-            # standardizing series of satellite images per band
-            ts_imgs[:, band_id::NBANDS] = (img_band - _np.mean(img_band)) / std_band
+            ts_imgs[:, band_id::NBANDS] = stats.zscore(img_band, axis=1)
 
         return ts_imgs
 
@@ -720,15 +723,18 @@ class DataAdapterTS(DatasetView):
         # TODO clean data set if needed
         lst_ds = list(self.__splitDataset(ts_imgs=ts_imgs, labels=labels))
 
+        # TODO ignore NANs
+
         try:
             for id_ds in range(len(lst_ds) // 2):
+
                 ts_imgs = lst_ds[id_ds]; tmp_shape = None
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     # save original shape of series
                     tmp_shape = ts_imgs.shape
                     # reshape image to time series related to pixels
-                    ts_imgs = ts_imgs.reshape((ts_imgs.shape[0], -1)).T
+                    ts_imgs = ts_imgs.reshape((tmp_shape[0], -1)).T
 
                 ts_imgs = self.__transformTimeseries(ts_imgs)
 
@@ -766,7 +772,7 @@ class DataAdapterTS(DatasetView):
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     tmp_shape = ts_imgs.shape
-                    ts_imgs = ts_imgs.T.reshape((ts_imgs.shape[0], -1)).T
+                    ts_imgs = ts_imgs.reshape((tmp_shape[0], -1)).T
 
                 standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
                 ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs, standardize=standardize)

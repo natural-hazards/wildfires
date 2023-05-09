@@ -32,9 +32,9 @@ if __name__ == '__main__':
     # LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
-    DS_SPLIT_OPT = DatasetSplitOpt.SHUFFLE_SPLIT
+    # DS_SPLIT_OPT = DatasetSplitOpt.SHUFFLE_SPLIT
     # DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
-    # DS_SPLIT_OPT = DatasetSplitOpt.IMG_HORIZONTAL_SPLIT
+    DS_SPLIT_OPT = DatasetSplitOpt.IMG_HORIZONTAL_SPLIT
     TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
 
     TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.PCA]
@@ -103,7 +103,8 @@ if __name__ == '__main__':
 
     if len(ts_train.shape) == 3:
 
-        utils_plt.imshow(ts_train[1], title='Satellite ', show=True)
+        utils_plt.imshow(ts_train[1], title='', show=True)
+        utils_plt.imshow(ts_test[1], title='', show=True)
 
     else:
 
@@ -116,10 +117,10 @@ if __name__ == '__main__':
     if len(ts_train.shape) == 3:
 
         tmp_shape_train = ds_train[0].shape
-        tmp_ts_train = ds_train[0].T.reshape(tmp_shape_train[0], -1).T
+        tmp_ts_train = ds_train[0].reshape(tmp_shape_train[0], -1).T
 
         tmp_shape_test = ds_test[0].shape
-        tmp_ts_test = ds_test[0].T.reshape(tmp_shape_test[0], -1).T
+        tmp_ts_test = ds_test[0].reshape(tmp_shape_test[0], -1).T
 
     else:
 
@@ -149,7 +150,7 @@ if __name__ == '__main__':
         xgb.fit(ts_train, label_train)
 
     """
-    Inference using trained model
+    Inference using trained model (on test data set)
     """
 
     labels_pred = xgb.predict(ts_test)
