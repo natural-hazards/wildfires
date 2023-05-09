@@ -436,8 +436,6 @@ class DataAdapterTS(DatasetView):
 
         NBANDS = 7  # TODO implement for additional indexes such as NDVI and LST
 
-        print(ts_imgs.shape)
-
         for band_id in range(NBANDS):
 
             img_band = ts_imgs[:, band_id::NBANDS]

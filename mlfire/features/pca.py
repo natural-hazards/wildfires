@@ -145,7 +145,7 @@ class TransformPCA(object):
         elif self._factor_ops & FactorOP.TEST_CUMSUM.value == FactorOP.TEST_CUMSUM.value:
             variance_ratio = self._pca.explained_variance_ratio_
             cs_variance_ratio = np.cumsum(variance_ratio)
-            self._nlatent_factor = np.argmax(cs_variance_ratio >= 0.90)
+            self._nlatent_factor = np.argmax(cs_variance_ratio >= 0.999)
 
             if self.verbose:
                 msg = 'PCA cumsum test, found explainable {} latent factor'.format(self._nlatent_factor)
