@@ -1,0 +1,4 @@
+
+def inference() -> None:
+
+    pass
