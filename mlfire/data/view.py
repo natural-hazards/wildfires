@@ -34,7 +34,6 @@ class FireLabelsViewOpt(Enum):
     SEVERITY = 3
 
 
-
 class DatasetView(DatasetLoader):
 
     def __init__(self,
@@ -257,7 +256,7 @@ class DatasetView(DatasetLoader):
             raise NotImplementedError
 
     def __showSatImage_MODIS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
-                             brightness_factors: Union[tuple[float, float], list[float, float]]) -> None:
+                             brightness_factors: Union[tuple[float, float], list[float, float]], show: bool = True, ax=None) -> None:
         # lazy imports
         opencv = lazy_import('cv2')
 
@@ -286,13 +285,13 @@ class DatasetView(DatasetLoader):
             str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
-        imshow(src=satimg, title=str_title, figsize=figsize, show=True)
+        imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
-                     brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
+                     brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.), show: bool = True, ax=None) -> None:
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
+            self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
         else:
             raise NotImplementedError
 
@@ -364,7 +363,7 @@ class DatasetView(DatasetLoader):
         else:
             raise NotImplementedError
 
-    def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_non_mapped_areas: bool = True) -> \
+    def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:
 
         # lazy imports
@@ -398,7 +397,7 @@ class DatasetView(DatasetLoader):
         else:
             raise AttributeError('Not supported option for viewing labels!')
 
-        if with_non_mapped_areas:
+        if with_uncharted_areas:
             PIXEL_NOT_OBSERVED = -1
             label[rs_flags == PIXEL_NOT_OBSERVED, :] = 0
 
@@ -408,7 +407,8 @@ class DatasetView(DatasetLoader):
             del mask_fires; gc.collect()
             return label
 
-    def __showFireLabels_CCI(self, id_bands: Union[int, range],  figsize: Union[tuple[float, float], list[float, float]]) -> None:
+    def __showFireLabels_CCI(self, id_bands: Union[int, range],  figsize: Union[tuple[float, float], list[float, float]],
+                             show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         # lazy imports
         calendar = lazy_import('calendar')
@@ -446,10 +446,10 @@ class DatasetView(DatasetLoader):
         str_title = '{} ({})'.format(str_title, str_date)
 
         # get fire labels
-        labels = self.__getFireLabels_CCI(id_bands=id_bands)
+        labels = self.__getFireLabels_CCI(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
         # show labels and binary mask related to localization of wildfires (CCI labels)
-        imshow(src=labels, title=str_title, figsize=figsize, show=True)
+        imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:
 
@@ -485,7 +485,7 @@ class DatasetView(DatasetLoader):
         else:
             raise NotImplementedError
 
-    def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_non_mapped_areas: bool = True) -> \
+    def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:
 
         # lazy imports
@@ -523,10 +523,10 @@ class DatasetView(DatasetLoader):
         else:
             raise AttributeError
 
-        if with_non_mapped_areas:
+        if with_uncharted_areas:
 
-            mask_non_mapped = _np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
-            if len(mask_non_mapped) != 0: label[mask_non_mapped, :] = 0
+            mask_uncharted = _np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
+            if len(mask_uncharted) != 0: label[mask_uncharted, :] = 0
 
         # return
         if with_fire_mask:
@@ -535,7 +535,8 @@ class DatasetView(DatasetLoader):
             del mask_fires; gc.collect()
             return label
 
-    def __showFireLabels_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]]) -> None:
+    def __showFireLabels_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]],
+                              show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         # put a region name to a plot title
         str_title = 'MTBS labels ({}'.format(self.mtbs_region.name)
@@ -555,12 +556,13 @@ class DatasetView(DatasetLoader):
         str_title = '{} {})'.format(str_title, str_date)
 
         # get fire labels
-        labels = self.__getFireLabels_MTBS(id_bands)
+        labels = self.__getFireLabels_MTBS(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
         # show up labels and binary mask (non-) related to localization of wildfires (MTBS labels)
-        imshow(src=labels, title=str_title, figsize=figsize, show=True)
+        imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
-    def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5)) -> None:
+    def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                       show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         if not self._labels_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
@@ -586,9 +588,9 @@ class DatasetView(DatasetLoader):
                     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
 
         if self.label_collection == FireLabelsCollection.CCI:
-            self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize)
+            self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
         elif self.label_collection == FireLabelsCollection.MTBS:
-            self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize)
+            self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
         else:
             raise NotImplementedError
 
@@ -607,7 +609,7 @@ class DatasetView(DatasetLoader):
 
         # get index of corresponding labels
         label_index = int(self.label_dates.index[self._df_dates_labels['Date'] == date_label][0])
-        label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_non_mapped_areas=False)
+        label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
         return label, mask_fires
 
@@ -621,7 +623,7 @@ class DatasetView(DatasetLoader):
 
         # get index of corresponding labels
         label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == date_label][0])
-        label, mask_fires = self.__getFireLabels_MTBS(id_bands=label_index, with_fire_mask=True, with_non_mapped_areas=False)
+        label, mask_fires = self.__getFireLabels_MTBS(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
         return label, mask_fires
 
@@ -635,7 +637,8 @@ class DatasetView(DatasetLoader):
             raise NotImplementedError
 
     def __showSatImageWithFireLabels_MODIS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
-                                           brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)) -> None:
+                                           brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.),
+                                           show: bool = True, ax=None) -> None:
         # lazy import
         opencv = lazy_import('cv2')
 
@@ -656,10 +659,11 @@ class DatasetView(DatasetLoader):
         str_title = 'MODIS ({}, {}, labels={})'.format(img_type, ref_date, self.label_collection.name)
 
         # show multi spectral image as RGB with additional information about localization of wildfires
-        imshow(src=satimg, title=str_title, figsize=figsize, show=True)
+        imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def showSatImageWithFireLabels(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
-                                   brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.)):
+                                   brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.),
+                                   show: bool = True, ax=None) -> None:
 
         if not self._labels_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
@@ -676,7 +680,7 @@ class DatasetView(DatasetLoader):
                 raise IOError('Cannot process meta data related to satellite images!')
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
-            self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors)
+            self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
         else:
             raise NotImplementedError
 
@@ -685,7 +689,7 @@ class DatasetView(DatasetLoader):
 if __name__ == '__main__':
 
     DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_850'
+    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
     LABEL_COLLECTION = FireLabelsCollection.MTBS
     # LABEL_COLLECTION = FireLabelsCollection.CCI
