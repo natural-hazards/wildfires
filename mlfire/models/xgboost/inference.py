@@ -7,26 +7,36 @@ _np = lazy_import('numpy')
 _xgboost = lazy_import('xgboost')
 
 
-def report(labels_pred: _np.ndarray,
-           labels_true: _np.ndarray) -> None:
+def report(labels_true: _np.ndarray,
+           labels_pred: _np.ndarray) -> None:
 
     imblearn_metrics = lazy_import('imblearn.metrics')
     sklearn_metrics = lazy_import('sklearn.metrics')
 
-    print('Classification report:')
+    print('Classification report:\n')
     print(sklearn_metrics.classification_report(
         labels_true[~_np.isnan(labels_true)], labels_pred[~_np.isnan(labels_true)]
     ))
 
-    print('Classification report (imbalanced)')
+    print('\nClassification report (imbalanced):\n')
     print(imblearn_metrics.classification_report_imbalanced(
         labels_true[~_np.isnan(labels_true)], labels_pred[~_np.isnan(labels_true)]
     ))
 
 
+def plot_aucroc(labels_true: _np.ndarray,
+                labels_pred: _np.ndarray) -> None:
+
+    roc = lazy_import('mlfire.utils.roc')
+
+    auc_roc = roc.AucRoc(labels_true=labels_true, labels_pred=labels_pred)
+    auc_roc.plot()
+
+
 def predict(xgb: _xgboost.XGBClassifier,
             ds: Union[tuple[_np.ndarray], list[_np.ndarray]],
-            with_report: bool = False) -> _np.ndarray:
+            with_report: bool = False,
+            with_aucroc: bool = False) -> _np.ndarray:
 
     ts_img: _np.ndarray = ds[0]
     labels: _np.ndarray = ds[1]
@@ -42,7 +52,8 @@ def predict(xgb: _xgboost.XGBClassifier,
     labels_pred = _np.empty(shape=labels.shape, dtype=labels.dtype); labels_pred[:] = _np.nan
     labels_pred[~_np.isnan(labels)] = xgb.predict(ts_pixels)
 
-    if with_report: report(labels_pred=labels_pred, labels_true=labels)
+    if with_report: report(labels_true=labels, labels_pred=labels_pred)
+    if with_aucroc: plot_aucroc(labels_true=labels, labels_pred=labels_pred)
 
     # change back to original shape
     labels_pred = labels_pred.reshape(ts_shape[1:3])
