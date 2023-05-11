@@ -31,4 +31,24 @@ def imshow(src: _np.ndarray,
     if show:
         plt.show()
 
-# TODO show labels
+
+def labelshow(labels: _np.ndarray,
+              with_uncharted_areas: bool = False,
+              ax=None,
+              title: str = None,
+              figsize: tuple = None,
+              tight_layout: bool = True,
+              show: bool = False) -> None:
+
+    # lazy imports
+    colors = lazy_import('mlfire.utils.colors')
+
+    label_rendered = _np.empty(shape=labels.shape + (3,), dtype=_np.uint8)
+
+    label_rendered[:] = colors.Colors.GRAY_COLOR.value
+    label_rendered[labels == 1, :] = colors.Colors.RED_COLOR.value
+
+    # show uncharted pixels
+    if with_uncharted_areas: label_rendered[_np.isnan(labels), :] = 0
+
+    imshow(label_rendered, ax=ax, title=title, figsize=figsize, tight_layout=tight_layout, show=show)
