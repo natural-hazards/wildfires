@@ -21,6 +21,7 @@ def imshow(src: _np.ndarray,
     else:
 
         if figsize is not None: plt.rcParams['figure.figsize'] = figsize
+
         plt.imshow(src)
         plt.axis('off')
         if title is not None: plt.title(title)
