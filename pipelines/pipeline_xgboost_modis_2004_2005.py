@@ -95,16 +95,18 @@ if __name__ == '__main__':
     xgb = _xgboost.XGBClassifier(objective='binary:logistic')
     _xgboost_train.trainSegmentationModel(xgb=xgb, ds=ds_train)
 
+    print('\n============================\nInference on a train data set\n')
+
     _xgboost_inference.predict(
         xgb=xgb,
         ds=ds_train,
         with_report=True,
-        with_aucroc=True
     )
+
+    print('\n============================\nInference on a test data set\n')
 
     _xgboost_inference.predict(
         xgb=xgb,
         ds=ds_test,
         with_report=True,
-        with_aucroc=True
     )

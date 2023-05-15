@@ -23,6 +23,9 @@ def report(labels_true: _np.ndarray,
         labels_true[~_np.isnan(labels_true)], labels_pred[~_np.isnan(labels_true)]
     ))
 
+    iou_score = sklearn_metrics.jaccard_score(y_true=labels_true[~_np.isnan(labels_true)], y_pred=labels_pred[~_np.isnan(labels_true)])
+    print('\nIoU (intersection over union): {:.2f}'.format(iou_score))
+
 
 def plot_aucroc(labels_true: _np.ndarray,
                 labels_pred: _np.ndarray,
@@ -73,6 +76,8 @@ def predict(xgb: _xgboost.XGBClassifier,
         report(labels_true=labels, labels_pred=labels_pred)
 
     if with_cmat and with_aucroc:
+
+        if with_report: print('\n')
 
         plt_pylab = lazy_import('matplotlib.pylab')
         _, axes = plt_pylab.subplots(1, 2, figsize=(10, 5))
