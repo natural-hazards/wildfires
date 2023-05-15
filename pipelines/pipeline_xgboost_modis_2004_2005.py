@@ -14,7 +14,7 @@ _xgboost_train = lazy_import('mlfire.models.xgboost.train')
 
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
+    DATA_DIR = '../data/tifs'
     OUTPUT_H5_DIR = 'data/h5/mtbs'
     DS_PREFIX = 'ak_modis_2005_100km_'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
