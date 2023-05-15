@@ -25,18 +25,35 @@ def report(labels_true: _np.ndarray,
 
 
 def plot_aucroc(labels_true: _np.ndarray,
-                labels_pred: _np.ndarray) -> None:
+                labels_pred: _np.ndarray,
+                ax=None) -> None:
 
     roc = lazy_import('mlfire.utils.roc')
 
     auc_roc = roc.AucRoc(labels_true=labels_true, labels_pred=labels_pred)
-    auc_roc.plot()
+    auc_roc.plot(ax=ax)
+
+
+def plot_cmat(labels_true: _np.ndarray,
+              labels_pred: _np.ndarray,
+              ax=None) -> None:
+
+    cmat = lazy_import('mlfire.utils.cmat')
+
+    cm = cmat.ConfusionMatrix(
+        y_true=labels_true[~_np.isnan(labels_true)],
+        y_pred=labels_pred[~_np.isnan(labels_true)],
+        labels=['Background', 'Fire']
+    )
+
+    cm.plot(ax=ax)
 
 
 def predict(xgb: _xgboost.XGBClassifier,
             ds: Union[tuple[_np.ndarray], list[_np.ndarray]],
-            with_report: bool = False,
-            with_aucroc: bool = False) -> _np.ndarray:
+            with_aucroc: bool = False,
+            with_cmat: bool = False,
+            with_report: bool = False) -> _np.ndarray:
 
     ts_img: _np.ndarray = ds[0]
     labels: _np.ndarray = ds[1]
@@ -52,8 +69,24 @@ def predict(xgb: _xgboost.XGBClassifier,
     labels_pred = _np.empty(shape=labels.shape, dtype=labels.dtype); labels_pred[:] = _np.nan
     labels_pred[~_np.isnan(labels)] = xgb.predict(ts_pixels)
 
-    if with_report: report(labels_true=labels, labels_pred=labels_pred)
-    if with_aucroc: plot_aucroc(labels_true=labels, labels_pred=labels_pred)
+    if with_report:
+        report(labels_true=labels, labels_pred=labels_pred)
+
+    if with_cmat and with_aucroc:
+
+        plt_pylab = lazy_import('matplotlib.pylab')
+        _, axes = plt_pylab.subplots(1, 2, figsize=(10, 5))
+
+        plot_aucroc(labels_true=labels, labels_pred=labels_pred, ax=axes[0])
+        plot_cmat(labels_true=labels, labels_pred=labels_pred, ax=axes[1])
+
+    elif with_cmat:
+
+        plot_cmat(labels_true=labels, labels_pred=labels_pred)
+
+    elif with_aucroc:
+
+        plot_aucroc(labels_true=labels, labels_pred=labels_pred)
 
     # change back to original shape
     labels_pred = labels_pred.reshape(ts_shape[1:3])

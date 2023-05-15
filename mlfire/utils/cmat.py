@@ -31,13 +31,8 @@ class ConfusionMatrix(object):
         )
 
     def plot(self,
-             figsize: tuple = (25, 20),
-             label_fontsize: int = 20,
-             ticks_fontsize: int = 15,
              title: str = 'Confusion matrix',
-             title_fontsize: int = 25,
-             value_size: int = 25
-             ) -> None:
+             ax=None) -> None:
 
         self.__computeConfusionMatrix()
 
@@ -46,20 +41,11 @@ class ConfusionMatrix(object):
             display_labels=self._labels,
         )
 
-        fig, ax = plt.subplots(figsize=figsize)
-
-        font = {'size': value_size}
-        plt.rc('font', **font)
-
         disp.plot(cmap='BuPu', ax=ax)
+        plt.title(title)
 
-        plt.title(title, fontsize=title_fontsize)
-
-        plt.xlabel('Predicted label', fontsize=label_fontsize)
-        plt.ylabel('True label', fontsize=label_fontsize)
-
-        plt.xticks(fontsize=ticks_fontsize, rotation=90)
-        plt.yticks(fontsize=ticks_fontsize)
+        plt.xlabel('Predicted label')
+        plt.ylabel('True label')
 
         plt.tight_layout()
         plt.show()
@@ -78,4 +64,4 @@ if __name__ == '__main__':
         labels
     )
 
-    cm.plot(figsize=(25, 20), title_fontsize=50, label_fontsize=30, ticks_fontsize=25)
+    cm.plot()

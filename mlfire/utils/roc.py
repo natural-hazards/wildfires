@@ -58,27 +58,64 @@ class AucRoc(object):
 
     def __compute(self) -> None:
 
-        self._fpr, self._tpr, _ = roc_curve(self._labels_true.reshape(-1), self._labels_pred.reshape(-1))
+        self._fpr, self._tpr, _ = roc_curve(self._labels_true, self._labels_pred)
         self._auc = auc(self._fpr, self._tpr)
 
-    def plot(self) -> None:
+    def plot(self, ax=None) -> None:
 
         fpr = self.fpr
         tpr = self.tpr
 
-        plt.plot(
-            fpr,
-            tpr,
-            color='darkorange',
-            label='AUC ROC = {0:.4f}'.format(self._auc),
-        )
-        plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+        if ax is None:
 
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.05])
+            plt.plot(
+                fpr,
+                tpr,
+                color='darkorange',
+                label='AUC ROC = {0:.4f}'.format(self._auc),
+            )
+            plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
 
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
+            plt.xlim([0.0, 1.0])
+            plt.ylim([0.0, 1.05])
 
-        plt.title('Receiver operating characteristic')
-        plt.legend(loc='lower right')
+            plt.xlabel('False Positive Rate')
+            plt.ylabel('True Positive Rate')
+
+            plt.title('Receiver operating characteristic')
+            plt.legend(loc='lower right')
+
+            plt.show()
+
+        else:
+
+            ax.plot(
+                fpr,
+                tpr,
+                color='darkorange',
+                label='AUC ROC = {0:.4f}'.format(self._auc),
+            )
+            ax.plot([0, 1], [0, 1], color='navy', linestyle='--')
+
+            ax.set_xlim([0.0, 1.0])
+            ax.set_ylim([0.0, 1.05])
+
+            ax.set_xlabel('False Positive Rate')
+            ax.set_ylabel('True Positive Rate')
+
+            ax.set_title('Receiver operating characteristic')
+            ax.legend(loc='lower right')
+
+
+# test
+if __name__ == '__main__':
+
+    _np = lazy_import('numpy')
+    _plt_pylab = lazy_import('matplotlib.pylab')
+    _utils_cmat = lazy_import('mlfire.utils.cmat')
+
+    y_true = _np.asarray([1, 0, 1, 1, 0])
+    y_pred = _np.asarray([0, 0, 1, 1, 0])
+
+    auc_roc = AucRoc(labels_true=y_true, labels_pred=y_pred)
+    auc_roc.plot()
