@@ -50,6 +50,7 @@ class DataAdapterTS(DatasetView):
                  savgol_winlen: int = 5,
                  pca_nfactors: int = 2,
                  pca_ops: list[FactorOP] = (FactorOP.USER_SET,),
+                 pca_retained_variance: float = 0.95,
                  # view options
                  modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
@@ -99,6 +100,9 @@ class DataAdapterTS(DatasetView):
         self._lst_pca_ops = None
         self._pca_ops = 0
         self.pca_ops = pca_ops
+
+        self._pca_retained_variance = None
+        self.pca_retained_variance = pca_retained_variance
 
         self._lst_extractors_pca = []
 
@@ -261,6 +265,20 @@ class DataAdapterTS(DatasetView):
 
         self._reset()
         self._nfactors_pca = n
+
+    @property
+    def pca_retained_variance(self) -> float:
+
+        return self._pca_retained_variance
+
+    @pca_retained_variance.setter
+    def pca_retained_variance(self, val: float) -> None:
+
+        if val == self._pca_retained_variance:
+            return
+
+        self._reset()
+        self._pca_retained_variance = val
 
     @property
     def pca_ops(self) -> list[FactorOP]:
@@ -499,6 +517,7 @@ class DataAdapterTS(DatasetView):
                 train_ds=ts_imgs[:, band_id::NBANDS],
                 factor_ops=self._lst_pca_ops,
                 nlatent_factors=self.pca_ops,
+                retained_variance=self.pca_retained_variance,
                 verbose=True
             )
 
@@ -522,8 +541,7 @@ class DataAdapterTS(DatasetView):
                     mod_lst_pca_ops = list(self._lst_pca_ops)
                 else:
                     mod_lst_pca_ops = copy.deepcopy(self._lst_transform_ops)
-                if FactorOP.TEST_CUMSUM in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_CUMSUM)
-                if FactorOP.TEST_BARTLETT in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.TEST_BARTLETT)
+                if FactorOP.CUMULATIVE_EXPLAINED_VARIANCE in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.CUMULATIVE_EXPLAINED_VARIANCE)
                 if FactorOP.USER_SET not in mod_lst_pca_ops: mod_lst_pca_ops.append(FactorOP.USER_SET)
                 extractor_pca.factor_ops = mod_lst_pca_ops
 
@@ -830,7 +848,7 @@ if __name__ == '__main__':
     VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
 
     TRANSFORM_OPS = [DatasetTransformOP.PCA, DatasetTransformOP.SAVITZKY_GOLAY]
-    PCA_OPS = [FactorOP.TEST_CUMSUM]
+    PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
 
     lst_satimgs = []
     lst_labels = []

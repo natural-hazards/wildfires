@@ -32,7 +32,8 @@ if __name__ == '__main__':
     FactorOP = _data_ts.FactorOP
 
     TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.PCA]
-    PCA_OPS = [FactorOP.TEST_CUMSUM]
+    PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
+    PCA_RETAINED_VARIANCE = .99
 
     lst_satimgs = []
     lst_labels = []
@@ -69,9 +70,10 @@ if __name__ == '__main__':
         # transformation options
         transform_ops=TRANSFORM_OPS,
         pca_ops=PCA_OPS,
+        pca_retained_variance=PCA_RETAINED_VARIANCE,
         # data set split options
         ds_split_opt=DS_SPLIT_OPT,
-        test_ratio=TEST_RATIO
+        test_ratio=TEST_RATIO,
     )
 
     index_begin_date = 0
