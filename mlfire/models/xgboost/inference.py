@@ -63,7 +63,7 @@ def predict(xgb: _xgboost.XGBClassifier,
 
     ts_shape = ts_img.shape
 
-    ts_pixels = ts_img.reshape(ts_shape[0], -1).T
+    ts_pixels = ts_img.reshape(-1, ts_shape[2])
     labels = labels.reshape(-1)
 
     # remove uncharted pixels represented as time series
@@ -94,6 +94,6 @@ def predict(xgb: _xgboost.XGBClassifier,
         plot_aucroc(labels_true=labels, labels_pred=labels_pred)
 
     # change back to original shape
-    labels_pred = labels_pred.reshape(ts_shape[1:3])
+    labels_pred = labels_pred.reshape(ts_shape[0:2])
 
     return labels_pred

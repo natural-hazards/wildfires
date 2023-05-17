@@ -17,7 +17,7 @@ def trainSegmentationModel(xgb: _xgboost.XGBClassifier,
 
     ts_shape = ts_img.shape
 
-    ts_pixels = ts_img.reshape(ts_shape[0], -1).T
+    ts_pixels = ts_img.reshape(-1, ts_shape[2])
     labels = labels.reshape(-1)
 
     # remove uncharted pixels represented as time series

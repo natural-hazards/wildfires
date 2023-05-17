@@ -389,6 +389,7 @@ class DataAdapterTS(DatasetView):
         else:
 
             img_ts = self._ds_satimgs[0].ReadAsArray()
+            print(img_ts.shape)
 
         return img_ts
 
@@ -407,7 +408,8 @@ class DataAdapterTS(DatasetView):
             for band_id in range(0, NBANDS_MODIS):
                 lst_img_ts.append(ds_satimg.GetRasterBand(start_band_id + band_id).ReadAsArray())
 
-        img_ts = _np.array(lst_img_ts)
+        img_ts = _np.array(lst_img_ts)  # TODO change to dstact
+        print(img_ts.shape)
         del lst_img_ts; gc.collect()
 
         return img_ts
@@ -417,7 +419,11 @@ class DataAdapterTS(DatasetView):
         start_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_start_date][0]
         end_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_end_date][0]
 
+        # reimplement using the following approach https://notebook.community/ritviksahajpal/open-geo-tutorial/Python/chapters/chapter_1_GDALDataset
+
         if end_img_id - start_img_id + 1 == len(self._df_dates_satimgs['Date']):
+
+            # TODO remove
 
             ts_imgs = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
 
@@ -811,19 +817,27 @@ class DataAdapterTS(DatasetView):
             elif self.val_ratio > 0.:
                 self._ds_val = (lst_ds[1], lst_ds[3])
 
-    def getTrainingDataset(self) -> _np.ndarray:
+    def getTrainingDataset(self) -> tuple:
 
         if not self._ds_training:
             self.createDataset()
 
-        return self._ds_training
+        # TODO remove
+        out_ds_training = list(self._ds_training)
+        out_ds_training[0] = _np.moveaxis(out_ds_training[0], 0, -1)
 
-    def getTestDataset(self) -> _np.ndarray:
+        return tuple(out_ds_training)
+
+    def getTestDataset(self) -> tuple:
 
         if not self._ds_test and self.test_ratio > 0.:
             self.createDataset()
 
-        return self._ds_test
+        # TODO remove
+        out_ds_test = list(self._ds_test)
+        out_ds_test[0] = _np.moveaxis(out_ds_test[0], 0, -1)
+
+        return tuple(out_ds_test)
 
     def getValidationDataset(self) -> _np.ndarray:
 
