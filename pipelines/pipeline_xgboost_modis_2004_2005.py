@@ -4,6 +4,9 @@ from mlfire.utils.functool import lazy_import
 _os = lazy_import('os')
 _np = lazy_import('numpy')
 
+# import CLI argument parser
+_args = lazy_import('pipelines.args')
+
 _data_ts = lazy_import('mlfire.data.ts')
 _ee_collection = lazy_import('mlfire.earthengine.collections')
 _features_pca = lazy_import('mlfire.features.pca')
@@ -12,10 +15,12 @@ _xgboost = lazy_import('xgboost')
 _xgboost_inference = lazy_import('mlfire.models.xgboost.inference')
 _xgboost_train = lazy_import('mlfire.models.xgboost.train')
 
+
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
-    OUTPUT_H5_DIR = 'data/h5/mtbs'
+    kwargs = _args.cli_argument_parser()
+
+    DATA_DIR = kwargs['img_dir']
     DS_PREFIX = 'ak_modis_2005_100km_'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 

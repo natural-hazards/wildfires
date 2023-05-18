@@ -22,6 +22,7 @@ class DatasetSplitOpt(Enum):
     SHUFFLE_SPLIT = 0
     IMG_HORIZONTAL_SPLIT = 1
     IMG_VERTICAL_SPLIT = 2
+    # TODO patches
 
 
 class DatasetTransformOP(Enum):
@@ -378,72 +379,86 @@ class DataAdapterTS(DatasetView):
 
         if len_ds > 1:
 
-            lst_img_ts = []
-            for band_id in range(len_ds):
-                lst_img_ts.append(self._ds_satimgs[band_id].ReadAsArray())
-            img_ts = _np.concatenate(lst_img_ts)
+            rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
+            nbands = self._ds_satimgs[0].RasterCount
 
-            del lst_img_ts
-            gc.collect()
+            for id_img in range(1, len_ds):
+
+                tmp_img = self._ds_satimgs[id_img]
+
+                if rows != tmp_img.RasterYSize or cols != tmp_img.RasterXSize:
+                    raise RuntimeError('Inconsistent shape among sources!')
+
+                nbands += tmp_img.RasterCount
+
+            # allocate an empty array
+            satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
+            rstart = rend = 0
+
+            for id_img in range(len_ds):
+
+                gc.collect()  # invoke garbage collector
+
+                rend += self._ds_satimgs[id_img].RasterCount
+
+                tmp_img = self._ds_satimgs[id_img].ReadAsArray()
+                satimg_ts[:, :, rstart:rend] = _np.moveaxis(tmp_img, 0, -1)
+
+                rstart = rend
 
         else:
 
-            img_ts = self._ds_satimgs[0].ReadAsArray()
-            print(img_ts.shape)
+            satimg_ts = self._ds_satimgs[0].ReadAsArray()
+            satimg_ts = _np.moveaxis(satimg_ts, 0, -1)
+            satimg_ts = satimg_ts.astype(_np.float32)
 
-        return img_ts
+        return satimg_ts
 
-    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_img_id: int, end_img_id: int) -> _np.ndarray:
+    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_id_img: int, end_id_img: int) -> _np.ndarray:
 
         NBANDS_MODIS = 7
-        lst_img_ts = []
+        rgn = range(start_id_img, end_id_img + 1)
 
-        for img_id in range(start_img_id, end_img_id + 1):
+        rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
+        nbands = NBANDS_MODIS * len(rgn)
 
-            gc.collect()
+        satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
+        band_pos = 0
 
-            id_ds, start_band_id = self._map_start_satimgs[img_id]
-            ds_satimg = self._ds_satimgs[id_ds]
+        for id_img in rgn:
 
-            for band_id in range(0, NBANDS_MODIS):
-                lst_img_ts.append(ds_satimg.GetRasterBand(start_band_id + band_id).ReadAsArray())
+            id_img, start_id_band = self._map_start_satimgs[id_img]
+            satimg = self._ds_satimgs[id_img]
 
-        img_ts = _np.array(lst_img_ts)  # TODO change to dstact
-        print(img_ts.shape)
-        del lst_img_ts; gc.collect()
+            for id_band in range(0, NBANDS_MODIS):
 
-        return img_ts
+                satimg_ts[:, :, band_pos] = satimg.GetRasterBand(start_id_band + id_band).ReadAsArray()
+                band_pos += 1
+
+        # invoke garbage collector
+        gc.collect()
+
+        return satimg_ts
 
     def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:
 
         start_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_start_date][0]
         end_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_end_date][0]
 
-        # reimplement using the following approach https://notebook.community/ritviksahajpal/open-geo-tutorial/Python/chapters/chapter_1_GDALDataset
-
         if end_img_id - start_img_id + 1 == len(self._df_dates_satimgs['Date']):
-
-            # TODO remove
-
-            ts_imgs = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
-
+            satimg_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
         else:
+            satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
 
-            ts_imgs = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_img_id=start_img_id, end_img_id=end_img_id)
-
-        ts_imgs = ts_imgs.astype(_np.float32)
-
-        return ts_imgs
+        return satimg_ts
 
     def __loadSatImg_TS(self) -> _np.ndarray:
 
         start_date = self.ds_start_date
-        if start_date not in self._df_dates_satimgs['Date'].values:
-            raise AttributeError('Start date does not correspond any band!')
+        if start_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('Start date does not correspond any band!')
 
         end_date = self.ds_end_date
-        if end_date not in self._df_dates_satimgs['Date'].values:
-            raise AttributeError('End date does not correspond any band!')
+        if end_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('End date does not correspond any band!')
 
         if self.modis_collection == ModisIndex.REFLECTANCE:
             return self.__loadSatImg_REFLECTANCE()
@@ -451,8 +466,9 @@ class DataAdapterTS(DatasetView):
             raise NotImplementedError
 
     """
-    Time series transformation
+    Preprocessing 
     """
+
     @staticmethod
     def __transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs: _np.ndarray) -> _np.ndarray:
 
@@ -532,7 +548,7 @@ class DataAdapterTS(DatasetView):
             nlatent_factors_found = max(nlatent_factors_found, extractor_pca.nlatent_factors)
             lst_extractors.append(extractor_pca)
 
-        # retrain PCA feature extractors
+        # refit PCA feature extractors
 
         for band_id in range(NBANDS):
 
@@ -558,9 +574,7 @@ class DataAdapterTS(DatasetView):
 
     def __transformTimeseries_PCA(self, ts_imgs: _np.ndarray, standardize=False) -> _np.ndarray:
 
-        if standardize:
-
-            self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+        if standardize: self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
 
         NBANDS = 7
         NFACTORS = self._lst_extractors_pca[0].nlatent_factors
@@ -577,17 +591,86 @@ class DataAdapterTS(DatasetView):
 
         return reduced_ts
 
+    def __preprocessingSatelliteImages(self, ds_imgs: list) -> list:
+
+        try:
+            for id_ds in range(len(ds_imgs)):
+
+                ts_imgs = ds_imgs[id_ds]; tmp_shape = None
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    # save original shape of series
+                    tmp_shape = ts_imgs.shape
+                    # reshape image to time series related to pixels
+                    ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+
+                ts_imgs = self.__transformTimeseries(ts_imgs)
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    # reshape back to series of satellite images
+                    ts_imgs = ts_imgs.reshape(tmp_shape)
+
+                ds_imgs[id_ds] = ts_imgs
+
+                gc.collect()  # invoke garbage collector
+        except ValueError:
+            pass
+
+        # Dimensionality reduction using principal component analysis
+
+        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+
+            ts_imgs = ds_imgs[0]; tmp_shape = None
+
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+
+                tmp_shape = ts_imgs.shape
+                ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+
+            self.__transformTimeseries_PCA_FIT(ts_imgs)
+            ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs)
+
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+
+                ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
+
+            ds_imgs[0] = ts_imgs
+
+            # clean up
+            gc.collect()  # invoke garbage collector
+
+            # transform test and validation data set
+            for id_ds in range(1, len(ds_imgs)):
+
+                ts_imgs = ds_imgs[id_ds]
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+
+                    tmp_shape = ts_imgs.shape
+                    ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+
+                standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
+                ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs, standardize=standardize)
+
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                    #
+                    ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
+
+                ds_imgs[id_ds] = ts_imgs
+
+        return ds_imgs
+
     """
-    Data set split into training, test and validation
+    Data set split into training, test, and validation
     """
 
-    def __splitDataset_SHUFFLE_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+    def __splitDataset_SHUFFLE_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> list:
 
         # lazy import
         model_selection = lazy_import('sklearn.model_selection')
 
         # convert to 3D (spatial in time) multi-spectral image to time series related to pixels
-        ts_imgs = ts_imgs.reshape((ts_imgs.shape[0], -1)).T
+        ts_imgs = ts_imgs.reshape((-1, ts_imgs.shape[2]))
         # reshape labels to be 1D vector
         labels = labels.reshape(-1)
 
@@ -619,94 +702,96 @@ class DataAdapterTS(DatasetView):
             ts_imgs_val = labels_val = None
 
         if self.test_ratio > 0. and self.val_ratio > 0.:
-            return ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val
+            return [ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val]
         elif self.test_ratio > 0.:
-            return ts_imgs_train, ts_imgs_test, labels_train, labels_test
+            return [ts_imgs_train, ts_imgs_test, labels_train, labels_test]
         elif self.val_ratio > 0.:
-            return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+            return [ts_imgs_train, ts_imgs_val, labels_train, labels_val]
         else:
-            return ts_imgs, labels
+            return [ts_imgs, labels]
 
-    def __splitDataset_HORIZONTAL_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+    def __splitDataset_HORIZONTAL_SPLIT(self, satimg_ts: _np.ndarray, labels: _np.ndarray) -> list:
 
         if self.test_ratio > 0.:
 
-            _, rows, _ = ts_imgs.shape
+            rows, _, _ = satimg_ts.shape
             hi_rows = int(rows * (1. - self.test_ratio))
 
-            ts_imgs_train = ts_imgs[:, :hi_rows, :]; labels_train = labels[:hi_rows, :]
-            ts_imgs_test = ts_imgs[:, hi_rows:, :]; labels_test = labels[hi_rows:, :]
+            satimg_ts_train = satimg_ts[:hi_rows, :, :]; labels_train = labels[:hi_rows, :]
+            satimg_ts_test = satimg_ts[hi_rows:, :, :]; labels_test = labels[hi_rows:, :]
 
         else:
 
-            ts_imgs_train = ts_imgs; labels_train = labels
-            ts_imgs_test = None; labels_test = None
+            satimg_ts_train = satimg_ts; labels_train = labels
+            satimg_ts_test = None; labels_test = None
 
         if self.val_ratio > 0.:
 
-            _, rows, _ = ts_imgs_train.shape
+            rows, _, _ = satimg_ts_train.shape
             hi_rows = int(rows * (1. - self.val_ratio))
 
-            ts_imgs_val = ts_imgs_train[:, hi_rows:, :]; labels_val = labels_train[hi_rows:, :]
-            ts_imgs_train = ts_imgs_train[:, :hi_rows, :]; labels_train = labels_train[:hi_rows, :]
+            satimg_ts_val = satimg_ts_train[hi_rows:, :, :]; labels_val = labels_train[hi_rows:, :, :]
+            satimg_ts_train = satimg_ts_train[:hi_rows, :, :]; labels_train = labels_train[:hi_rows, :, :]
 
         else:
 
-            ts_imgs_val = labels_val = None
+            satimg_ts_val = labels_val = None
 
         if self.test_ratio > 0. and self.val_ratio > 0.:
-            return ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val
+            return [satimg_ts_train, satimg_ts_test, satimg_ts_val, labels_train, labels_test, satimg_ts_val]
         elif self.test_ratio > 0.:
-            return ts_imgs_train, ts_imgs_test, labels_train, labels_test
+            return [satimg_ts_train, satimg_ts_test, labels_train, labels_test]
         elif self.val_ratio > 0.:
-            return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+            return [satimg_ts_train, satimg_ts_val, labels_train, labels_val]
         else:
-            return ts_imgs_train, labels_train
+            return [satimg_ts_train, labels_train]
 
-    def __splitDataset_VERTICAL_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+    def __splitDataset_VERTICAL_SPLIT(self, satimg_ts: _np.ndarray, labels: _np.ndarray) -> list:
 
         if self.test_ratio > 0.:
 
-            _, _, cols = ts_imgs.shape
+            _, cols, _ = satimg_ts.shape
             hi_cols = int(cols * (1. - self.test_ratio))
 
-            ts_imgs_train = ts_imgs[:, :, :hi_cols]; labels_train = labels[:, :hi_cols]
-            ts_imgs_test = ts_imgs[:, :, hi_cols:]; labels_test = labels[:, hi_cols:]
+            ts_imgs_train = satimg_ts[:, :hi_cols, :]; labels_train = labels[:, :hi_cols]
+            ts_imgs_test = satimg_ts[:, hi_cols:, :]; labels_test = labels[:, hi_cols:]
 
         else:
 
-            ts_imgs_train = ts_imgs; labels_train = labels
+            ts_imgs_train = satimg_ts; labels_train = labels
             ts_imgs_test = None; labels_test = None
 
         if self.val_ratio > 0.:
 
-            _, _, cols = ts_imgs_train.shape
+            _, cols, _ = ts_imgs_train.shape
             hi_cols = int(cols * (1. - self.val_ratio))
 
-            ts_imgs_val = ts_imgs_train[:, :, hi_cols:]; labels_val = labels_train[:, hi_cols:]
-            ts_imgs_train = ts_imgs_train[:, :, :hi_cols]; labels_train = labels_train[:, :hi_cols]
+            ts_imgs_val = ts_imgs_train[:, hi_cols:, :]; labels_val = labels_train[:, hi_cols:]
+            ts_imgs_train = ts_imgs_train[:, :hi_cols, :]; labels_train = labels_train[:, :hi_cols]
 
         else:
 
             ts_imgs_val = labels_val = None
 
         if self.test_ratio > 0. and self.val_ratio > 0.:
-            return ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val
+            return [ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val]
         elif self.test_ratio > 0.:
-            return ts_imgs_train, ts_imgs_test, labels_train, labels_test
+            return [ts_imgs_train, ts_imgs_test, labels_train, labels_test]
         elif self.val_ratio > 0.:
-            return ts_imgs_train, ts_imgs_val, labels_train, labels_val
+            return [ts_imgs_train, ts_imgs_val, labels_train, labels_val]
         else:
-            return ts_imgs_train, labels_train
+            return [ts_imgs_train, labels_train]
 
-    def __splitDataset(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+    def __splitDataset(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> list:
+
+        # TODO patching
 
         if self.train_test_val_opt == DatasetSplitOpt.SHUFFLE_SPLIT:
             ds = self.__splitDataset_SHUFFLE_SPLIT(ts_imgs=ts_imgs, labels=labels)
         elif self.train_test_val_opt == DatasetSplitOpt.IMG_HORIZONTAL_SPLIT:
-            ds = self.__splitDataset_HORIZONTAL_SPLIT(ts_imgs=ts_imgs, labels=labels)
+            ds = self.__splitDataset_HORIZONTAL_SPLIT(satimg_ts=ts_imgs, labels=labels)
         elif self.train_test_val_opt == DatasetSplitOpt.IMG_VERTICAL_SPLIT:
-            ds = self.__splitDataset_VERTICAL_SPLIT(ts_imgs=ts_imgs, labels=labels)
+            ds = self.__splitDataset_VERTICAL_SPLIT(satimg_ts=ts_imgs, labels=labels)
         else:
             raise NotImplementedError
 
@@ -741,66 +826,14 @@ class DataAdapterTS(DatasetView):
         except IOError or ValueError or NotImplementedError:
             raise RuntimeError('Cannot load series of satellite images!')
 
-        # TODO add NDVI and land surface temperature
-        # TODO clean data set if needed
-        lst_ds = list(self.__splitDataset(ts_imgs=ts_imgs, labels=labels))
+        if labels.shape != ts_imgs.shape[0:2]:
+            raise RuntimeError('Inconsistent shape between satellite images and labels!')
 
-        # TODO ignore NANs
-
-        try:
-            for id_ds in range(len(lst_ds) // 2):
-
-                ts_imgs = lst_ds[id_ds]; tmp_shape = None
-
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    # save original shape of series
-                    tmp_shape = ts_imgs.shape
-                    # reshape image to time series related to pixels
-                    ts_imgs = ts_imgs.reshape((tmp_shape[0], -1)).T
-
-                ts_imgs = self.__transformTimeseries(ts_imgs)
-
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    # reshape back to series of satellite images
-                    lst_ds[id_ds] = ts_imgs.T.reshape(tmp_shape)
-
-                gc.collect()  # invoke garbage collector
-        except ValueError:
-            pass
-
-        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
-
-            ts_imgs_train = lst_ds[0]
-            tmp_shape = None
-
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                # save original shape of series
-                tmp_shape = ts_imgs_train.shape
-                # reshape image to time series related to pixels
-                ts_imgs_train = ts_imgs_train.reshape((ts_imgs_train.shape[0], -1)).T
-
-            self.__transformTimeseries_PCA_FIT(ts_imgs_train)
-            ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs_train)
-
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                lst_ds[0] = ts_imgs.T.reshape(ts_imgs.shape[1], tmp_shape[1], tmp_shape[2])
-
-            # transform test and validation data set
-            for id_ds in range(1, len(lst_ds) // 2):
-
-                # save original shape of series
-                ts_imgs = lst_ds[id_ds]
-                tmp_shape = None
-
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    tmp_shape = ts_imgs.shape
-                    ts_imgs = ts_imgs.reshape((tmp_shape[0], -1)).T
-
-                standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
-                ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs, standardize=standardize)
-
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    lst_ds[id_ds] = ts_imgs.T.reshape(ts_imgs.shape[1], tmp_shape[1], tmp_shape[2])
+        # TODO add NDVI and LST
+        # TODO fill nan values
+        lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
+        # TODO ignore nan values
+        lst_ds[:len(lst_ds) // 2] = self.__preprocessingSatelliteImages(ds_imgs=lst_ds[:len(lst_ds) // 2])
 
         if self.test_ratio > 0 and self.val_ratio > 0:
 
@@ -819,31 +852,17 @@ class DataAdapterTS(DatasetView):
 
     def getTrainingDataset(self) -> tuple:
 
-        if not self._ds_training:
-            self.createDataset()
-
-        # TODO remove
-        out_ds_training = list(self._ds_training)
-        out_ds_training[0] = _np.moveaxis(out_ds_training[0], 0, -1)
-
-        return tuple(out_ds_training)
+        if not self._ds_training: self.createDataset()
+        return self._ds_training
 
     def getTestDataset(self) -> tuple:
 
-        if not self._ds_test and self.test_ratio > 0.:
-            self.createDataset()
-
-        # TODO remove
-        out_ds_test = list(self._ds_test)
-        out_ds_test[0] = _np.moveaxis(out_ds_test[0], 0, -1)
-
-        return tuple(out_ds_test)
+        if not self._ds_test and self.test_ratio > 0.: self.createDataset()
+        return self._ds_test
 
     def getValidationDataset(self) -> _np.ndarray:
 
-        if not self._ds_val and self.val_ratio > 0.:
-            self.createDataset()
-
+        if not self._ds_val and self.val_ratio > 0.: self.createDataset()
         return self._ds_val
 
 

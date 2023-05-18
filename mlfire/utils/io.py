@@ -60,7 +60,7 @@ def saveDataset(ds: tuple[_np.ndarray], fn: str, file_format: FileFormat = FileF
     ts_img = ds[0]; labels = ds[1]
 
     # reshape
-    ts_pixels = ts_img.reshape(ts_img.shape[0], -1).T
+    ts_pixels = ts_img.reshape((-1, ts_img.shape[2]))
     labels = labels.reshape(-1)
 
     if file_format == FileFormat.PETSC_BINARY:

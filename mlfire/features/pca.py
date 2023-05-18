@@ -171,7 +171,7 @@ class TransformPCA(object):
         # fit data transformation
         n_components = self.nlatent_factors_user if self._factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value else None
 
-        self._pca = _sklearn_decomposition.PCA(n_components=n_components, svd_solver='full')
+        self._pca = _sklearn_decomposition.PCA(n_components=n_components, svd_solver='auto', random_state=42)
         self._pca.fit(self.training_dataset)
 
         if self._factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value:

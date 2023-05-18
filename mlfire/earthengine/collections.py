@@ -46,7 +46,7 @@ class MTBSSeverity(Enum):
     MODERATE = 3
     HIGH = 4
     INCREASE_GREENNESS = 5
-    NON_MAPPED_AREA = 6
+    NON_MAPPED_AREA = 6  # TODO rename -> UNCHARTED_AREA
 
 
 class MTBSRegion(Enum):
