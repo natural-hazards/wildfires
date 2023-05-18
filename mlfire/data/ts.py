@@ -22,7 +22,6 @@ class DatasetSplitOpt(Enum):
     SHUFFLE_SPLIT = 0
     IMG_HORIZONTAL_SPLIT = 1
     IMG_VERTICAL_SPLIT = 2
-    # TODO patches
 
 
 class DatasetTransformOP(Enum):
@@ -31,7 +30,8 @@ class DatasetTransformOP(Enum):
     SCALE = 1
     STANDARTIZE_ZSCORE = 2
     PCA = 4
-    SAVITZKY_GOLAY = 8
+    PCA_PER_BAND = 8
+    SAVITZKY_GOLAY = 16
 
 
 class DataAdapterTS(DatasetView):
@@ -165,8 +165,6 @@ class DataAdapterTS(DatasetView):
 
         self._reset()
         self._val_ratio = val
-
-    # TODO start/end index
 
     @property
     def ds_start_date(self) -> lazy_import('datetime').date:
@@ -517,16 +515,17 @@ class DataAdapterTS(DatasetView):
 
         return ts_imgs
 
-    def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> None:
+    """
+    Preprocessing (principal component analysis) 
+    """
+
+    def __transformTimeseries_PCA_FIT_PER_BAND(self, ts_imgs: _np.ndarray) -> None:
 
         # lazy imports
         features_pca = lazy_import('mlfire.features.pca')
         copy = lazy_import('copy')
 
         NBANDS = 7  # TODO as a class attribute
-
-        if DatasetTransformOP.STANDARTIZE_ZSCORE not in self._lst_transform_ops:
-            ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
 
         # build up PCA projection for each band
 
@@ -538,7 +537,7 @@ class DataAdapterTS(DatasetView):
             extractor_pca = features_pca.TransformPCA(
                 train_ds=ts_imgs[:, band_id::NBANDS],
                 factor_ops=self._lst_pca_ops,
-                nlatent_factors=self.pca_ops,
+                nlatent_factors=self.pca_nfactors,
                 retained_variance=self.pca_retained_variance,
                 verbose=True
             )
@@ -572,15 +571,41 @@ class DataAdapterTS(DatasetView):
 
         self._lst_extractors_pca = lst_extractors
 
-    def __transformTimeseries_PCA(self, ts_imgs: _np.ndarray, standardize=False) -> _np.ndarray:
+    def __transformTimeseries_PCA_FIT_ALL_BANDS(self, ts_imgs: _np.ndarray) -> None:
 
-        if standardize: self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+        # lazy imports
+        features_pca = lazy_import('mlfire.features.pca')
+
+        extractor_pca = features_pca.TransformPCA(
+            train_ds=ts_imgs,
+            factor_ops=self._lst_pca_ops,
+            nlatent_factors=self.pca_nfactors,
+            retained_variance=self.pca_retained_variance,
+            verbose=True
+        )
+
+        extractor_pca.fit()
+        self._lst_extractors_pca = [extractor_pca]
+
+    def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> _np.ndarray:
+
+        if DatasetTransformOP.STANDARTIZE_ZSCORE not in self._lst_transform_ops:
+            ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+
+        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+            return self.__transformTimeseries_PCA_FIT_ALL_BANDS(ts_imgs=ts_imgs)
+        elif self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
+            return self.__transformTimeseries_PCA_FIT_PER_BAND(ts_imgs=ts_imgs)
+        else:
+            raise NotImplementedError
+
+    def __transformTimeseries_PCA_TRANSFORM_PER_BAND(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
         NBANDS = 7
         NFACTORS = self._lst_extractors_pca[0].nlatent_factors
 
-        nsamples_test = ts_imgs.shape[0]
-        reduced_ts = _np.zeros(shape=(nsamples_test, NBANDS * NFACTORS), dtype=ts_imgs.dtype)
+        nsamples = ts_imgs.shape[0]
+        reduced_ts = _np.zeros(shape=(nsamples, NBANDS * NFACTORS), dtype=ts_imgs.dtype)
 
         for band_id in range(NBANDS):
             transformer_pca = self._lst_extractors_pca[band_id]
@@ -590,6 +615,66 @@ class DataAdapterTS(DatasetView):
         del ts_imgs; gc.collect()
 
         return reduced_ts
+
+    def __transformTimeseries_PCA_TRANSFORM_ALL_BANDS(self, ts_imgs: _np.ndarray) -> _np.ndarray:
+
+        transformer_pca = self._lst_extractors_pca[0]
+        reduced_ts = transformer_pca.transform(ts_imgs)
+
+        # clean up and invoke garbage collector
+        del ts_imgs; gc.collect()
+
+        return reduced_ts
+
+    def __transformTimeseries_PCA_TRANSFORM(self, ts_imgs: _np.ndarray, standardize: bool = False) -> _np.ndarray:
+
+        if standardize: self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+
+        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+            return self.__transformTimeseries_PCA_TRANSFORM_ALL_BANDS(ts_imgs=ts_imgs)
+        elif self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
+            return self.__transformTimeseries_PCA_TRANSFORM_PER_BAND(ts_imgs=ts_imgs)
+        else:
+            raise NotImplementedError
+
+    def __transformTimeseries_PCA(self, ds_imgs: list) -> list:
+
+        ts_imgs = ds_imgs[0]; tmp_shape = None
+
+        if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+            tmp_shape = ts_imgs.shape
+            ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+
+        self.__transformTimeseries_PCA_FIT(ts_imgs)
+        ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs)
+
+        if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+            ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
+
+        ds_imgs[0] = ts_imgs
+
+        # clean up
+        gc.collect()  # invoke garbage collector
+
+        # transform test and validation data set
+        for id_ds in range(1, len(ds_imgs)):
+
+            ts_imgs = ds_imgs[id_ds]
+
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                tmp_shape = ts_imgs.shape
+                ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+
+            standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
+            ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs, standardize=standardize)
+
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
+                #
+                ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
+
+            ds_imgs[id_ds] = ts_imgs
+
+        return ds_imgs
 
     def __preprocessingSatelliteImages(self, ds_imgs: list) -> list:
 
@@ -612,51 +697,18 @@ class DataAdapterTS(DatasetView):
 
                 ds_imgs[id_ds] = ts_imgs
 
-                gc.collect()  # invoke garbage collector
+            gc.collect()  # invoke garbage collector
         except ValueError:
             pass
 
-        # Dimensionality reduction using principal component analysis
+        """
+        Dimensionality reduction using principal component analysis 
+        """
 
-        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value or \
+                self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
 
-            ts_imgs = ds_imgs[0]; tmp_shape = None
-
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-
-                tmp_shape = ts_imgs.shape
-                ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
-
-            self.__transformTimeseries_PCA_FIT(ts_imgs)
-            ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs)
-
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-
-                ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
-
-            ds_imgs[0] = ts_imgs
-
-            # clean up
-            gc.collect()  # invoke garbage collector
-
-            # transform test and validation data set
-            for id_ds in range(1, len(ds_imgs)):
-
-                ts_imgs = ds_imgs[id_ds]
-
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-
-                    tmp_shape = ts_imgs.shape
-                    ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
-
-                standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
-                ts_imgs = self.__transformTimeseries_PCA(ts_imgs=ts_imgs, standardize=standardize)
-
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    #
-                    ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
-
-                ds_imgs[id_ds] = ts_imgs
+            ds_imgs = self.__transformTimeseries_PCA(ds_imgs=ds_imgs)
 
         return ds_imgs
 
@@ -784,8 +836,6 @@ class DataAdapterTS(DatasetView):
 
     def __splitDataset(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> list:
 
-        # TODO patching
-
         if self.train_test_val_opt == DatasetSplitOpt.SHUFFLE_SPLIT:
             ds = self.__splitDataset_SHUFFLE_SPLIT(ts_imgs=ts_imgs, labels=labels)
         elif self.train_test_val_opt == DatasetSplitOpt.IMG_HORIZONTAL_SPLIT:
@@ -880,7 +930,7 @@ if __name__ == '__main__':
     TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
     VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
 
-    TRANSFORM_OPS = [DatasetTransformOP.PCA, DatasetTransformOP.SAVITZKY_GOLAY]
+    TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.SAVITZKY_GOLAY]
     PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
 
     lst_satimgs = []

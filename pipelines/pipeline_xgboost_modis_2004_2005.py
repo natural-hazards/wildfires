@@ -36,7 +36,7 @@ if __name__ == '__main__':
     DatasetTransformOP = _data_ts.DatasetTransformOP
     FactorOP = _data_ts.FactorOP
 
-    TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.PCA]
+    TRANSFORM_OPS = [DatasetTransformOP.STANDARTIZE_ZSCORE, DatasetTransformOP.PCA_PER_BAND]
     PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
     PCA_RETAINED_VARIANCE = .99
 
