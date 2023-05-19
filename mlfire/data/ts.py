@@ -40,8 +40,8 @@ class VegetationIndex(Enum):
 
     NONE = 0
     EVI = 2
-    EVI_2BAND = 3
-    NDVI = 4
+    EVI_2BAND = 4
+    NDVI = 8
 
 
 class DataAdapterTS(DatasetView):
@@ -494,6 +494,12 @@ class DataAdapterTS(DatasetView):
         else:
             satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
 
+        # scale pixel values using MODIS scale factor
+        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
+        if self._transform_ops & DatasetTransformOP.SCALE.value == DatasetTransformOP.SCALE.value:
+            satimg_ts /= 1e-4
+
+        # TODO #bands related to MODIS as constant
         self._nfeatures_ts = 7
 
         return satimg_ts
@@ -536,12 +542,6 @@ class DataAdapterTS(DatasetView):
     def __transformTimeseries(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
         NFEATURES_TS = self._nfeatures_ts  # implement #features ts as property
-
-        # scale data using MODIS scale factor
-        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-        if self._transform_ops & DatasetTransformOP.SCALE.value == DatasetTransformOP.SCALE.value:
-
-            ts_imgs /= 1e-4  # scale factor for LST is 0.02
 
         # standardize data to have zero mean and unit standard deviation using z-score
         if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
@@ -763,21 +763,44 @@ class DataAdapterTS(DatasetView):
     Vegetation index
     """
 
-    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray):
-
-        pass
-
-    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray):
+    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
         NFEATURES_TS = self._nfeatures_ts
 
         ee_collection = lazy_import('mlfire.earthengine.collections')
         ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
 
-        ref_nir = ts_imgs[:, :, ModisReflectanceSpectralBands.NIR.value::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, ModisReflectanceSpectralBands.RED.value::NFEATURES_TS]
+        ref_blue = ts_imgs[:, :, (ModisReflectanceSpectralBands.BLUE.value - 1)::NFEATURES_TS]
+        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
+        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
-        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir * 2.4 * ref_red + 1)
+        # constants
+        L = 1.
+        G = 2.5
+        C1 = 6.
+        C2 = 7.5
+
+        evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
+
+        # clean up and invoke garbage collector
+        del evi; gc.collect()
+
+        self._nfeatures_ts += 1
+
+        return ts_imgs
+
+    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray) -> _np.ndarray:
+
+        NFEATURES_TS = self._nfeatures_ts
+
+        ee_collection = lazy_import('mlfire.earthengine.collections')
+        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+
+        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
+        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
+
+        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
 
         # clean up and invoke garbage collector
@@ -787,15 +810,15 @@ class DataAdapterTS(DatasetView):
 
         return ts_imgs
 
-    def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+    def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
 
         NFEATURES_TS = self._nfeatures_ts
 
         ee_collection = lazy_import('mlfire.earthengine.collections')
         ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
 
-        ref_nir = ts_imgs[:, :, ModisReflectanceSpectralBands.NIR.value::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, ModisReflectanceSpectralBands.RED.value::NFEATURES_TS]
+        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
+        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
         ndvi = None
         try:
@@ -821,15 +844,13 @@ class DataAdapterTS(DatasetView):
         out_ts_imgs = ts_imgs; out_labels = labels
 
         if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value:
-
             out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=ts_imgs, labels=labels)
 
         if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
+            out_ts_imgs = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs)
 
-            if self._vi_ops & VegetationIndex.EVI_2BAND.value == VegetationIndex.EVI_2BAND.value:
-                out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=ts_imgs)
-            else:
-                self.__addVegetationIndex_EVI()
+        if self._vi_ops & VegetationIndex.EVI_2BAND.value == VegetationIndex.EVI_2BAND.value:
+            out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs)
 
         return out_ts_imgs, out_labels
 
@@ -1000,11 +1021,8 @@ class DataAdapterTS(DatasetView):
         if labels.shape != ts_imgs.shape[0:2]:
             raise RuntimeError('Inconsistent shape between satellite images and labels!')
 
-        # TODO move to loadSatImg_TS
-        # Vegetation index
-        if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value or \
-                self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
-
+        # vegetation index
+        if self._vi_ops >= VegetationIndex.NONE.value:
             ts_imgs, labels = self.__addVegetationIndex(ts_imgs=ts_imgs, labels=labels)
 
         # TODO fill nan values
