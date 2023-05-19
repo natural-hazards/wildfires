@@ -769,7 +769,23 @@ class DataAdapterTS(DatasetView):
 
     def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray):
 
-        pass
+        NFEATURES_TS = self._nfeatures_ts
+
+        ee_collection = lazy_import('mlfire.earthengine.collections')
+        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+
+        ref_nir = ts_imgs[:, :, ModisReflectanceSpectralBands.NIR.value::NFEATURES_TS]
+        ref_red = ts_imgs[:, :, ModisReflectanceSpectralBands.RED.value::NFEATURES_TS]
+
+        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir * 2.4 * ref_red + 1)
+        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
+
+        # clean up and invoke garbage collector
+        del evi2; gc.collect()
+
+        self._nfeatures_ts += 1
+
+        return ts_imgs
 
     def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
 
@@ -811,7 +827,7 @@ class DataAdapterTS(DatasetView):
         if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
 
             if self._vi_ops & VegetationIndex.EVI_2BAND.value == VegetationIndex.EVI_2BAND.value:
-                self.__addVegetationIndex_EVI2()
+                out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=ts_imgs)
             else:
                 self.__addVegetationIndex_EVI()
 

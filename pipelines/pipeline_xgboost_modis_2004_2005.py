@@ -41,7 +41,7 @@ if __name__ == '__main__':
     PCA_RETAINED_VARIANCE = .99
 
     VegetationIndex = _data_ts.VegetationIndex
-    VI_OPS = [VegetationIndex.NDVI]
+    VI_OPS = [VegetationIndex.EVI_2BAND]
 
     lst_satimgs = []
     lst_labels = []
