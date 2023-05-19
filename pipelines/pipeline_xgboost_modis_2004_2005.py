@@ -40,6 +40,9 @@ if __name__ == '__main__':
     PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
     PCA_RETAINED_VARIANCE = .99
 
+    VegetationIndex = _data_ts.VegetationIndex
+    VI_OPS = [VegetationIndex.NDVI]
+
     lst_satimgs = []
     lst_labels = []
 
@@ -72,6 +75,8 @@ if __name__ == '__main__':
         label_collection=LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
         cci_confidence_level=CCI_CONFIDENCE_LEVEL,
+        # vegetation index
+        vegetation_index=VI_OPS,
         # transformation options
         transform_ops=TRANSFORM_OPS,
         pca_ops=PCA_OPS,

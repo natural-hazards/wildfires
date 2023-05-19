@@ -14,12 +14,12 @@ class ModisReflectanceSpectralBands(Enum):
     SWIR3 = 7  # short-wave infra-red (wave length 2105-2155nm)
 
 
-class ModisIndex(Enum):
+class ModisCollection(Enum):
 
-    LST = 'MODIS/006/MOD11A2'  # land surface temperature
+    LST = 'MODIS/0061/MOD11A2'  # land surface temperature
     REFLECTANCE = 'MODIS/061/MOD09A1'  # spectral reflectance bands
-    EVI = 'MODIS/006/MOD13A1'  # enhanced vegetation index
-    NDVI = 'MODIS/006/MOD13A1'  # normalized difference vegetation index
+    # EVI = 'MODIS/006/MOD13A1'  # enhanced vegetation index
+    # NDVI = 'MODIS/006/MOD13A1'  # normalized difference vegetation index
 
 
 class FireLabelsCollection(Enum):

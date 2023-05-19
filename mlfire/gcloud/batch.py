@@ -6,7 +6,7 @@ import geojson
 
 from enum import Enum
 
-from mlfire.earthengine.collections import ModisIndex, FireLabelsCollection
+from mlfire.earthengine.collections import ModisCollection, FireLabelsCollection
 from mlfire.utils.utils_string import getRandomString
 
 
@@ -39,7 +39,7 @@ class EarthEngineBatch(object):
                  file_json: str,
                  startdate: earthengine.Date = None,
                  enddate: earthengine.Date = None,
-                 modis_index: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_index: ModisCollection = ModisCollection.REFLECTANCE,
                  labels_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  export: ExportData = ExportData.ALL,
                  resolution_per_pixel: int = 500,
@@ -145,12 +145,12 @@ class EarthEngineBatch(object):
         self._json_rois = fn
 
     @property
-    def modis_index(self) -> ModisIndex:
+    def modis_index(self) -> ModisCollection:
 
         return self._modis_index
 
     @modis_index.setter
-    def modis_index(self, index: ModisIndex) -> None:
+    def modis_index(self, index: ModisCollection) -> None:
 
         self._modis_index = index
 
@@ -267,13 +267,13 @@ class EarthEngineBatch(object):
 
         self._collection_img_modis = earthengine.ImageCollection(self._modis_index.value)
 
-        if self._modis_index == ModisIndex.REFLECTANCE:
+        if self._modis_index == ModisCollection.REFLECTANCE:
             self._collection_img_modis = self._collection_img_modis.select('sur_refl.+')
-        elif self._modis_index == ModisIndex.LST:
+        elif self._modis_index == ModisCollection.LST:
             self._collection_img_modis = self._collection_img_modis.select('LST_Day.+')
-        elif self._modis_index == ModisIndex.EVI:
+        elif self._modis_index == ModisCollection.EVI:
             self._collection_img_modis = self._collection_img_modis.select('EVI')
-        elif self._collection_img_modis == ModisIndex.NDVI:
+        elif self._collection_img_modis == ModisCollection.NDVI:
             self._collection_img_modis = self._collection_img_modis.select('NDVI')
 
     def __loadLabels(self) -> None:
@@ -412,7 +412,7 @@ if __name__ == '__main__':
         earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_100km_epsg3338'.format(y)
 
         earthengine_batch.labels_collection = FireLabelsCollection.CCI
-        earthengine_batch.modis_index = ModisIndex.REFLECTANCE
+        earthengine_batch.modis_index = ModisCollection.REFLECTANCE
 
         earthengine_batch.gdrive_folder = 'AK_{}'.format(y)
         earthengine_batch.submit()

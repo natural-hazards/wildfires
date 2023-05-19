@@ -1,3 +1,5 @@
+# TODO rename like pix_ts.py (not use spatial information)
+
 import gc
 import os
 
@@ -5,7 +7,7 @@ from enum import Enum
 from typing import Union
 
 from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
-from mlfire.earthengine.collections import ModisIndex
+from mlfire.earthengine.collections import ModisCollection
 from mlfire.earthengine.collections import FireLabelsCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 from mlfire.features.pca import FactorOP
@@ -34,6 +36,14 @@ class DatasetTransformOP(Enum):
     SAVITZKY_GOLAY = 16
 
 
+class VegetationIndex(Enum):
+
+    NONE = 0
+    EVI = 2
+    EVI_2BAND = 3
+    NDVI = 4
+
+
 class DataAdapterTS(DatasetView):
 
     def __init__(self,
@@ -45,6 +55,8 @@ class DataAdapterTS(DatasetView):
                  ds_split_opt: DatasetSplitOpt = DatasetSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = 0.33,
                  val_ratio: float = 0.,
+                 # add vegetation index
+                 vegetation_index: list[VegetationIndex] = list[VegetationIndex.NONE],
                  # transformation operation
                  transform_ops: Union[tuple[DatasetTransformOP], list[DatasetTransformOP]] = (DatasetTransformOP.NONE,),
                  savgol_polyorder: int = 1,
@@ -53,7 +65,7 @@ class DataAdapterTS(DatasetView):
                  pca_ops: list[FactorOP] = (FactorOP.USER_SET,),
                  pca_retained_variance: float = 0.95,
                  # view options
-                 modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -82,6 +94,7 @@ class DataAdapterTS(DatasetView):
         self.ds_end_date = ds_end_date
 
         # transformation options
+
         self._train_test_val_opt = None
         self.train_test_val_opt = ds_split_opt
 
@@ -89,11 +102,21 @@ class DataAdapterTS(DatasetView):
         self._transform_ops = DatasetTransformOP.NONE.value
         self.transform_ops = transform_ops
 
+        # vegetation index
+
+        self._lst_vegetation_index = None
+        self._vi_ops = VegetationIndex.NONE.value
+        self.vegetation_index = vegetation_index
+
+        # Savitzky-Golay filter properties
+
         self._savgol_polyorder = None
         self.savgol_polyorder = savgol_polyorder
 
         self._savgol_winlen = None
         self.savgol_winlen = savgol_winlen
+
+        # principal component properties
 
         self._pca_nfactors = 0
         self.pca_nfactors = pca_nfactors
@@ -108,10 +131,12 @@ class DataAdapterTS(DatasetView):
         self._lst_extractors_pca = []
 
         # test data set options
+
         self._test_ratio = None
         self.test_ratio = test_ratio
 
         # validation data set options
+
         self._val_ratio = None
         self.val_ratio = val_ratio
 
@@ -201,6 +226,27 @@ class DataAdapterTS(DatasetView):
         gc.collect()
 
         self._ds_end_date = val_date
+
+    """
+    Vegetation index options
+    """
+
+    @property
+    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
+
+        return self._lst_vegetation_index
+
+    @vegetation_index.setter
+    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
+
+        if self.vegetation_index == lst_vi:
+            return
+
+        self._reset()
+
+        self._vi_ops = 0
+        self._lst_vegetation_index = lst_vi
+        for op in lst_vi: self._vi_ops |= op.value
 
     """
     Transform options
@@ -378,7 +424,7 @@ class DataAdapterTS(DatasetView):
         if len_ds > 1:
 
             rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
-            nbands = self._ds_satimgs[0].RasterCount
+            nbands = self._ds_satimgs[0].RasterCount  # TODO rename -> nrasters
 
             for id_img in range(1, len_ds):
 
@@ -448,6 +494,8 @@ class DataAdapterTS(DatasetView):
         else:
             satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
 
+        self._nfeatures_ts = 7
+
         return satimg_ts
 
     def __loadSatImg_TS(self) -> _np.ndarray:
@@ -458,7 +506,7 @@ class DataAdapterTS(DatasetView):
         end_date = self.ds_end_date
         if end_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('End date does not correspond any band!')
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             return self.__loadSatImg_REFLECTANCE()
         else:
             raise NotImplementedError
@@ -467,28 +515,27 @@ class DataAdapterTS(DatasetView):
     Preprocessing 
     """
 
-    @staticmethod
-    def __transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs: _np.ndarray) -> _np.ndarray:
+    def __transformTimeseries_STANDARTIZE_ZSCORE(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
-        from scipy import stats
+        from scipy import stats  # TODO lazy import
 
-        NBANDS = 7  # TODO implement for additional indexes such as NDVI and LST
+        NFEATURES_TS = self._nfeatures_ts  # TODO implement for additional indexes such as NDVI and LST
 
-        for band_id in range(NBANDS):
+        for band_id in range(NFEATURES_TS):
 
-            img_band = ts_imgs[:, band_id::NBANDS]
+            img_band = ts_imgs[:, band_id::NFEATURES_TS]
 
             # check if standard deviation is greater than 0
             std_band = _np.std(img_band)
             if std_band == 0.: continue
 
-            ts_imgs[:, band_id::NBANDS] = stats.zscore(img_band, axis=1)
+            ts_imgs[:, band_id::NFEATURES_TS] = stats.zscore(img_band, axis=1)
 
         return ts_imgs
 
     def __transformTimeseries(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
-        NBANDS = 7  # TODO implement for additional indexes such as NDVI and LST
+        NFEATURES_TS = self._nfeatures_ts  # implement #features ts as property
 
         # scale data using MODIS scale factor
         # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
@@ -505,10 +552,10 @@ class DataAdapterTS(DatasetView):
 
             scipy_signal = lazy_import('scipy.signal')
 
-            for band_id in range(NBANDS):
+            for band_id in range(NFEATURES_TS):
                 # apply Savitzky–Golay filter, parameters are user-specified
-                ts_imgs[:, band_id::NBANDS] = scipy_signal.savgol_filter(
-                    ts_imgs[:, band_id::NBANDS],
+                ts_imgs[:, band_id::NFEATURES_TS] = scipy_signal.savgol_filter(
+                    ts_imgs[:, band_id::NFEATURES_TS],
                     window_length=self.savgol_winlen,
                     polyorder=self.savgol_polyorder
                 )
@@ -525,17 +572,17 @@ class DataAdapterTS(DatasetView):
         features_pca = lazy_import('mlfire.features.pca')
         copy = lazy_import('copy')
 
-        NBANDS = 7  # TODO as a class attribute
+        NFEATURES_TS = self._nfeatures_ts  # TODO as a property
 
         # build up PCA projection for each band
 
         lst_extractors = []
         nlatent_factors_found = 0
 
-        for band_id in range(NBANDS):
+        for band_id in range(NFEATURES_TS):
 
             extractor_pca = features_pca.TransformPCA(
-                train_ds=ts_imgs[:, band_id::NBANDS],
+                train_ds=ts_imgs[:, band_id::NFEATURES_TS],
                 factor_ops=self._lst_pca_ops,
                 nlatent_factors=self.pca_nfactors,
                 retained_variance=self.pca_retained_variance,
@@ -549,7 +596,7 @@ class DataAdapterTS(DatasetView):
 
         # refit PCA feature extractors
 
-        for band_id in range(NBANDS):
+        for band_id in range(NFEATURES_TS):
 
             extractor_pca = lst_extractors[band_id]
 
@@ -601,15 +648,15 @@ class DataAdapterTS(DatasetView):
 
     def __transformTimeseries_PCA_TRANSFORM_PER_BAND(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
-        NBANDS = 7
+        NFEATURES_TS = self._nfeatures_ts
         NFACTORS = self._lst_extractors_pca[0].nlatent_factors
 
         nsamples = ts_imgs.shape[0]
-        reduced_ts = _np.zeros(shape=(nsamples, NBANDS * NFACTORS), dtype=ts_imgs.dtype)
+        reduced_ts = _np.zeros(shape=(nsamples, NFEATURES_TS * NFACTORS), dtype=ts_imgs.dtype)
 
-        for band_id in range(NBANDS):
+        for band_id in range(NFEATURES_TS):
             transformer_pca = self._lst_extractors_pca[band_id]
-            reduced_ts[:, band_id::NBANDS] = transformer_pca.transform(ts_imgs[:, band_id::NBANDS])
+            reduced_ts[:, band_id::NFEATURES_TS] = transformer_pca.transform(ts_imgs[:, band_id::NFEATURES_TS])
 
         # clean up and invoke garbage collector
         del ts_imgs; gc.collect()
@@ -711,6 +758,64 @@ class DataAdapterTS(DatasetView):
             ds_imgs = self.__transformTimeseries_PCA(ds_imgs=ds_imgs)
 
         return ds_imgs
+
+    """
+    Vegetation index
+    """
+
+    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray):
+
+        pass
+
+    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray):
+
+        pass
+
+    def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray):
+
+        NFEATURES_TS = self._nfeatures_ts
+
+        ee_collection = lazy_import('mlfire.earthengine.collections')
+        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+
+        ref_nir = ts_imgs[:, :, ModisReflectanceSpectralBands.NIR.value::NFEATURES_TS]
+        ref_red = ts_imgs[:, :, ModisReflectanceSpectralBands.RED.value::NFEATURES_TS]
+
+        ndvi = None
+        try:
+            ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
+        except ZeroDivisionError:
+            labels[_np.any(ndvi == _np.inf, axis=2)] = _np.nan
+            ndvi = _np.where(ndvi == _np.inf, _np.nan, ndvi)
+
+        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), ndvi, axis=2)
+
+        # clean up and invoke garbage collector
+        del ndvi; gc.collect()
+
+        self._nfeatures_ts += 1
+
+        return ts_imgs, labels
+
+    def __addVegetationIndex(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
+
+        # https://en.wikipedia.org/wiki/Enhanced_vegetation_index
+        # https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
+
+        out_ts_imgs = ts_imgs; out_labels = labels
+
+        if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value:
+
+            out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=ts_imgs, labels=labels)
+
+        if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
+
+            if self._vi_ops & VegetationIndex.EVI_2BAND.value == VegetationIndex.EVI_2BAND.value:
+                self.__addVegetationIndex_EVI2()
+            else:
+                self.__addVegetationIndex_EVI()
+
+        return out_ts_imgs, out_labels
 
     """
     Data set split into training, test, and validation
@@ -879,9 +984,16 @@ class DataAdapterTS(DatasetView):
         if labels.shape != ts_imgs.shape[0:2]:
             raise RuntimeError('Inconsistent shape between satellite images and labels!')
 
-        # TODO add NDVI and LST
+        # TODO move to loadSatImg_TS
+        # Vegetation index
+        if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value or \
+                self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
+
+            ts_imgs, labels = self.__addVegetationIndex(ts_imgs=ts_imgs, labels=labels)
+
         # TODO fill nan values
         lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
+
         # TODO ignore nan values
         lst_ds[:len(lst_ds) // 2] = self.__preprocessingSatelliteImages(ds_imgs=lst_ds[:len(lst_ds) // 2])
 

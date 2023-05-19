@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Union
 
 from mlfire.data.loader import DatasetLoader
-from mlfire.earthengine.collections import ModisIndex, ModisReflectanceSpectralBands
+from mlfire.earthengine.collections import ModisCollection, ModisReflectanceSpectralBands
 from mlfire.earthengine.collections import FireLabelsCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 
@@ -39,7 +39,7 @@ class DatasetView(DatasetLoader):
     def __init__(self,
                  lst_satimgs: Union[tuple[str], list[str]],
                  lst_labels: Union[tuple[str], list[str]],
-                 modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -250,7 +250,7 @@ class DatasetView(DatasetLoader):
 
     def __getSatelliteImageArray(self, img_id: int) -> _np.ndarray:
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             return self.__getSatelliteImageArray_MODIS(img_id)
         else:
             raise NotImplementedError
@@ -290,7 +290,7 @@ class DatasetView(DatasetLoader):
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                      brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.), show: bool = True, ax=None) -> None:
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
         else:
             raise NotImplementedError
@@ -679,7 +679,7 @@ class DatasetView(DatasetLoader):
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to satellite images!')
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
         else:
             raise NotImplementedError

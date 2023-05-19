@@ -4,7 +4,7 @@ import os
 from typing import Union
 
 # collections
-from mlfire.earthengine.collections import FireLabelsCollection, ModisIndex
+from mlfire.earthengine.collections import FireLabelsCollection, ModisCollection
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
 # import utils
@@ -21,7 +21,7 @@ class DatasetLoader(object):  # TODO rename to data set base
                  lst_labels: Union[tuple[str], list[str]],
                  test_ratio: float = .33,
                  val_ratio: float = .0,
-                 modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -37,9 +37,13 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._map_band_id_label = None
 
         self._nimgs = 0
-        self._nbands_label = 0
+        self._nbands_label = 0  # TODO rename
 
         # training and test data set
+
+        # TODO move to ts.py
+
+        self._nfeatures_ts = 0  # TODO rename
 
         self._ds_training = None
         self._ds_test = None
@@ -103,12 +107,12 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._lst_satimgs = lst_fn
 
     @property
-    def modis_collection(self) -> ModisIndex:
+    def modis_collection(self) -> ModisCollection:
 
         return self._modis_collection
 
     @modis_collection.setter
-    def modis_collection(self, collection: ModisIndex) -> None:
+    def modis_collection(self, collection: ModisCollection) -> None:
 
         if self.modis_collection == collection:
             return
@@ -274,6 +278,7 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         gc.collect()  # invoke garbage collector
 
+        self._nfeatures_ts = 0  # TODO rename nbands_img?
         self._nimgs = 0
         self._nbands_label = 0
 
@@ -377,7 +382,7 @@ class DatasetLoader(object):  # TODO rename to data set base
             except IOError:
                 raise IOError('Cannot load any of following satellite images: {}'.format(self.lst_satimgs))
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             try:
                 self.__processBandDates_SATIMG_MODIS_REFLECTANCE()
             except ValueError:
@@ -434,7 +439,7 @@ class DatasetLoader(object):  # TODO rename to data set base
                 raise ValueError(msg.format(self.lst_satimgs))
 
         try:
-            if self.modis_collection == ModisIndex.REFLECTANCE:
+            if self.modis_collection == ModisCollection.REFLECTANCE:
                 self.__processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE()
             else:
                 raise NotImplementedError
