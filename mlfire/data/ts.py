@@ -634,15 +634,19 @@ class DataAdapterTS(DatasetView):
 
     def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
+        utils_time = lazy_import('mlfire.utils.time')
+
         if DatasetTransformOP.STANDARTIZE_ZSCORE not in self._lst_transform_ops:
             ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
 
-        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
-            return self.__transformTimeseries_PCA_FIT_ALL_BANDS(ts_imgs=ts_imgs)
-        elif self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
-            return self.__transformTimeseries_PCA_FIT_PER_BAND(ts_imgs=ts_imgs)
-        else:
-            raise NotImplementedError
+        with utils_time.elapsed_timer('Transforming data using PCA'):
+
+            if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
+                return self.__transformTimeseries_PCA_FIT_ALL_BANDS(ts_imgs=ts_imgs)
+            elif self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
+                return self.__transformTimeseries_PCA_FIT_PER_BAND(ts_imgs=ts_imgs)
+            else:
+                raise NotImplementedError
 
     def __transformTimeseries_PCA_TRANSFORM_PER_BAND(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
