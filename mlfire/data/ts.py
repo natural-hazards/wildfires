@@ -29,11 +29,10 @@ class DatasetSplitOpt(Enum):
 class DatasetTransformOP(Enum):
 
     NONE = 0
-    SCALE = 1
-    STANDARTIZE_ZSCORE = 2
-    PCA = 4
-    PCA_PER_BAND = 8
-    SAVITZKY_GOLAY = 16
+    STANDARTIZE_ZSCORE = 1
+    PCA = 2
+    PCA_PER_BAND = 4
+    SAVITZKY_GOLAY = 8
 
 
 class VegetationIndex(Enum):
@@ -494,10 +493,9 @@ class DataAdapterTS(DatasetView):
         else:
             satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
 
-        # scale pixel values using MODIS scale factor
+        # scale pixel values using MODIS scale factor (0.0001)
         # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-        if self._transform_ops & DatasetTransformOP.SCALE.value == DatasetTransformOP.SCALE.value:
-            satimg_ts /= 1e-4
+        satimg_ts /= 1e-4
 
         # TODO #bands related to MODIS as constant
         self._nfeatures_ts = 7
