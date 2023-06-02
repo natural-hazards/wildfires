@@ -265,16 +265,10 @@ class EarthEngineBatch(object):
         if self._collection_img_modis is not None:
             return
 
-        self._collection_img_modis = earthengine.ImageCollection(self._modis_index.value)
-
         if self._modis_index == ModisCollection.REFLECTANCE:
             self._collection_img_modis = self._collection_img_modis.select('sur_refl.+')
         elif self._modis_index == ModisCollection.LST:
             self._collection_img_modis = self._collection_img_modis.select('LST_Day.+')
-        elif self._modis_index == ModisCollection.EVI:
-            self._collection_img_modis = self._collection_img_modis.select('EVI')
-        elif self._collection_img_modis == ModisCollection.NDVI:
-            self._collection_img_modis = self._collection_img_modis.select('NDVI')
 
     def __loadLabels(self) -> None:
 
@@ -403,7 +397,7 @@ if __name__ == '__main__':
             startdate=start_date,
             enddate=end_date
         )
-        earthengine_batch.export_flag = ExportData.LABEL
+        earthengine_batch.export_flag = ExportData.SATIMG
 
         earthengine_batch.crs = CRS.ALASKA_ALBERS
         earthengine_batch.resolution_per_pixel = 500  # pixel corresponds to resolution 500x500 meters
@@ -417,9 +411,9 @@ if __name__ == '__main__':
         earthengine_batch.gdrive_folder = 'AK_{}'.format(y)
         earthengine_batch.submit()
 
-        # earthengine_batch.export_flag = ExportData.LABEL
-        # earthengine_batch.labels_collection = FireLabelsCollection.CCI
-        # earthengine_batch.submit()
+        earthengine_batch.export_flag = ExportData.LABEL
+        earthengine_batch.labels_collection = FireLabelsCollection.CCI
+        earthengine_batch.submit()
 
         # print task list (running or ready)
         earthengine_batch.task_list()

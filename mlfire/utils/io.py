@@ -20,18 +20,23 @@ class FileFormat(Enum):
     HDF5 = 2
 
 
-def saveDatasetT_PETSC_BINARY(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np.ndarray, _np.ndarray]], fn) -> None:
+def saveDataset_PETSC_BINARY(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np.ndarray, _np.ndarray]], fn) -> None:
 
-    ts = ds[0]
-    labels = ds[1]
+    raise NotImplementedError
 
-    vec_labels = labels.view(io_petsc.Vec)
-    # mat_ts = ts.view(PetscBinaryIO.MatDense) this is not supported yet
-    mat_ts = _scipy_sparse.csr_matrix(ts)
-    petsc_ds = (mat_ts, vec_labels)
-
-    io = io_petsc.PetscBinaryIO()
-    io.writeBinaryFile(fn, petsc_ds)
+    # ts = ds[0]
+    # labels = ds[1]
+    #
+    # ts_pixels = ts.reshape((-1, ds[0].shape[2]))
+    # labels = labels.reshape(-1)
+    #
+    # vec_labels = labels.view(io_petsc.Vec)
+    # # mat_ts = ts.view(PetscBinaryIO.MatDense) this is not supported yet
+    # mat_ts = _scipy_sparse.csr_matrix(ts_pixels)
+    # petsc_ds = (mat_ts, vec_labels)
+    #
+    # io = io_petsc.PetscBinaryIO()
+    # io.writeBinaryFile(fn, petsc_ds)
 
 
 def saveDataset_HDF5(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np.ndarray, _np.ndarray]], fn: str) -> None:
@@ -39,33 +44,52 @@ def saveDataset_HDF5(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np.ndarray
     ts = ds[0]
     labels = ds[1]
 
+    # store binary mask
+    mask = _np.isnan(labels)
+
+    # reshape data set
+    ts_pixels = ts.reshape((-1, ds[0].shape[2]))
+    labels = labels.reshape(-1)
+
+    ts_pixels_drop_nans = ts_pixels[~mask.reshape(-1), :]
+    labels_drop_nans = labels[~mask.reshape(-1)]
+
     with io_h5py.File(fn, 'w') as hf:
 
         str_type = 'double'
         attr_name = 'MATLAB_class'
 
-        # create matrix of feature vectors
-        ts = _np.transpose(ts)
+        # store matrix of feature vectors
+        ts_pixels_drop_nans = _np.transpose(ts_pixels_drop_nans)
 
-        hfds = hf.create_dataset('X', shape=ts.shape, dtype=_np.float64, data=ts)
+        hfds = hf.create_dataset('X', shape=ts_pixels_drop_nans.shape, dtype=_np.float64, data=ts_pixels_drop_nans)
         ascii_type = io_h5py.string_dtype('ascii', 6)
         hfds.attrs[attr_name] = _np.array(str_type.encode('ascii'), dtype=ascii_type)
 
-        # create vector of labels
-        hf.create_dataset('y', shape=labels.shape, dtype=_np.float64, data=labels)
+        # store vector of labels
+        hf.create_dataset('y', shape=labels_drop_nans.shape, dtype=_np.float64, data=labels_drop_nans)
+
+        # store mask of labels
+        hf.create_dataset('mask', shape=mask.shape, dtype=_np.bool_, data=mask)
 
 
 def saveDataset(ds: tuple[_np.ndarray], fn: str, file_format: FileFormat = FileFormat.HDF5) -> None:
 
-    ts_img = ds[0]; labels = ds[1]
-
-    # reshape
-    ts_pixels = ts_img.reshape((-1, ts_img.shape[2]))
-    labels = labels.reshape(-1)
+    ts_img = ds[0]
+    labels = ds[1]
 
     if file_format == FileFormat.PETSC_BINARY:
-        saveDatasetT_PETSC_BINARY(ds=(ts_pixels, labels), fn=fn)
+        saveDataset_PETSC_BINARY(ds=(ts_img, labels), fn=fn)
     elif file_format == FileFormat.HDF5:
-        saveDataset_HDF5(ds=(ts_pixels, labels), fn=fn)
+        saveDataset_HDF5(ds=(ts_img, labels), fn=fn)
     else:
         raise NotImplementedError
+
+
+def loadArrayHDF5(fn: str, obj_name: str) -> _np.ndarray:
+
+    with io_h5py.File(fn, 'r') as hf:
+
+        y = _np.array(hf[obj_name][:])
+
+    return y
