@@ -48,8 +48,11 @@ def saveDataset_HDF5(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np.ndarray
     mask = _np.isnan(labels)
 
     # reshape data set
-    ts_pixels = ts.reshape((-1, ds[0].shape[2]))
-    labels = labels.reshape(-1)
+    if len(ds[0].shape) > 2:
+        ts_pixels = ts.reshape((-1, ds[0].shape[2]))
+        labels = labels.reshape(-1)
+    else:
+        ts_pixels = ts
 
     ts_pixels_drop_nans = ts_pixels[~mask.reshape(-1), :]
     labels_drop_nans = labels[~mask.reshape(-1)]
