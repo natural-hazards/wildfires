@@ -539,12 +539,16 @@ class DataAdapterTS(DatasetView):
 
     def __transformTimeseries(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
+        utils_time = lazy_import('mlfire.utils.time')
+
         NFEATURES_TS = self._nfeatures_ts  # implement #features ts as property
 
         # standardize data to have zero mean and unit standard deviation using z-score
         if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
 
-            ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
+            with utils_time.elapsed_timer('Standardize time series pixels using z-score'):
+
+                ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
 
         if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
 
