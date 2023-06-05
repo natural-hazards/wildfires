@@ -38,6 +38,12 @@ class CMapHelper(object):
 
         return rbg
 
+    def getRGBA(self, val: int):
+
+        rbga = self._scalar_map.to_rgba(val)
+
+        return rbga
+
     def save(self, filename: OSPath):
 
         n = self.vmax + 1
