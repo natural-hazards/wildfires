@@ -265,6 +265,8 @@ class EarthEngineBatch(object):
         if self._collection_img_modis is not None:
             return
 
+        self._collection_img_modis = earthengine.ImageCollection(self._modis_index.value)
+
         if self._modis_index == ModisCollection.REFLECTANCE:
             self._collection_img_modis = self._collection_img_modis.select('sur_refl.+')
         elif self._modis_index == ModisCollection.LST:
@@ -323,9 +325,9 @@ class EarthEngineBatch(object):
 
         labels_filtered = self._collection_img_labels.filterDate(self.startdate, self.enddate)
         labels_bands = labels_filtered.toBands()
-        if self.labels_collection == FireLabelsCollection.CCI:
-            # avoid inconsistent types
-            labels_bands = labels_bands.toInt16()
+        # if self.labels_collection == FireLabelsCollection.CCI:
+        # avoid inconsistent types
+        labels_bands = labels_bands.toInt16()
 
         _prefix = '' if self.output_prefix is None else '{}_'.format(self.output_prefix)
         _folder = getRandomString(10) if self.gdrive_folder is None else self.gdrive_folder
@@ -385,9 +387,9 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    fn_json = 'data/jsons/ak_area_100km.geojson'
+    fn_json = 'data/jsons/ak_area_500km.geojson'
 
-    for y in range(2005, 2006):
+    for y in range(2004, 2006):
 
         start_date = earthengine.Date('{}-01-01'.format(y))
         end_date = earthengine.Date('{}-01-01'.format(y + 1))
@@ -403,16 +405,16 @@ if __name__ == '__main__':
         earthengine_batch.resolution_per_pixel = 500  # pixel corresponds to resolution 500x500 meters
 
         earthengine_batch.task_description = 'MODIS-REFLECTANCE-AK-{}-JANUARY-DECEMBER-EPSG3338'.format(y)
-        earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_100km_epsg3338'.format(y)
+        earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_500km_epsg3338'.format(y)
 
         earthengine_batch.labels_collection = FireLabelsCollection.CCI
         earthengine_batch.modis_index = ModisCollection.REFLECTANCE
 
-        earthengine_batch.gdrive_folder = 'AK_{}'.format(y)
-        earthengine_batch.submit()
+        earthengine_batch.gdrive_folder = 'POC_AK_{}'.format(y)
+        # earthengine_batch.submit()
 
         earthengine_batch.export_flag = ExportData.LABEL
-        earthengine_batch.labels_collection = FireLabelsCollection.CCI
+        earthengine_batch.labels_collection = FireLabelsCollection.MTBS
         earthengine_batch.submit()
 
         # print task list (running or ready)
