@@ -21,6 +21,8 @@ _np = lazy_import('numpy')
 class SatImgViewOpt(Enum):
 
     CIR = 'Color Infrared, Vegetation'
+    EVI = 'EVI'
+    EVI_2BAND = '2 band EVI'
     NATURAL_COLOR = 'Natural Color'
     NDVI = 'NVDI'
     SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
@@ -115,7 +117,7 @@ class DatasetView(DatasetLoader):
         id_ds, start_band_id = self._map_start_satimgs[img_id]
         ds_satimg = self._ds_satimgs[id_ds]
 
-        # display as CIR image (color infrared - vegetation)
+        # display CIR representation of MODIS input (color infrared - vegetation)
         # https://eos.com/make-an-analysis/color-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
         ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
@@ -133,6 +135,45 @@ class DatasetView(DatasetLoader):
         cir_img[:, :, 2] = (ref_green + 100.) / 16100. * 255.
 
         return cir_img
+
+    def __getSatelliteImageArray_MODIS_EVI(self, img_id: int) -> _np.ndarray:
+
+        # lazy imports
+        cmap = lazy_import('mlfire.utils.cmap')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        # computing enhanced vegetation index
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+
+        # EVI constants
+        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
+
+        evi = None
+        try:
+            evi = _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+        except ZeroDivisionError:
+            evi = _np.where(evi == _np.inf, -99, evi)
+
+        # colour palette for displaying EVI
+        palette = [
+            'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
+            '74A901', '66A000', '529400', '3E8601', '207401', '056201',
+            '004C00', '023B01', '012E01', '011D01', '011301'
+        ]
+
+        cmap_helper = cmap.CMapHelper(lst_colors=palette, vmin=.2, vmax=.8)
+        img_evi = _np.uint8(cmap_helper.getRGBA(G * evi)[:, :, :-1] * 255)
+        img_evi[evi == -99] = [0, 0, 0]
+
+        return img_evi
 
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
@@ -239,6 +280,8 @@ class DatasetView(DatasetLoader):
             return self.__getSatelliteImageArray_MODIS_NATURAL_COLOR(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.CIR:
             return self.__getSatelliteImageArray_MODIS_CIR(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.EVI:
+            return self.__getSatelliteImageArray_MODIS_EVI(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.NDVI:
             return self.__getSatelliteImageArray_NDVI(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED1:
