@@ -58,6 +58,8 @@ def predict(xgb: _xgboost.XGBClassifier,
             with_cmat: bool = False,
             with_report: bool = False) -> _np.ndarray:
 
+    utils_report = lazy_import('mlfire.models.utils.report')
+
     ts_img: _np.ndarray = ds[0]
     labels: _np.ndarray = ds[1]
 
@@ -72,28 +74,14 @@ def predict(xgb: _xgboost.XGBClassifier,
     labels_pred = _np.empty(shape=labels.shape, dtype=labels.dtype); labels_pred[:] = _np.nan
     labels_pred[~_np.isnan(labels)] = xgb.predict(ts_pixels)
 
-    if with_report:
-        report(labels_true=labels, labels_pred=labels_pred)
+    utils_report.show_report(
+        labels_true=labels,
+        labels_pred=labels_pred,
+        with_aucroc=with_aucroc,
+        with_cmat=with_cmat,
+        with_report=with_report
+    )
 
-    if with_cmat and with_aucroc:
-
-        if with_report: print('\n')
-
-        plt_pylab = lazy_import('matplotlib.pylab')
-        _, axes = plt_pylab.subplots(1, 2, figsize=(10, 5))
-
-        plot_aucroc(labels_true=labels, labels_pred=labels_pred, ax=axes[0])
-        plot_cmat(labels_true=labels, labels_pred=labels_pred, ax=axes[1])
-
-    elif with_cmat:
-
-        plot_cmat(labels_true=labels, labels_pred=labels_pred)
-
-    elif with_aucroc:
-
-        plot_aucroc(labels_true=labels, labels_pred=labels_pred)
-
-    # change back to original shape
     labels_pred = labels_pred.reshape(ts_shape[0:2])
 
     return labels_pred
