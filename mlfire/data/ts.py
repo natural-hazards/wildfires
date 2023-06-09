@@ -39,7 +39,7 @@ class VegetationIndex(Enum):
 
     NONE = 0
     EVI = 2
-    EVI_2BAND = 4
+    EVI_2BAND = 4 # TODO EVI2
     NDVI = 8
 
 
@@ -769,7 +769,7 @@ class DataAdapterTS(DatasetView):
     Vegetation index
     """
 
-    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray) -> _np.ndarray:
+    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
 
         NFEATURES_TS = self._nfeatures_ts
 
@@ -780,13 +780,18 @@ class DataAdapterTS(DatasetView):
         ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
         ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
+        _np.seterr(divide='ignore')
+
         # constants
-        L = 1.
-        G = 2.5
-        C1 = 6.
-        C2 = 7.5
+        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
 
         evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+        ninf = _np.count_nonzero(evi == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in EVI. The will be removed from data set!')
+            labels[_np.any(evi == _np.inf, axis=2)] = _np.nan
+            evi = _np.where(evi == _np.inf, _np.nan, evi)
+
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
 
         # clean up and invoke garbage collector
@@ -796,7 +801,7 @@ class DataAdapterTS(DatasetView):
 
         return ts_imgs
 
-    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray) -> _np.ndarray:
+    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> [_np.ndarray, _np.ndarray]:
 
         NFEATURES_TS = self._nfeatures_ts
 
@@ -806,7 +811,17 @@ class DataAdapterTS(DatasetView):
         ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
         ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
+        _np.seterr(divide='ignore')
+
+        # compute EVI using 2 bands (nir and red)
         evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
+        ninf = _np.count_nonzero(evi2 == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in EVI2. The will be removed from data set!')
+            labels[_np.any(evi2 == _np.inf, axis=2)] = _np.nan
+            evi2 = _np.where(evi2 == _np.inf, _np.nan, evi2)
+
+        # add features
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
 
         # clean up and invoke garbage collector
@@ -814,7 +829,7 @@ class DataAdapterTS(DatasetView):
 
         self._nfeatures_ts += 1
 
-        return ts_imgs
+        return ts_imgs, labels
 
     def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
 
@@ -826,13 +841,17 @@ class DataAdapterTS(DatasetView):
         ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
         ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
-        ndvi = None
-        try:
-            ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
-        except ZeroDivisionError:
+        _np.seterr(divide='ignore')
+
+        # compute NDVI
+        ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
+        ninf = _np.count_nonzero(ndvi == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI. The will be removed from data set!')
             labels[_np.any(ndvi == _np.inf, axis=2)] = _np.nan
             ndvi = _np.where(ndvi == _np.inf, _np.nan, ndvi)
 
+        # add to features
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), ndvi, axis=2)
 
         # clean up and invoke garbage collector
@@ -853,10 +872,10 @@ class DataAdapterTS(DatasetView):
             out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=ts_imgs, labels=labels)
 
         if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
-            out_ts_imgs = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs)
+            out_ts_imgs = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
 
         if self._vi_ops & VegetationIndex.EVI_2BAND.value == VegetationIndex.EVI_2BAND.value:
-            out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs)
+            out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
 
         return out_ts_imgs, out_labels
 
@@ -1034,7 +1053,7 @@ class DataAdapterTS(DatasetView):
         # TODO fill nan values
         lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
 
-        # TODO ignore nan values
+        # TODO ignore nan labels
         lst_ds[:len(lst_ds) // 2] = self.__preprocessingSatelliteImages(ds_imgs=lst_ds[:len(lst_ds) // 2])
 
         if self.test_ratio > 0 and self.val_ratio > 0:

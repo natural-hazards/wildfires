@@ -22,7 +22,7 @@ class SatImgViewOpt(Enum):
 
     CIR = 'Color Infrared, Vegetation'
     EVI = 'EVI'
-    EVI_2BAND = '2 band EVI'
+    EVI2 = 'EVI2'
     NATURAL_COLOR = 'Natural Color'
     NDVI = 'NVDI'
     SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
@@ -138,42 +138,11 @@ class DatasetView(DatasetLoader):
 
     def __getSatelliteImageArray_MODIS_EVI(self, img_id: int) -> _np.ndarray:
 
-        # lazy imports
-        cmap = lazy_import('mlfire.utils.cmap')
+        raise NotImplementedError
 
-        id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs[id_ds]
+    def __getSatelliteImageArray_MODIS_EVI2(self, img_id: int) -> _np.ndarray:
 
-        # computing enhanced vegetation index
-        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
-
-        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
-        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
-
-        band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
-        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
-
-        # EVI constants
-        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
-
-        evi = None
-        try:
-            evi = _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
-        except ZeroDivisionError:
-            evi = _np.where(evi == _np.inf, -99, evi)
-
-        # colour palette for displaying EVI
-        palette = [
-            'FFFFFF', 'CE7E45', 'DF923D', 'F1B555', 'FCD163', '99B718',
-            '74A901', '66A000', '529400', '3E8601', '207401', '056201',
-            '004C00', '023B01', '012E01', '011D01', '011301'
-        ]
-
-        cmap_helper = cmap.CMapHelper(lst_colors=palette, vmin=.2, vmax=.8)
-        img_evi = _np.uint8(cmap_helper.getRGBA(G * evi)[:, :, :-1] * 255)
-        img_evi[evi == -99] = [0, 0, 0]
-
-        return img_evi
+        raise NotImplementedError
 
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
@@ -206,24 +175,25 @@ class DatasetView(DatasetLoader):
         ds_satimg = self._ds_satimgs[id_ds]
 
         # computing Normalized Difference Vegetation Index (NDVI)
-        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
 
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
-        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
 
         # Colour palette and thresholding inspired by
         # https://www.neonscience.org/resources/learning-hub/tutorials/calc-ndvi-tiles-py
         # Credit: Zachary Langford @langfordzl
         cmap = plt.get_cmap(name='RdYlGn') if self.ndvi_view_threshold > -1. else plt.get_cmap(name='seismic')
-        norm = mpl.colors.Normalize(vmin=self.ndvi_view_threshold, vmax=1)
 
-        ndvi = None
-        try:
-            ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
-        except ZeroDivisionError:
+        _np.seterr(divide='ignore')
+
+        ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
+        ninf = _np.count_nonzero(ndvi == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI')
             ndvi = _np.where(ndvi == _np.inf, -99, ndvi)
 
-        img_ndvi = _np.uint8(cmap(norm(ndvi))[:, :, :-1] * 255)
+        img_ndvi = _np.uint8(cmap(ndvi)[:, :, :-1] * 255)
         if self.ndvi_view_threshold > -1: img_ndvi[ndvi < self.ndvi_view_threshold] = [255, 255, 255]
         img_ndvi[ndvi == -99] = [0, 0, 0]
 
@@ -282,6 +252,8 @@ class DatasetView(DatasetLoader):
             return self.__getSatelliteImageArray_MODIS_CIR(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.EVI:
             return self.__getSatelliteImageArray_MODIS_EVI(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.EVI2:
+            return self.__getSatelliteImageArray_MODIS_EVI2(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.NDVI:
             return self.__getSatelliteImageArray_NDVI(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED1:
