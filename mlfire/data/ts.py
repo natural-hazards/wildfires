@@ -33,13 +33,14 @@ class DatasetTransformOP(Enum):
     PCA = 2
     PCA_PER_BAND = 4
     SAVITZKY_GOLAY = 8
+    NOT_PROCESS_UNCHARTED_PIXELS = 16
 
 
 class VegetationIndex(Enum):
 
     NONE = 0
     EVI = 2
-    EVI_2BAND = 4 # TODO EVI2
+    EVI2 = 4
     NDVI = 8
 
 
@@ -55,7 +56,7 @@ class DataAdapterTS(DatasetView):
                  test_ratio: float = 0.33,
                  val_ratio: float = 0.,
                  # add vegetation index
-                 vegetation_index: list[VegetationIndex] = list[VegetationIndex.NONE],
+                 vegetation_index: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),
                  # transformation operation
                  transform_ops: Union[tuple[DatasetTransformOP], list[DatasetTransformOP]] = (DatasetTransformOP.NONE,),
                  savgol_polyorder: int = 1,
@@ -495,7 +496,7 @@ class DataAdapterTS(DatasetView):
 
         # scale pixel values using MODIS scale factor (0.0001)
         # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-        satimg_ts /= 1e-4
+        satimg_ts /= 1e4
 
         # TODO #bands related to MODIS as constant
         self._nfeatures_ts = 7
@@ -710,7 +711,7 @@ class DataAdapterTS(DatasetView):
         gc.collect()  # invoke garbage collector
 
         # transform test and validation data set
-        for id_ds in range(1, len(ds_imgs)):
+        for id_ds in range(1, len(ds_imgs) // 2):
 
             ts_imgs = ds_imgs[id_ds]
 
@@ -731,8 +732,11 @@ class DataAdapterTS(DatasetView):
 
     def __preprocessingSatelliteImages(self, ds_imgs: list) -> list:
 
+        FLG_UNCHARTED_PIX = DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS.value
+        nds = len(ds_imgs) // 2
+
         try:
-            for id_ds in range(len(ds_imgs)):
+            for id_ds in range(nds):
 
                 ts_imgs = ds_imgs[id_ds]; tmp_shape = None
 
@@ -742,7 +746,16 @@ class DataAdapterTS(DatasetView):
                     # reshape image to time series related to pixels
                     ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
 
-                ts_imgs = self.__transformTimeseries(ts_imgs)
+                if self._transform_ops & FLG_UNCHARTED_PIX == FLG_UNCHARTED_PIX:
+                    labels = ds_imgs[id_ds + nds]
+                    if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
+
+                    mask = ~_np.isnan(labels)
+                    ts_imgs[mask, :] = self.__transformTimeseries(ts_imgs[mask, :])
+
+                    del mask; gc.collect()  # invoke garbage collector
+                else:
+                    ts_imgs = self.__transformTimeseries(ts_imgs)
 
                 if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                     # reshape back to series of satellite images
@@ -874,7 +887,7 @@ class DataAdapterTS(DatasetView):
         if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
             out_ts_imgs = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
 
-        if self._vi_ops & VegetationIndex.EVI_2BAND.value == VegetationIndex.EVI_2BAND.value:
+        if self._vi_ops & VegetationIndex.EVI2.value == VegetationIndex.EVI2.value:
             out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
 
         return out_ts_imgs, out_labels
@@ -1054,7 +1067,7 @@ class DataAdapterTS(DatasetView):
         lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
 
         # TODO ignore nan labels
-        lst_ds[:len(lst_ds) // 2] = self.__preprocessingSatelliteImages(ds_imgs=lst_ds[:len(lst_ds) // 2])
+        lst_ds = self.__preprocessingSatelliteImages(ds_imgs=lst_ds)
 
         if self.test_ratio > 0 and self.val_ratio > 0:
 
@@ -1099,9 +1112,9 @@ if __name__ == '__main__':
 
     DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
     TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
-    VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
+    VAL_RATIO = 0. # 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
 
-    TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.SAVITZKY_GOLAY]
+    TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS]
     PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
 
     lst_satimgs = []
