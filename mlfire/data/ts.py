@@ -755,7 +755,7 @@ class DataAdapterTS(DatasetView):
                 # transform
                 mask = ~_np.isnan(labels)
 
-                tmp_imgs = np.empty(shape=(ts_imgs.shape[0], NFEATURES_TS), dtype=ts_imgs.dtype);
+                tmp_imgs = np.empty(shape=(ts_imgs.shape[0], NFEATURES_TS), dtype=ts_imgs.dtype)
                 tmp_imgs[:, :] = _np.nan
 
                 tmp_imgs[mask, :] = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs[mask, :])
@@ -859,7 +859,7 @@ class DataAdapterTS(DatasetView):
 
         self._nfeatures_ts += 1
 
-        return ts_imgs
+        return ts_imgs, labels
 
     def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> [_np.ndarray, _np.ndarray]:
 
@@ -929,13 +929,13 @@ class DataAdapterTS(DatasetView):
         out_ts_imgs = ts_imgs; out_labels = labels
 
         if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=ts_imgs, labels=labels)
+            out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=out_ts_imgs, labels=out_labels)
 
         if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
-            out_ts_imgs = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
+            out_ts_imgs, out_labels = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
 
         if self._vi_ops & VegetationIndex.EVI2.value == VegetationIndex.EVI2.value:
-            out_ts_imgs = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
+            out_ts_imgs, out_labels = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
 
         return out_ts_imgs, out_labels
 
