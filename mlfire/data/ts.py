@@ -6,6 +6,8 @@ import os
 from enum import Enum
 from typing import Union
 
+import numpy as np
+
 from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
 from mlfire.earthengine.collections import ModisCollection
 from mlfire.earthengine.collections import FireLabelsCollection
@@ -300,7 +302,7 @@ class DataAdapterTS(DatasetView):
     @property
     def pca_nfactors(self) -> int:
 
-        return self._nfactors_pca
+        return self._pca_nfactors
 
     @pca_nfactors.setter
     def pca_nfactors(self, n) -> None:
@@ -309,7 +311,7 @@ class DataAdapterTS(DatasetView):
             return
 
         self._reset()
-        self._nfactors_pca = n
+        self._pca_nfactors = n
 
     @property
     def pca_retained_variance(self) -> float:
@@ -620,6 +622,7 @@ class DataAdapterTS(DatasetView):
                 extractor_pca.fit()
 
         self._lst_extractors_pca = lst_extractors
+        self._pca_nfactors = nlatent_factors_found
 
     def __transformTimeseries_PCA_FIT_ALL_BANDS(self, ts_imgs: _np.ndarray) -> None:
 
@@ -636,6 +639,7 @@ class DataAdapterTS(DatasetView):
 
         extractor_pca.fit()
         self._lst_extractors_pca = [extractor_pca]
+        self._pca_nfactors = extractor_pca.nlatent_factors
 
     def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
@@ -693,14 +697,37 @@ class DataAdapterTS(DatasetView):
 
     def __transformTimeseries_PCA(self, ds_imgs: list) -> list:
 
+        FLG_UNCHARTED_PIXS = DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS.value
+        NFEATURES_TS = self._nfeatures_ts
+        nds = len(ds_imgs) // 2
+
         ts_imgs = ds_imgs[0]; tmp_shape = None
 
         if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
             tmp_shape = ts_imgs.shape
             ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
 
-        self.__transformTimeseries_PCA_FIT(ts_imgs)
-        ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs)
+        if self._transform_ops & FLG_UNCHARTED_PIXS == FLG_UNCHARTED_PIXS:
+            labels = ds_imgs[nds]
+            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
+
+            # fit
+            mask = ~_np.isnan(labels)
+            self.__transformTimeseries_PCA_FIT(ts_imgs[mask, :])
+
+            # transform
+            NFEATURES_TS *= self.pca_nfactors
+            tmp_imgs = np.empty(shape=(ts_imgs.shape[0], NFEATURES_TS), dtype=ts_imgs.dtype); tmp_imgs[:, :] = _np.nan
+
+            tmp_imgs[mask, :] = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs[mask, :])
+            del ts_imgs; gc.collect()  # invoke garbage collector
+
+            ts_imgs = tmp_imgs
+
+            del mask; gc.collect()  # invoke garbage collector
+        else:
+            self.__transformTimeseries_PCA_FIT(ts_imgs)
+            ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs)
 
         if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
             ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
@@ -720,7 +747,25 @@ class DataAdapterTS(DatasetView):
                 ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
 
             standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
-            ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs, standardize=standardize)
+
+            if self._transform_ops & FLG_UNCHARTED_PIXS == FLG_UNCHARTED_PIXS:
+                labels = ds_imgs[nds + id_ds]
+                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
+
+                # transform
+                mask = ~_np.isnan(labels)
+
+                tmp_imgs = np.empty(shape=(ts_imgs.shape[0], NFEATURES_TS), dtype=ts_imgs.dtype);
+                tmp_imgs[:, :] = _np.nan
+
+                tmp_imgs[mask, :] = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs[mask, :])
+                del ts_imgs; gc.collect()  # invoke garbage collector
+
+                ts_imgs = tmp_imgs
+
+                del mask; gc.collect()  # invoke garbage collector
+            else:
+                ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs, standardize=standardize)
 
             if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
                 #
@@ -732,7 +777,7 @@ class DataAdapterTS(DatasetView):
 
     def __preprocessingSatelliteImages(self, ds_imgs: list) -> list:
 
-        FLG_UNCHARTED_PIX = DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS.value
+        FLG_UNCHARTED_PIXS = DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS.value
         nds = len(ds_imgs) // 2
 
         try:
@@ -746,12 +791,14 @@ class DataAdapterTS(DatasetView):
                     # reshape image to time series related to pixels
                     ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
 
-                if self._transform_ops & FLG_UNCHARTED_PIX == FLG_UNCHARTED_PIX:
+                if self._transform_ops & FLG_UNCHARTED_PIXS == FLG_UNCHARTED_PIXS:
                     labels = ds_imgs[id_ds + nds]
-                    if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
 
+                    if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
                     mask = ~_np.isnan(labels)
+
                     ts_imgs[mask, :] = self.__transformTimeseries(ts_imgs[mask, :])
+                    ts_imgs[~mask, :] = _np.nan
 
                     del mask; gc.collect()  # invoke garbage collector
                 else:
