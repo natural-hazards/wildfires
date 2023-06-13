@@ -41,7 +41,7 @@ if __name__ == '__main__':
     PCA_RETAINED_VARIANCE = .99
 
     VegetationIndex = _data_ts.VegetationIndex
-    VI_OPS = [VegetationIndex.EVI_2BAND]
+    VI_OPS = [VegetationIndex.EVI]
 
     lst_satimgs = []
     lst_labels = []
@@ -109,7 +109,7 @@ if __name__ == '__main__':
 
     print('\n============================\nInference on a train data set\n')
 
-    _xgboost_inference.predict(
+    labels_train_pred = _xgboost_inference.predict(
         xgb=xgb,
         ds=ds_train,
         with_report=True,
@@ -117,7 +117,7 @@ if __name__ == '__main__':
 
     print('\n============================\nInference on a test data set\n')
 
-    _xgboost_inference.predict(
+    labels_train_pred = _xgboost_inference.predict(
         xgb=xgb,
         ds=ds_test,
         with_report=True,

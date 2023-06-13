@@ -1009,15 +1009,15 @@ class DataAdapterTS(DatasetView):
             rows, _, _ = satimg_ts_train.shape
             hi_rows = int(rows * (1. - self.val_ratio))
 
-            satimg_ts_val = satimg_ts_train[hi_rows:, :, :]; labels_val = labels_train[hi_rows:, :, :]
-            satimg_ts_train = satimg_ts_train[:hi_rows, :, :]; labels_train = labels_train[:hi_rows, :, :]
+            satimg_ts_val = satimg_ts_train[hi_rows:, :, :]; labels_val = labels_train[hi_rows:, :]
+            satimg_ts_train = satimg_ts_train[:hi_rows, :, :]; labels_train = labels_train[:hi_rows, :]
 
         else:
 
             satimg_ts_val = labels_val = None
 
         if self.test_ratio > 0. and self.val_ratio > 0.:
-            return [satimg_ts_train, satimg_ts_test, satimg_ts_val, labels_train, labels_test, satimg_ts_val]
+            return [satimg_ts_train, satimg_ts_test, satimg_ts_val, labels_train, labels_test, labels_val]
         elif self.test_ratio > 0.:
             return [satimg_ts_train, satimg_ts_test, labels_train, labels_test]
         elif self.val_ratio > 0.:
@@ -1053,7 +1053,7 @@ class DataAdapterTS(DatasetView):
             ts_imgs_val = labels_val = None
 
         if self.test_ratio > 0. and self.val_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val]
+            return [ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, labels_val]
         elif self.test_ratio > 0.:
             return [ts_imgs_train, ts_imgs_test, labels_train, labels_test]
         elif self.val_ratio > 0.:
@@ -1159,7 +1159,7 @@ if __name__ == '__main__':
 
     DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
     TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
-    VAL_RATIO = 0. # 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
+    VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
 
     TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS]
     PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
