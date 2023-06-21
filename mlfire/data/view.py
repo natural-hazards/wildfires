@@ -138,11 +138,81 @@ class DatasetView(DatasetLoader):
 
     def __getSatelliteImageArray_MODIS_EVI(self, img_id: int) -> _np.ndarray:
 
-        raise NotImplementedError
+        cmap = lazy_import('mlfire.utils.cmap')
 
-    def __getSatelliteImageArray_MODIS_EVI2(self, img_id: int) -> _np.ndarray:
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
 
-        raise NotImplementedError
+        band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        _np.seterr(divide='ignore')
+
+        # constants
+        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
+
+        # EVI computation
+        evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+        ninf = _np.count_nonzero(evi == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI')
+            evi = _np.where(evi == _np.inf, -99, evi)
+
+        # Colour palette and thresholding inspired by
+        # https://developers.google.com/earth-engine/datasets/catalog/MODIS_MOD09GA_006_EVI#description
+        # Credit: Zachary Langford @langfordzl
+        lst_colors = [
+            '#ffffff', '#ce7e45', '#df923d', '#f1b555', '#fcd163', '#99b718', '#74a901',
+            '#66a000', '#529400', '#3e8601', '#207401', '#056201', '#004c00', '#023b01',
+            '#012e01', '#011d01', '#011301'
+        ]
+
+        # get EVI2 heat map
+        cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
+        img_evi = cmap_helper.getRGBA(evi)[:, :, :-1]
+        img_evi[evi == -99, :] = [0, 0, 0]
+
+        return img_evi
+
+    def __getSatelliteImageArray_MODIS_EVI2(self, img_id: int):
+
+        cmap = lazy_import('mlfire.utils.cmap')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1.)
+        ninf = _np.count_nonzero(evi2 == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI')
+            evi2 = _np.where(evi2 == _np.inf, -99, evi2)
+
+        # Colour palette and thresholding inspired by
+        # https://developers.google.com/earth-engine/datasets/catalog/MODIS_MOD09GA_006_EVI#description
+        # Credit: Zachary Langford @langfordzl
+        lst_colors = [
+            '#ffffff', '#ce7e45', '#df923d', '#f1b555', '#fcd163', '#99b718', '#74a901',
+            '#66a000', '#529400', '#3e8601', '#207401', '#056201', '#004c00', '#023b01',
+            '#012e01', '#011d01', '#011301'
+        ]
+
+        # get EVI2 heat map
+        cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
+        img_evi2 = cmap_helper.getRGBA(evi2)[:, :, :-1]
+        img_evi2[evi2 == -99, :] = [0, 0, 0]
+
+        return img_evi2
 
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
@@ -168,7 +238,6 @@ class DatasetView(DatasetLoader):
     def __getSatelliteImageArray_NDVI(self, img_id: int) -> _np.ndarray:
 
         # lazy imports
-        mpl = lazy_import('matplotlib')
         plt = lazy_import('matplotlib.pylab')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
@@ -288,7 +357,11 @@ class DatasetView(DatasetLoader):
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
 
         satimg = self.__getSatelliteImageArray(id_img)
-        if brightness_factors is not None and self.satimg_view_opt != SatImgViewOpt.NDVI:
+        if brightness_factors is not None and \
+                self.satimg_view_opt != SatImgViewOpt.NDVI and \
+                self.satimg_view_opt != SatImgViewOpt.EVI and \
+                self.satimg_view_opt != SatImgViewOpt.EVI2:
+
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
@@ -759,3 +832,7 @@ if __name__ == '__main__':
     dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 0)
     dataset_view.showFireLabels(19 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     dataset_view.showFireLabels(range(18, 20) if LABEL_COLLECTION == FireLabelsCollection.CCI else range(0, 2))
+
+    # view evi and evi2
+    dataset_view.satimg_view_opt = SatImgViewOpt.EVI2
+    dataset_view.showSatImage(70, show=True)

@@ -390,7 +390,7 @@ class DataAdapterTS(DatasetView):
 
             end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
             end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
-            id_bands = (start_label_index, end_label_index)
+            id_bands = range(start_label_index, end_label_index + 1)
 
         else:
 
@@ -426,7 +426,7 @@ class DataAdapterTS(DatasetView):
         if len_ds > 1:
 
             rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
-            nbands = self._ds_satimgs[0].RasterCount  # TODO rename -> nrasters
+            nrasters = self._ds_satimgs[0].RasterCount
 
             for id_img in range(1, len_ds):
 
@@ -435,10 +435,10 @@ class DataAdapterTS(DatasetView):
                 if rows != tmp_img.RasterYSize or cols != tmp_img.RasterXSize:
                     raise RuntimeError('Inconsistent shape among sources!')
 
-                nbands += tmp_img.RasterCount
+                nrasters += tmp_img.RasterCount
 
             # allocate an empty array
-            satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
+            satimg_ts = _np.empty(shape=(rows, cols, nrasters), dtype=_np.float32)
             rstart = rend = 0
 
             for id_img in range(len_ds):
@@ -524,7 +524,7 @@ class DataAdapterTS(DatasetView):
 
     def __transformTimeseries_STANDARTIZE_ZSCORE(self, ts_imgs: _np.ndarray) -> _np.ndarray:
 
-        from scipy import stats  # TODO lazy import
+        stats = lazy_import('scipy.stats')
 
         NFEATURES_TS = self._nfeatures_ts  # TODO implement for additional indexes such as NDVI and LST
 
@@ -1113,7 +1113,6 @@ class DataAdapterTS(DatasetView):
         # TODO fill nan values
         lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
 
-        # TODO ignore nan labels
         lst_ds = self.__preprocessingSatelliteImages(ds_imgs=lst_ds)
 
         if self.test_ratio > 0 and self.val_ratio > 0:
@@ -1153,8 +1152,8 @@ if __name__ == '__main__':
     DATA_DIR = 'data/tifs'
     PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    LABEL_COLLECTION = FireLabelsCollection.MTBS
-    # LABEL_COLLECTION = FireLabelsCollection.CCI
+    # LABEL_COLLECTION = FireLabelsCollection.MTBS
+    LABEL_COLLECTION = FireLabelsCollection.CCI
     STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
 
     DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
