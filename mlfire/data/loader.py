@@ -4,7 +4,7 @@ import os
 from typing import Union
 
 # collections
-from mlfire.earthengine.collections import FireLabelsCollection, ModisIndex
+from mlfire.earthengine.collections import FireLabelsCollection, ModisCollection
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
 # import utils
@@ -21,7 +21,7 @@ class DatasetLoader(object):  # TODO rename to data set base
                  lst_labels: Union[tuple[str], list[str]],
                  test_ratio: float = .33,
                  val_ratio: float = .0,
-                 modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -37,9 +37,13 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._map_band_id_label = None
 
         self._nimgs = 0
-        self._nbands_label = 0
+        self._nbands_label = 0  # TODO rename
 
         # training and test data set
+
+        # TODO move to ts.py
+
+        self._nfeatures_ts = 0  # TODO rename
 
         self._ds_training = None
         self._ds_test = None
@@ -103,12 +107,12 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._lst_satimgs = lst_fn
 
     @property
-    def modis_collection(self) -> ModisIndex:
+    def modis_collection(self) -> ModisCollection:
 
         return self._modis_collection
 
     @modis_collection.setter
-    def modis_collection(self, collection: ModisIndex) -> None:
+    def modis_collection(self, collection: ModisCollection) -> None:
 
         if self.modis_collection == collection:
             return
@@ -274,6 +278,7 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         gc.collect()  # invoke garbage collector
 
+        self._nfeatures_ts = 0  # TODO rename nbands_img?
         self._nimgs = 0
         self._nbands_label = 0
 
@@ -377,7 +382,7 @@ class DatasetLoader(object):  # TODO rename to data set base
             except IOError:
                 raise IOError('Cannot load any of following satellite images: {}'.format(self.lst_satimgs))
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             try:
                 self.__processBandDates_SATIMG_MODIS_REFLECTANCE()
             except ValueError:
@@ -434,7 +439,7 @@ class DatasetLoader(object):  # TODO rename to data set base
                 raise ValueError(msg.format(self.lst_satimgs))
 
         try:
-            if self.modis_collection == ModisIndex.REFLECTANCE:
+            if self.modis_collection == ModisCollection.REFLECTANCE:
                 self.__processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE()
             else:
                 raise NotImplementedError
@@ -626,23 +631,23 @@ class DatasetLoader(object):  # TODO rename to data set base
 # tests
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    VAR_DATA_DIR = 'data/tifs'
+    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    lst_satimgs = []
-    lst_labels_mtbs = []
+    VAR_LST_SATIMGS = []
+    VAR_LST_LABELS_MTBS = []
 
     for year in range(2004, 2006):
-        PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
+        PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
 
-        fn_satimg = os.path.join(DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        lst_satimgs.append(fn_satimg)
+        fn_satimg = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
+        VAR_LST_SATIMGS.append(fn_satimg)
 
-        fn_labels_mtbs = os.path.join(DATA_DIR, '{}_epsg3338_area_0_mtbs_labels.tif'.format(PREFIX_IMG_YEAR))
-        lst_labels_mtbs.append(fn_labels_mtbs)
+        fn_labels_mtbs = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0_mtbs_labels.tif'.format(PREFIX_IMG_YEAR))
+        VAR_LST_LABELS_MTBS.append(fn_labels_mtbs)
 
     # setup of data set loader
     dataset_loader = DatasetLoader(
-        lst_satimgs=lst_satimgs,
-        lst_labels=lst_labels_mtbs
+        lst_satimgs=VAR_LST_SATIMGS,
+        lst_labels=VAR_LST_LABELS_MTBS
     )

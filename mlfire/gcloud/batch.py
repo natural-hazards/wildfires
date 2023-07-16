@@ -6,7 +6,7 @@ import geojson
 
 from enum import Enum
 
-from mlfire.earthengine.collections import ModisIndex, FireLabelsCollection
+from mlfire.earthengine.collections import ModisCollection, FireLabelsCollection
 from mlfire.utils.utils_string import getRandomString
 
 
@@ -39,7 +39,7 @@ class EarthEngineBatch(object):
                  file_json: str,
                  startdate: earthengine.Date = None,
                  enddate: earthengine.Date = None,
-                 modis_index: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_index: ModisCollection = ModisCollection.REFLECTANCE,
                  labels_collection: FireLabelsCollection = FireLabelsCollection.CCI,
                  export: ExportData = ExportData.ALL,
                  resolution_per_pixel: int = 500,
@@ -145,12 +145,12 @@ class EarthEngineBatch(object):
         self._json_rois = fn
 
     @property
-    def modis_index(self) -> ModisIndex:
+    def modis_index(self) -> ModisCollection:
 
         return self._modis_index
 
     @modis_index.setter
-    def modis_index(self, index: ModisIndex) -> None:
+    def modis_index(self, index: ModisCollection) -> None:
 
         self._modis_index = index
 
@@ -267,14 +267,10 @@ class EarthEngineBatch(object):
 
         self._collection_img_modis = earthengine.ImageCollection(self._modis_index.value)
 
-        if self._modis_index == ModisIndex.REFLECTANCE:
+        if self._modis_index == ModisCollection.REFLECTANCE:
             self._collection_img_modis = self._collection_img_modis.select('sur_refl.+')
-        elif self._modis_index == ModisIndex.LST:
+        elif self._modis_index == ModisCollection.LST:
             self._collection_img_modis = self._collection_img_modis.select('LST_Day.+')
-        elif self._modis_index == ModisIndex.EVI:
-            self._collection_img_modis = self._collection_img_modis.select('EVI')
-        elif self._collection_img_modis == ModisIndex.NDVI:
-            self._collection_img_modis = self._collection_img_modis.select('NDVI')
 
     def __loadLabels(self) -> None:
 
@@ -329,9 +325,9 @@ class EarthEngineBatch(object):
 
         labels_filtered = self._collection_img_labels.filterDate(self.startdate, self.enddate)
         labels_bands = labels_filtered.toBands()
-        if self.labels_collection == FireLabelsCollection.CCI:
-            # avoid inconsistent types
-            labels_bands = labels_bands.toInt16()
+        # if self.labels_collection == FireLabelsCollection.CCI:
+        # avoid inconsistent types
+        labels_bands = labels_bands.toInt16()
 
         _prefix = '' if self.output_prefix is None else '{}_'.format(self.output_prefix)
         _folder = getRandomString(10) if self.gdrive_folder is None else self.gdrive_folder
@@ -391,35 +387,35 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    fn_json = 'data/jsons/ak_area_100km.geojson'
+    VAR_FN_JSON = 'data/jsons/ak_area_500km.geojson'
 
-    for y in range(2005, 2006):
+    for y in range(2004, 2006):
 
-        start_date = earthengine.Date('{}-01-01'.format(y))
-        end_date = earthengine.Date('{}-01-01'.format(y + 1))
+        VAR_START_DATE = earthengine.Date('{}-01-01'.format(y))
+        VAR_END_DATE = earthengine.Date('{}-01-01'.format(y + 1))
 
         earthengine_batch = EarthEngineBatch(
-            file_json=fn_json,
-            startdate=start_date,
-            enddate=end_date
+            file_json=VAR_FN_JSON,
+            startdate=VAR_START_DATE,
+            enddate=VAR_END_DATE
         )
-        earthengine_batch.export_flag = ExportData.LABEL
+        earthengine_batch.export_flag = ExportData.SATIMG
 
         earthengine_batch.crs = CRS.ALASKA_ALBERS
         earthengine_batch.resolution_per_pixel = 500  # pixel corresponds to resolution 500x500 meters
 
         earthengine_batch.task_description = 'MODIS-REFLECTANCE-AK-{}-JANUARY-DECEMBER-EPSG3338'.format(y)
-        earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_100km_epsg3338'.format(y)
+        earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_500km_epsg3338'.format(y)
 
         earthengine_batch.labels_collection = FireLabelsCollection.CCI
-        earthengine_batch.modis_index = ModisIndex.REFLECTANCE
+        earthengine_batch.modis_index = ModisCollection.REFLECTANCE
 
-        earthengine_batch.gdrive_folder = 'AK_{}'.format(y)
-        earthengine_batch.submit()
-
-        # earthengine_batch.export_flag = ExportData.LABEL
-        # earthengine_batch.labels_collection = FireLabelsCollection.CCI
+        earthengine_batch.gdrive_folder = 'POC_AK_{}'.format(y)
         # earthengine_batch.submit()
+
+        earthengine_batch.export_flag = ExportData.LABEL
+        earthengine_batch.labels_collection = FireLabelsCollection.MTBS
+        earthengine_batch.submit()
 
         # print task list (running or ready)
         earthengine_batch.task_list()

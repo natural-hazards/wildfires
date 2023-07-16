@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Union
 
 from mlfire.data.loader import DatasetLoader
-from mlfire.earthengine.collections import ModisIndex, ModisReflectanceSpectralBands
+from mlfire.earthengine.collections import ModisCollection, ModisReflectanceSpectralBands
 from mlfire.earthengine.collections import FireLabelsCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 
@@ -21,6 +21,8 @@ _np = lazy_import('numpy')
 class SatImgViewOpt(Enum):
 
     CIR = 'Color Infrared, Vegetation'
+    EVI = 'EVI'
+    EVI2 = 'EVI2'
     NATURAL_COLOR = 'Natural Color'
     NDVI = 'NVDI'
     SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
@@ -39,7 +41,7 @@ class DatasetView(DatasetLoader):
     def __init__(self,
                  lst_satimgs: Union[tuple[str], list[str]],
                  lst_labels: Union[tuple[str], list[str]],
-                 modis_collection: ModisIndex = ModisIndex.REFLECTANCE,
+                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -115,7 +117,7 @@ class DatasetView(DatasetLoader):
         id_ds, start_band_id = self._map_start_satimgs[img_id]
         ds_satimg = self._ds_satimgs[id_ds]
 
-        # display as CIR image (color infrared - vegetation)
+        # display CIR representation of MODIS input (color infrared - vegetation)
         # https://eos.com/make-an-analysis/color-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
         ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
@@ -133,6 +135,84 @@ class DatasetView(DatasetLoader):
         cir_img[:, :, 2] = (ref_green + 100.) / 16100. * 255.
 
         return cir_img
+
+    def __getSatelliteImageArray_MODIS_EVI(self, img_id: int) -> _np.ndarray:
+
+        cmap = lazy_import('mlfire.utils.cmap')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
+        ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
+        ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        _np.seterr(divide='ignore')
+
+        # constants
+        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
+
+        # EVI computation
+        evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+        ninf = _np.count_nonzero(evi == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI')
+            evi = _np.where(evi == _np.inf, -99, evi)
+
+        # Colour palette and thresholding inspired by
+        # https://developers.google.com/earth-engine/datasets/catalog/MODIS_MOD09GA_006_EVI#description
+        # Credit: Zachary Langford @langfordzl
+        lst_colors = [
+            '#ffffff', '#ce7e45', '#df923d', '#f1b555', '#fcd163', '#99b718', '#74a901',
+            '#66a000', '#529400', '#3e8601', '#207401', '#056201', '#004c00', '#023b01',
+            '#012e01', '#011d01', '#011301'
+        ]
+
+        # get EVI2 heat map
+        cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
+        img_evi = cmap_helper.getRGBA(evi)[:, :, :-1]
+        img_evi[evi == -99, :] = [0, 0, 0]
+
+        return img_evi
+
+    def __getSatelliteImageArray_MODIS_EVI2(self, img_id: int):
+
+        cmap = lazy_import('mlfire.utils.cmap')
+
+        id_ds, start_band_id = self._map_start_satimgs[img_id]
+        ds_satimg = self._ds_satimgs[id_ds]
+
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
+
+        band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1.)
+        ninf = _np.count_nonzero(evi2 == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI')
+            evi2 = _np.where(evi2 == _np.inf, -99, evi2)
+
+        # Colour palette and thresholding inspired by
+        # https://developers.google.com/earth-engine/datasets/catalog/MODIS_MOD09GA_006_EVI#description
+        # Credit: Zachary Langford @langfordzl
+        lst_colors = [
+            '#ffffff', '#ce7e45', '#df923d', '#f1b555', '#fcd163', '#99b718', '#74a901',
+            '#66a000', '#529400', '#3e8601', '#207401', '#056201', '#004c00', '#023b01',
+            '#012e01', '#011d01', '#011301'
+        ]
+
+        # get EVI2 heat map
+        cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
+        img_evi2 = cmap_helper.getRGBA(evi2)[:, :, :-1]
+        img_evi2[evi2 == -99, :] = [0, 0, 0]
+
+        return img_evi2
 
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
@@ -158,31 +238,31 @@ class DatasetView(DatasetLoader):
     def __getSatelliteImageArray_NDVI(self, img_id: int) -> _np.ndarray:
 
         # lazy imports
-        mpl = lazy_import('matplotlib')
         plt = lazy_import('matplotlib.pylab')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
         ds_satimg = self._ds_satimgs[id_ds]
 
         # computing Normalized Difference Vegetation Index (NDVI)
-        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
+        ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
 
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
-        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray()
+        ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
 
         # Colour palette and thresholding inspired by
         # https://www.neonscience.org/resources/learning-hub/tutorials/calc-ndvi-tiles-py
         # Credit: Zachary Langford @langfordzl
         cmap = plt.get_cmap(name='RdYlGn') if self.ndvi_view_threshold > -1. else plt.get_cmap(name='seismic')
-        norm = mpl.colors.Normalize(vmin=self.ndvi_view_threshold, vmax=1)
 
-        ndvi = None
-        try:
-            ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
-        except ZeroDivisionError:
+        _np.seterr(divide='ignore')
+
+        ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
+        ninf = _np.count_nonzero(ndvi == _np.inf)
+        if ninf > 0:
+            print(f'#inf values = {ninf} in NDVI')
             ndvi = _np.where(ndvi == _np.inf, -99, ndvi)
 
-        img_ndvi = _np.uint8(cmap(norm(ndvi))[:, :, :-1] * 255)
+        img_ndvi = _np.uint8(cmap(ndvi)[:, :, :-1] * 255)
         if self.ndvi_view_threshold > -1: img_ndvi[ndvi < self.ndvi_view_threshold] = [255, 255, 255]
         img_ndvi[ndvi == -99] = [0, 0, 0]
 
@@ -239,6 +319,10 @@ class DatasetView(DatasetLoader):
             return self.__getSatelliteImageArray_MODIS_NATURAL_COLOR(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.CIR:
             return self.__getSatelliteImageArray_MODIS_CIR(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.EVI:
+            return self.__getSatelliteImageArray_MODIS_EVI(img_id=img_id)
+        elif self.satimg_view_opt == SatImgViewOpt.EVI2:
+            return self.__getSatelliteImageArray_MODIS_EVI2(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.NDVI:
             return self.__getSatelliteImageArray_NDVI(img_id=img_id)
         elif self.satimg_view_opt == SatImgViewOpt.SHORTWAVE_INFRARED1:
@@ -250,7 +334,7 @@ class DatasetView(DatasetLoader):
 
     def __getSatelliteImageArray(self, img_id: int) -> _np.ndarray:
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             return self.__getSatelliteImageArray_MODIS(img_id)
         else:
             raise NotImplementedError
@@ -273,7 +357,11 @@ class DatasetView(DatasetLoader):
             raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
 
         satimg = self.__getSatelliteImageArray(id_img)
-        if brightness_factors is not None and self.satimg_view_opt != SatImgViewOpt.NDVI:
+        if brightness_factors is not None and \
+                self.satimg_view_opt != SatImgViewOpt.NDVI and \
+                self.satimg_view_opt != SatImgViewOpt.EVI and \
+                self.satimg_view_opt != SatImgViewOpt.EVI2:
+
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
@@ -290,7 +378,7 @@ class DatasetView(DatasetLoader):
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                      brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.), show: bool = True, ax=None) -> None:
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
         else:
             raise NotImplementedError
@@ -679,7 +767,7 @@ class DatasetView(DatasetLoader):
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to satellite images!')
 
-        if self.modis_collection == ModisIndex.REFLECTANCE:
+        if self.modis_collection == ModisCollection.REFLECTANCE:
             self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
         else:
             raise NotImplementedError
@@ -688,59 +776,64 @@ class DatasetView(DatasetLoader):
 # use case examples
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    VAR_DATA_DIR = 'data/tifs'
+    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    LABEL_COLLECTION = FireLabelsCollection.MTBS
-    # LABEL_COLLECTION = FireLabelsCollection.CCI
-    STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
+    VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
+    # VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
+    VAR_STR_LABEL_COLLECTION = VAR_LABEL_COLLECTION.name.lower()
 
-    lst_satimgs = []
-    lst_labels = []
+    VAR_LST_SATIMGS = []
+    VAR_LST_LABELS = []
 
     for year in range(2004, 2006):
 
-        PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
+        VAR_PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
 
-        fn_satimg = os.path.join(DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        lst_satimgs.append(fn_satimg)
+        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_YEAR))
+        VAR_LST_SATIMGS.append(VAR_FN_SATIMG)
 
-        fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
-        lst_labels.append(fn_labels)
+        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(VAR_PREFIX_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
+        VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
+        VAR_LST_LABELS.append(VAR_FN_LABELS)
 
-    SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
-    # SATIMG_VIEW_OPT = SatImgViewOpt.CIR  # uncomment this line for viewing a satellite image in infrared
-    # SATIMG_VIEW_OPT = SatImgViewOpt.NDVI  # uncomment this line for displaying NDVI using information from satellite image
-    # SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED1  # uncomment this line for viewing a satellite image in infrared using SWIR1 band
-    # SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED2  # uncomment this line for viewing a satellite image in infrared using SWIR2 band
+    VAR_SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.CIR  # uncomment this line for viewing a satellite image in infrared
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.NDVI  # uncomment this line for displaying NDVI using information from satellite image
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED1  # uncomment this line for viewing a satellite image in infrared using SWIR1 band
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED2  # uncomment this line for viewing a satellite image in infrared using SWIR2 band
 
-    NDVI_THRESHOLD = 0.5
-    CCI_CONFIDENCE_LEVEL = 70
+    VAR_NDVI_THRESHOLD = 0.5
+    VAR_CCI_CONFIDENCE_LEVEL = 70
 
-    # LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
-    LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
+    # VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
+    VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
 
     # setup of data set loader
     dataset_view = DatasetView(
-        lst_satimgs=lst_satimgs,
-        lst_labels=lst_labels,
-        satimg_view_opt=SATIMG_VIEW_OPT,
-        label_collection=LABEL_COLLECTION,
-        labels_view_opt=LABELS_VIEW_OPT,
+        lst_satimgs=VAR_LST_SATIMGS,
+        lst_labels=VAR_LST_LABELS,
+        satimg_view_opt=VAR_SATIMG_VIEW_OPT,
+        label_collection=VAR_LABEL_COLLECTION,
+        labels_view_opt=VAR_LABELS_VIEW_OPT,
         mtbs_severity_from=MTBSSeverity.LOW,
-        cci_confidence_level=CCI_CONFIDENCE_LEVEL,
-        ndvi_view_threshold=NDVI_THRESHOLD if SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None
+        cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
+        ndvi_view_threshold=VAR_NDVI_THRESHOLD if VAR_SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None
     )
 
     print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.satimg_dates)
     print(dataset_view.label_dates)
 
-    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     dataset_view.showSatImage(70)
     dataset_view.showSatImageWithFireLabels(70)
 
     # labels aggregation
-    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 0)
-    dataset_view.showFireLabels(19 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
-    dataset_view.showFireLabels(range(18, 20) if LABEL_COLLECTION == FireLabelsCollection.CCI else range(0, 2))
+    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 0)
+    dataset_view.showFireLabels(19 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    dataset_view.showFireLabels(range(18, 20) if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else range(0, 2))
+
+    # view evi and evi2
+    dataset_view.satimg_view_opt = SatImgViewOpt.EVI2
+    dataset_view.showSatImage(70, show=True)

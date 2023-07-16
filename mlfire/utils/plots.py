@@ -53,3 +53,22 @@ def labelshow(labels: _np.ndarray,
     if with_uncharted_areas: label_rendered[_np.isnan(labels), :] = 0
 
     imshow(label_rendered, ax=ax, title=title, figsize=figsize, tight_layout=tight_layout, show=show)
+
+
+def labelshow_prob(labels: _np.ndarray,
+                   with_uncharted_areas: bool = False,
+                   ax=None,
+                   title: str = None,
+                   figsize: tuple = None,
+                   tight_layout: bool = True,
+                   show: bool = False) -> None:
+
+    cmap = lazy_import('mlfire.utils.cmap')
+    lst_colors = ['#5A5A55', '#FFF']
+
+    cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=0, vmax=1)
+
+    label_rendered = _np.uint8(cmap_helper.getRGBA(labels)[:, :, :-1] * 255)
+    if with_uncharted_areas: label_rendered[_np.isnan(labels), :] = 0
+
+    imshow(label_rendered, ax=ax, title=title, figsize=figsize, tight_layout=tight_layout, show=show)
