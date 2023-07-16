@@ -40,11 +40,11 @@ def loadSource(fn: str) -> _np.ndarray:
 
 if __name__ == '__main__':
 
-    fn_test = '../../../data/h5/mtbs/ak_modis_2004_2005_100km_test.h5'
-    fn_pred = '../../../output/permonsvm/ak_modis_2004_2005_100km_test_predictions.h5'
+    VAR_FN_TEST = 'data/h5/mtbs/ak_modis_2004_2005_100km_labels_test.h5'
+    VAR_FN_PRED = 'output/permonsvm/ak_modis_2004_2005_100km_test_labels_predictions.h5'
 
-    y_test = loadSource(fn=fn_test)
-    y_pred = loadResult(fn_pred=fn_pred, fn_mask=fn_test)
+    VAR_Y_TEST = loadSource(fn=VAR_FN_TEST)
+    VAR_Y_PRED = loadResult(fn_pred=VAR_FN_PRED, fn_mask=VAR_FN_TEST)
 
-    print(y_test.shape)
-    print(y_pred.shape)
+    print(VAR_Y_TEST.shape)
+    print(VAR_Y_PRED.shape)

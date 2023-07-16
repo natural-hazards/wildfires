@@ -387,17 +387,17 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    fn_json = 'data/jsons/ak_area_500km.geojson'
+    VAR_FN_JSON = 'data/jsons/ak_area_500km.geojson'
 
     for y in range(2004, 2006):
 
-        start_date = earthengine.Date('{}-01-01'.format(y))
-        end_date = earthengine.Date('{}-01-01'.format(y + 1))
+        VAR_START_DATE = earthengine.Date('{}-01-01'.format(y))
+        VAR_END_DATE = earthengine.Date('{}-01-01'.format(y + 1))
 
         earthengine_batch = EarthEngineBatch(
-            file_json=fn_json,
-            startdate=start_date,
-            enddate=end_date
+            file_json=VAR_FN_JSON,
+            startdate=VAR_START_DATE,
+            enddate=VAR_END_DATE
         )
         earthengine_batch.export_flag = ExportData.SATIMG
 

@@ -53,15 +53,15 @@ class ConfusionMatrix(object):
 
 if __name__ == '__main__':
 
-    y_true = np.asarray([1, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7, 7, 8, 9, 10])
-    y_pred = np.asarray([2, 2, 3, 10, 4, 4, 5, 5, 6, 7, 6, 7, 8, 9, 10])
+    VAR_Y_TRUE = np.asarray([1, 2, 3, 3, 4, 4, 5, 5, 6, 7, 7, 7, 8, 9, 10])
+    VAR_Y_PRED = np.asarray([2, 2, 3, 10, 4, 4, 5, 5, 6, 7, 6, 7, 8, 9, 10])
 
-    labels = ['aaaaaa', 'bbbbbb', 'cccccc', 'dddd', 'eeeee', 'fffff', 'ggggg', 'hhhhhh', 'iiiiiii', 'jjjjjj']
+    VAR_LABELS = ['aaaaaa', 'bbbbbb', 'cccccc', 'dddd', 'eeeee', 'fffff', 'ggggg', 'hhhhhh', 'iiiiiii', 'jjjjjj']
 
     cm = ConfusionMatrix(
-        y_true,
-        y_pred,
-        labels
+        VAR_Y_TRUE,
+        VAR_Y_PRED,
+        VAR_LABELS
     )
 
     cm.plot()

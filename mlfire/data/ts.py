@@ -1149,58 +1149,60 @@ class DataAdapterTS(DatasetView):
 # use cases
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    VAR_DATA_DIR = 'data/tifs'
+    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    # LABEL_COLLECTION = FireLabelsCollection.MTBS
-    LABEL_COLLECTION = FireLabelsCollection.CCI
-    STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
+    # VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
+    VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
+    VAR_STR_LABEL_COLLECTION = VAR_LABEL_COLLECTION.name.lower()
 
-    DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
-    TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
-    VAL_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
+    VAR_DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
+    VAR_TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
+    VAR_VALIDATION_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
 
-    TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS]
-    PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
+    VAR_TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS]
+    VAR_PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
 
-    lst_satimgs = []
-    lst_labels = []
+    VAR_LST_SATIMGS = []
+    VAR_LST_LABELS = []
 
-    CCI_CONFIDENCE_LEVEL = 70
+    VAR_CCI_CONFIDENCE_LEVEL = 70
 
     for year in range(2004, 2006):
-        PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
 
-        fn_satimg = os.path.join(DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        lst_satimgs.append(fn_satimg)
+        PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
 
-        fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
-        lst_labels.append(fn_labels)
+        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
+        VAR_LST_SATIMGS.append(VAR_FN_SATIMG)
+
+        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
+        VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
+        VAR_LST_LABELS.append(VAR_FN_LABELS)
 
     adapter_ts = DataAdapterTS(
-        lst_satimgs=lst_satimgs,
-        lst_labels=lst_labels,
-        label_collection=LABEL_COLLECTION,
+        lst_satimgs=VAR_LST_SATIMGS,
+        lst_labels=VAR_LST_LABELS,
+        label_collection=VAR_LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
-        cci_confidence_level=CCI_CONFIDENCE_LEVEL,
+        cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
         # transformation options
-        transform_ops=TRANSFORM_OPS,
-        pca_ops=PCA_OPS,
+        transform_ops=VAR_TRANSFORM_OPS,
+        pca_ops=VAR_PCA_OPS,
         # data set split options
-        ds_split_opt=DS_SPLIT_OPT,
-        test_ratio=TEST_RATIO,
-        val_ratio=VAL_RATIO
+        ds_split_opt=VAR_DS_SPLIT_OPT,
+        test_ratio=VAR_TEST_RATIO,
+        val_ratio=VAR_VALIDATION_RATIO
     )
 
     # set dates
-    index_begin_date = 0
-    index_end_date = -1
+    VAR_INDEX_BEGIN_DATE = 0
+    VAR_INDEX_END_DATE = -1
 
     print(adapter_ts.satimg_dates)
 
-    start_date = adapter_ts.satimg_dates.iloc[index_begin_date]['Date']
-    adapter_ts.ds_start_date = start_date
-    end_date = adapter_ts.satimg_dates.iloc[index_end_date]['Date']
-    adapter_ts.ds_end_date = end_date
+    VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
+    adapter_ts.ds_start_date = VAR_START_DATE
+    VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
+    adapter_ts.ds_end_date = VAR_END_DATE
 
     adapter_ts.createDataset()

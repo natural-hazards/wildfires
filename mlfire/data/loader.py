@@ -631,23 +631,23 @@ class DatasetLoader(object):  # TODO rename to data set base
 # tests
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    VAR_DATA_DIR = 'data/tifs'
+    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    lst_satimgs = []
-    lst_labels_mtbs = []
+    VAR_LST_SATIMGS = []
+    VAR_LST_LABELS_MTBS = []
 
     for year in range(2004, 2006):
-        PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
+        PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
 
-        fn_satimg = os.path.join(DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        lst_satimgs.append(fn_satimg)
+        fn_satimg = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
+        VAR_LST_SATIMGS.append(fn_satimg)
 
-        fn_labels_mtbs = os.path.join(DATA_DIR, '{}_epsg3338_area_0_mtbs_labels.tif'.format(PREFIX_IMG_YEAR))
-        lst_labels_mtbs.append(fn_labels_mtbs)
+        fn_labels_mtbs = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0_mtbs_labels.tif'.format(PREFIX_IMG_YEAR))
+        VAR_LST_LABELS_MTBS.append(fn_labels_mtbs)
 
     # setup of data set loader
     dataset_loader = DatasetLoader(
-        lst_satimgs=lst_satimgs,
-        lst_labels=lst_labels_mtbs
+        lst_satimgs=VAR_LST_SATIMGS,
+        lst_labels=VAR_LST_LABELS_MTBS
     )

@@ -776,62 +776,63 @@ class DatasetView(DatasetLoader):
 # use case examples
 if __name__ == '__main__':
 
-    DATA_DIR = 'data/tifs'
-    PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    VAR_DATA_DIR = 'data/tifs'
+    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    LABEL_COLLECTION = FireLabelsCollection.MTBS
-    # LABEL_COLLECTION = FireLabelsCollection.CCI
-    STR_LABEL_COLLECTION = LABEL_COLLECTION.name.lower()
+    VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
+    # VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
+    VAR_STR_LABEL_COLLECTION = VAR_LABEL_COLLECTION.name.lower()
 
-    lst_satimgs = []
-    lst_labels = []
+    VAR_LST_SATIMGS = []
+    VAR_LST_LABELS = []
 
     for year in range(2004, 2006):
 
-        PREFIX_IMG_YEAR = PREFIX_IMG.format(year)
+        VAR_PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
 
-        fn_satimg = os.path.join(DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        lst_satimgs.append(fn_satimg)
+        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_YEAR))
+        VAR_LST_SATIMGS.append(VAR_FN_SATIMG)
 
-        fn_labels = os.path.join(DATA_DIR, '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, STR_LABEL_COLLECTION))
-        lst_labels.append(fn_labels)
+        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(VAR_PREFIX_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
+        VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
+        VAR_LST_LABELS.append(VAR_FN_LABELS)
 
-    SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
-    # SATIMG_VIEW_OPT = SatImgViewOpt.CIR  # uncomment this line for viewing a satellite image in infrared
-    # SATIMG_VIEW_OPT = SatImgViewOpt.NDVI  # uncomment this line for displaying NDVI using information from satellite image
-    # SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED1  # uncomment this line for viewing a satellite image in infrared using SWIR1 band
-    # SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED2  # uncomment this line for viewing a satellite image in infrared using SWIR2 band
+    VAR_SATIMG_VIEW_OPT = SatImgViewOpt.NATURAL_COLOR
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.CIR  # uncomment this line for viewing a satellite image in infrared
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.NDVI  # uncomment this line for displaying NDVI using information from satellite image
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED1  # uncomment this line for viewing a satellite image in infrared using SWIR1 band
+    # VAR_SATIMG_VIEW_OPT = SatImgViewOpt.SHORTWAVE_INFRARED2  # uncomment this line for viewing a satellite image in infrared using SWIR2 band
 
-    NDVI_THRESHOLD = 0.5
-    CCI_CONFIDENCE_LEVEL = 70
+    VAR_NDVI_THRESHOLD = 0.5
+    VAR_CCI_CONFIDENCE_LEVEL = 70
 
-    # LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
-    LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
+    # VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else FireLabelsViewOpt.SEVERITY
+    VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
 
     # setup of data set loader
     dataset_view = DatasetView(
-        lst_satimgs=lst_satimgs,
-        lst_labels=lst_labels,
-        satimg_view_opt=SATIMG_VIEW_OPT,
-        label_collection=LABEL_COLLECTION,
-        labels_view_opt=LABELS_VIEW_OPT,
+        lst_satimgs=VAR_LST_SATIMGS,
+        lst_labels=VAR_LST_LABELS,
+        satimg_view_opt=VAR_SATIMG_VIEW_OPT,
+        label_collection=VAR_LABEL_COLLECTION,
+        labels_view_opt=VAR_LABELS_VIEW_OPT,
         mtbs_severity_from=MTBSSeverity.LOW,
-        cci_confidence_level=CCI_CONFIDENCE_LEVEL,
-        ndvi_view_threshold=NDVI_THRESHOLD if SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None
+        cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
+        ndvi_view_threshold=VAR_NDVI_THRESHOLD if VAR_SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None
     )
 
     print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.satimg_dates)
     print(dataset_view.label_dates)
 
-    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     dataset_view.showSatImage(70)
     dataset_view.showSatImageWithFireLabels(70)
 
     # labels aggregation
-    dataset_view.showFireLabels(18 if LABEL_COLLECTION == FireLabelsCollection.CCI else 0)
-    dataset_view.showFireLabels(19 if LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
-    dataset_view.showFireLabels(range(18, 20) if LABEL_COLLECTION == FireLabelsCollection.CCI else range(0, 2))
+    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 0)
+    dataset_view.showFireLabels(19 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
+    dataset_view.showFireLabels(range(18, 20) if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else range(0, 2))
 
     # view evi and evi2
     dataset_view.satimg_view_opt = SatImgViewOpt.EVI2

@@ -114,8 +114,8 @@ if __name__ == '__main__':
     _plt_pylab = lazy_import('matplotlib.pylab')
     _utils_cmat = lazy_import('mlfire.utils.cmat')
 
-    y_true = _np.asarray([1, 0, 1, 1, 0])
-    y_pred = _np.asarray([0, 0, 1, 1, 0])
+    VAR_Y_TRUE = _np.asarray([1, 0, 1, 1, 0])
+    VAR_Y_PRED = _np.asarray([0, 0, 1, 1, 0])
 
-    auc_roc = AucRoc(labels_true=y_true, labels_pred=y_pred)
+    auc_roc = AucRoc(labels_true=VAR_Y_TRUE, labels_pred=VAR_Y_PRED)
     auc_roc.plot()
