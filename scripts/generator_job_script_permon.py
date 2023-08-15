@@ -12,6 +12,7 @@ _DeviceType = _device.DeviceTypes
 
 _ModelPERMON = lazy_import('scripts.models.permon')
 _ScoreTypes = lazy_import('scripts.models.scores').ScoreTypes
+_WorkloadManagerType = lazy_import('scripts.workload_managers.base').WorkloadManagerType
 
 
 class JobScriptBuilder(object):
@@ -19,18 +20,16 @@ class JobScriptBuilder(object):
     def __init__(self,
                  script_name: str = None,
                  project_id: str = None,
-                 wall_time: _datetime.time = _datetime.time(hour=0, minute=10),
-                 alloc_flags: str = 'smt4 gpumps',
+                 workload_manager_type: _WorkloadManagerType = _WorkloadManagerType.SLURM,
                  # resources
                  nnodes: int = 1,
-                 resources: int = 1,
-                 ranks_rs: int = 4,
-                 ncores: int = 7,
+                 ntasks: int = 1,
+                 partition: str = '',
+                 wall_time: _datetime.time = _datetime.time(hour=0, minute=10),
                  # locations
+                 executable_path: str = None,
                  remote_data_dir: str = None,
                  remote_output_dir: str = None,
-                 petsc_arch: str = None,
-                 permonsvm_dir: str = None,
                  # prefix
                  ds_prefix: str = None,
                  # training model settings
@@ -51,31 +50,28 @@ class JobScriptBuilder(object):
                  # device
                  device: _DeviceType = _DeviceType.CUDA):
 
+        self._workload_manager = None
+
+        self._workload_manager_type = None
+        self.workload_manager_type = workload_manager_type
+
         self._script_name = None
         self.script_name = script_name
-
-        #
 
         self._project_id = None
         self.project_id = project_id
 
-        self._wall_time = None
-        self.wall_time = wall_time
-
-        self._alloc_flags = None
-        self.alloc_flags = alloc_flags
-
         self._nnodes = None
         self.nnodes = nnodes
 
-        self._resources = None
-        self.resources = resources
+        self._ntasks = None
+        self.ntasks = ntasks
 
-        self._rank_rs = None
-        self.rank_rs = ranks_rs
+        self._partition = None
+        self.partition = partition
 
-        self._ncores = None
-        self.ncores = ncores
+        self._wall_time = None
+        self.wall_time = wall_time
 
         # locations
 
@@ -85,11 +81,8 @@ class JobScriptBuilder(object):
         self._remote_output_dir = None
         self.remote_output_dir = remote_output_dir
 
-        self._permonsvm_dir = None
-        self.permonsvm_dir = permonsvm_dir
-
-        self._petsc_arch = None
-        self.petsc_arch = petsc_arch
+        self._executable_path = None
+        self.executable_path = executable_path
 
         # prefixes
 
@@ -144,6 +137,28 @@ class JobScriptBuilder(object):
         self.device = device
 
     @property
+    def workload_manager_type(self) -> _WorkloadManagerType:
+
+        return self._workload_manager_type
+
+    @workload_manager_type.setter
+    def workload_manager_type(self, manager_type: _WorkloadManagerType):
+
+        if self._workload_manager is None:
+
+            if manager_type == _WorkloadManagerType.SLURM:
+
+                SlurmWorkloadManager = lazy_import('scripts.workload_managers.slurm').SlurmWorkloadManager
+                self._workload_manager = SlurmWorkloadManager()
+
+            else:
+
+                msg = 'Workload manager of type {} is not implemented!'.format(str(manager_type))
+                raise NotImplementedError(msg)
+
+        self._workload_manager_type = manager_type
+
+    @property
     def script_name(self) -> str:
 
         return self._script_name
@@ -159,19 +174,19 @@ class JobScriptBuilder(object):
         return self._project_id
 
     @project_id.setter
-    def project_id(self, pid) -> None:
+    def project_id(self, pid: str) -> None:
 
         self._project_id = pid
 
     @property
-    def wall_time(self) -> _datetime.time:
+    def partition(self) -> str:
 
-        return self._wall_time
+        return self._partition
 
-    @wall_time.setter
-    def wall_time(self, wtime: _datetime.time) -> None:
+    @partition.setter
+    def partition(self, p: str) -> None:
 
-        self._wall_time = wtime
+        self._partition = p
 
     @property
     def nnodes(self) -> int:
@@ -184,48 +199,38 @@ class JobScriptBuilder(object):
         self._nnodes = nnodes
 
     @property
-    def resources(self) -> int:
+    def ntasks(self) -> int:
 
-        return self._resources
+        return self._ntasks
 
-    @resources.setter
-    def resources(self, rs: int) -> None:
+    @ntasks.setter
+    def ntasks(self, n: int) -> None:
 
-        self._resources = rs
-
-    @property
-    def rank_rs(self) -> int:
-
-        return self._rank_rs
-
-    @rank_rs.setter
-    def rank_rs(self, v: int) -> None:
-
-        self._rank_rs = v
+        self._ntasks = n
 
     @property
-    def ncores(self) -> int:
+    def wall_time(self) -> _datetime.time:
 
-        return self._ncores
+        return self._wall_time
 
-    @ncores.setter
-    def ncores(self, c: int) -> None:
+    @wall_time.setter
+    def wall_time(self, wtime: _datetime.time) -> None:
 
-        self._ncores = c
-
-    @property
-    def alloc_flags(self) -> str:
-
-        return self._alloc_flags
-
-    @alloc_flags.setter
-    def alloc_flags(self, flags) -> None:
-
-        self._alloc_flags = flags
+        self._wall_time = wtime
 
     """
     Locations
     """
+
+    @property
+    def executable_path(self) -> str:
+
+        return self._executable_path
+
+    @executable_path.setter
+    def executable_path(self, bin_path: str) -> None:
+
+        self._executable_path = bin_path
 
     @property
     def remote_data_dir(self) -> str:
@@ -246,26 +251,6 @@ class JobScriptBuilder(object):
     def remote_output_dir(self, p: str) -> None:
 
         self._remote_output_dir = p
-
-    @property
-    def petsc_arch(self) -> str:
-
-        return self._petsc_arch
-
-    @petsc_arch.setter
-    def petsc_arch(self, arch: str) -> None:
-
-        self._petsc_arch = arch
-
-    @property
-    def permonsvm_dir(self) -> str:
-
-        return self._permonsvm_dir
-
-    @permonsvm_dir.setter
-    def permonsvm_dir(self, p: str) -> None:
-
-        self._permonsvm_dir = p
 
     """
     Prefixes and suffixes
@@ -421,15 +406,12 @@ class JobScriptBuilder(object):
     def _writeShebang(f) -> None:
 
         shebang = [
-            '#!/bin/bash\n'
+            '#!/bin/bash --login\n'
         ]
 
         f.writelines(shebang)
 
-    def _writeBsubOptions(self, f) -> None:
-
-        str_wtime_hours = '{:02d}'.format(self.wall_time.hour)
-        str_wtime_minutes = '{:02d}'.format(self.wall_time.minute)
+    def _writeBatchFileDirectives(self, f) -> None:
 
         job_name = self.ds_prefix.upper()
         job_name = '{}_{}'.format(
@@ -437,13 +419,15 @@ class JobScriptBuilder(object):
             'PROBABILITY' if self.probability_model else 'LABEL'
         )
 
-        if self.device == _DeviceType.CPU:
-            job_name = f'{job_name}_CPUS'
-        else:
-            if self.resources == 1:
-                job_name = f'{job_name}_SINGLE_GPU'
-            else:
-                job_name = f'{job_name}_MULTIPLE_GPU'
+        #
+        # if self.device == _DeviceType.CPU:
+        #     job_name = f'{job_name}_CPUS'
+        # else:
+        #     if self.resources == 1:
+        #         job_name = f'{job_name}_SINGLE_GPU'
+        #     else:
+        #         job_name = f'{job_name}_MULTIPLE_GPU'
+        #
 
         job_name = f'{job_name}_{self.solver_type.value.upper()}'
 
@@ -453,19 +437,14 @@ class JobScriptBuilder(object):
             if self.hyperopt_warm_start: job_name = f'{job_name}_WITH_WARM_START'
             job_name += '\n'
 
-        options = [
-            '### Begin BSUB Options\n',
-            f'#BSUB -P {self.project_id}\n',
-            f'#BSUB -J {job_name}\n',
-            '#BSUB -W {}:{}\n'.format(str_wtime_hours, str_wtime_minutes),
-            f'#BSUB -nnodes {self.nnodes}\n',
-            '#BSUB -alloc_flags "{}"\n'.format(self.alloc_flags),
-            '### End BSUB Options and begin shell commands\n\n',
-            f'RS={self.nnodes * self.resources}\n',
-            f'RANKS_PER_RS={self.rank_rs}\n',
-            f'CORES={self.ncores}\n'
-        ]
+        self._workload_manager.project_id = self.project_id
+        self._workload_manager.job_name = job_name
 
+        self._workload_manager.partition = self.partition
+        self._workload_manager.ntasks = self.ntasks
+        self._workload_manager.nnodes = self.nnodes
+
+        options = self._workload_manager.getHeaderDirectives()
         f.writelines(options)
 
     def _writeDirectoryLocations(self, f) -> None:
@@ -476,21 +455,11 @@ class JobScriptBuilder(object):
         if self.remote_output_dir is None:
             raise RuntimeError('Output directory is not set!')
 
-        if self.permonsvm_dir is None:
-            raise RuntimeError('Location of PermonSVM is not set!')
-
         locations = [
             '# Directories\n\n',
             'DATA_DIR={}\n'.format(self.remote_data_dir),
-            'OUTPUT_DIR={}\n\n'.format(self.remote_output_dir),
-            'PERMON_SVM_DIR={}\n'.format(self.permonsvm_dir),
+            'OUTPUT_DIR={}\n'.format(self.remote_output_dir),
         ]
-
-        if not self.probability_model:
-
-            locations.append(
-                'PERMON_ARCH={}\n'.format(self.petsc_arch)
-            )
 
         f.writelines(locations)
 
@@ -544,7 +513,7 @@ class JobScriptBuilder(object):
             'FN_TEST=${DATA_DIR}/${DS_PREFIX}_test.h5\n',
             '\n',
             'FN_TRAIN_PREDICTS=${OUTPUT_DIR}/${DS_PREFIX}_training_predictions_${OUTPUT_SUFFIX}.h5\n'
-            'FN_TEST_PREDICTS=${OUTPUT_DIR}/${DS_PREFIX}_test_predictions_${OUTPUT_SUFFIX}.h5\n'
+            'FN_TEST_PREDICTS=${OUTPUT_DIR}/${DS_PREFIX}_test_predictions_${OUTPUT_SUFFIX}.h5'
         ])
 
         f.writelines(files)
@@ -552,6 +521,7 @@ class JobScriptBuilder(object):
     def _writeHyperParameterOptimizationSettings(self, f) -> None:
 
         if self.hyperopt_scores is None:
+
             raise RuntimeError('Scores for hyperparameter optimization are not set!')
 
         HYPEROPT_SCORES = ''
@@ -655,49 +625,38 @@ class JobScriptBuilder(object):
 
         f.writelines(object_settings)
 
-    def _writeJSRunOptions(self, f) -> None:
+    def _writeRunOptions(self, f) -> None:
 
-        if self.probability_model:
-            BIN_FILE = '${PERMON_SVM_DIR}/src/tutorials/ex5'
-        else:
-            BIN_FILE = '${PERMON_SVM_DIR}/${PETSC_ARCH}/bin/permonsvmfile'
-
-        jsrun_options = [
-            'jsrun ',
-            '--smpiargs="-gpu"' if self.device == _DeviceType.CUDA else '',
-            '-n ${RS} -a ${RANK_RS} -c ${CORES} ',
-            '-g 1' if self.device != _DeviceType.CPU else '',
-            ' \\\n',
-            f'{BIN_FILE} \\\n',
-        ]
+        self._workload_manager.executable_path = self.executable_path
+        run_options = self._workload_manager.getRunOptions()
 
         if self.device == _DeviceType.CUDA:
 
-            jsrun_options.extend([
+            run_options.extend([
                 '-device_enable eager -use_gpu_aware_mpi 0 \\\n',
                 '-vec_type ${VEC_TYPE} \\\n'
                 ]
             )
 
-        jsrun_options.append(
+        run_options.append(
             '-f_training ${FN_TRAIN} -Xt_training_mat_type ${MAT_TYPE}'
         )
 
         if self.probability_model:
 
-            jsrun_options.append(
+            run_options.append(
                 ' -f_calib ${FN_CALIB} -Xt_calib_mat_type ${MAT_TYPE} '
             )
 
-        jsrun_options.append(
+        run_options.append(
             ' \\\n'
         )
 
-        jsrun_options.append(
+        run_options.append(
             '-f_test ${FN_TEST} -Xt_test_mat_type ${MAT_TYPE} \\\n'
         )
 
-        jsrun_options.append(
+        run_options.append(
             '-svm_view_io \\\n'
         )
 
@@ -709,37 +668,38 @@ class JobScriptBuilder(object):
 
         if self.solver_type == _ModelPERMON.SolverType.MPGP:
 
-            jsrun_options.extend([
+            run_options.extend([
+                f'-{QPS_PREFIX}qps_type', '${SOLVER_QPS_TYPE} \\n',
                 f'-{QPS_PREFIX}qps_mpgp_expansion_type projcg ',
                 f'-{QPS_PREFIX}mpgp_gamma ', '${MPGP_GAMMA}  \\\n'
             ])
 
         elif self.solver_type.BLMVM:
 
-            jsrun_options.extend([
+            run_options.extend([
                 f'-{QPS_PREFIX}qps_type ', '${SOLVER_QPS_TYPE} ',
                 f'-{QPS_PREFIX}qps_tao_type ', '${SOLVER_QPS_TAO_TYPE} ',
             ])
 
-        jsrun_options.append(
+        run_options.append(
             f'-{QPS_PREFIX}qps_view_convergence \\\n'
         )
 
-        jsrun_options.extend([
+        run_options.extend([
             f'-{QPS_PREFIX}svm_loss_type ', '${LOSS_TYPE} '
         ])
 
         if not self.run_hyperopt:
 
-            jsrun_options.extend([
+            run_options.extend([
                 f'-{QPS_PREFIX}svm_C ', '${SVM_C} '
             ])
 
-        jsrun_options.append('\\\n')
+        run_options.append('\\\n')
 
         if self.run_hyperopt:
 
-            jsrun_options.extend([
+            run_options.extend([
                 f'-{QPS_PREFIX}svm_hyperopt 1 ',
                 f'-{QPS_PREFIX}svm_hyperopt_score_types ', '${HYPEROPT_SCORE_TYPES} \\\n',
                 f'-{QPS_PREFIX}svm_cv_type ', '${CROSS_VALIDATION_TYPE} ',
@@ -750,7 +710,7 @@ class JobScriptBuilder(object):
 
             if self.solver_type == _ModelPERMON.SolverType.MPGP:
 
-                jsrun_options.extend([
+                run_options.extend([
                     '-cross_qps_mpgp_expansion_type projcg ',
                     '-cross_qps_mpgp_gamma ${MPGP_GAMMA} ',
                     '-cross_qps_view_convergence \\\n',
@@ -758,56 +718,61 @@ class JobScriptBuilder(object):
 
             elif self.solver_type == _ModelPERMON.SolverType.BLMVM:
 
-                jsrun_options.extend([
+                run_options.extend([
                     '-cross_qps_type ${SOLVER_QPS_TYPE} ',
                     '-cross_qps_tao_type ${SOLVER_QPS_TAO_TYPE} ',
                     '-cross_qps_view_convergence \\\n'
                 ])
 
-            jsrun_options.extend([
+            run_options.extend([
                 f'-cross_svm_warm_start {int(self.hyperopt_warm_start)} \\\n',
                 '-cross_svm_info -cross_svm_view_report \\\n'
             ])
 
         if self.probability_model:
 
-            jsrun_options.extend([
+            run_options.extend([
                 '-svm_threshold ${DECISION_THRESHOLD} -tao_view -H_bce_mat_type ${MAT_TYPE} \\\n'
                 '-svm_view_report \\\n'
             ])
 
-        jsrun_options.extend([
+        run_options.extend([
             '-f_training_predictions ${FN_TRAIN_PREDICTS} ',
             '-f_test_predictions ${FN_TEST_PREDICTS} \\\n'
         ])
 
         if self.device == _DeviceType.CPU:
-            nprocs = self.nnodes * self.resources * self.rank_rs
-            STR_DEVICE = '{}_cpu'.format(nprocs)
-            if nprocs > 1: STR_DEVICE += 's'
+            STR_DEVICE = ''
+            pass
+            # nprocs = self.nnodes * self.resources * self.rank_rs
+            # STR_DEVICE = '{}_cpu'.format(nprocs)
+            # if nprocs > 1: STR_DEVICE += 's'
         else:
-            if self.resources == 1:
-                STR_DEVICE = 'single_gpu'
-            else:
-                STR_DEVICE = 'multiple_gpu'
+            STR_DEVICE = ''
+            pass
+            # if self.resources == 1:
+            #     STR_DEVICE = 'single_gpu'
+            # else:
+            #     STR_DEVICE = 'multiple_gpu'
 
-        jsrun_options.extend([
+        run_options.extend([
             '2>&1 | tee ${OUTPUT_DIR}/${DS_PREFIX}_',
             STR_DEVICE,
             '_${OUTPUT_SUFFIX}.log\n'
         ])
 
-        f.writelines(jsrun_options)
+        f.writelines(run_options)
 
     def createScript(self) -> None:
 
         if self.script_name is None:
+
             raise RuntimeError('Name for generated script is not set!')
 
         with open(self.script_name, 'w') as f:
 
             self._writeShebang(f)
-            self._writeBsubOptions(f)
+            self._writeBatchFileDirectives(f)
             f.write('\n')
             self._writeDirectoryLocations(f)
             f.write('\n')
@@ -824,29 +789,31 @@ class JobScriptBuilder(object):
             f.write('\n')
             self._writeObjectSettings(f)
             f.write('\n')
-            self._writeJSRunOptions(f)
+            self._writeRunOptions(f)
 
 
 if __name__ == '__main__':
 
-    VAR_PROJECT_ID = 'CSC314'
-    VAR_USER = 'pecham'
+    _os = lazy_import('os')
 
-    VAR_WALL_TIME = _datetime.time(hour=0, minute=10)
-    VAR_RESOURCES = 1
-    VAR_RANKS_PER_RESOURCE = 4
-    VAR_NCORES = 7
+    VAR_PROJECT_ID = 'OPEN-27-10'
+    VAR_USER = 'mari'
 
     VAR_DEVICE = _DeviceType.CUDA
+    VAR_PARTITION = 'qdgx'
+
+    VAR_NTASKS = 16
+    VAR_NNODES = 1
+    VAR_WALL_TIME = _datetime.time(hour=0, minute=10)
 
     VAR_SCRIPT_NAME = 'test_{}.sh'.format(VAR_DEVICE.value)
 
     # locations
 
-    VAR_REMOTE_HOME_DIR = '/gpfs/alpine/proj-shared/{}/{}'.format(VAR_PROJECT_ID.lower(), VAR_USER)
+    VAR_REMOTE_HOME_DIR = _os.path.join('/scratch/user', VAR_USER)
 
-    VAR_PERMON_SVM_DIR = f'{VAR_REMOTE_HOME_DIR}/permon/permonsvm'
-    VAR_PETSC_ARCH = 'arch-olcf-summit-double-precision-gcc-O3'
+    VAR_REMOTE_APPS_DIR = _os.path.join(VAR_REMOTE_HOME_DIR, 'apps')
+    VAR_PERMON_SVM_DIR = _os.path.join(VAR_REMOTE_APPS_DIR, 'permon', 'permonsvm')
 
     VAR_DATA_DIR = f'{VAR_REMOTE_HOME_DIR}/data'
     VAR_OUTPUT_DIR = f'{VAR_REMOTE_HOME_DIR}/outputs'
@@ -874,15 +841,26 @@ if __name__ == '__main__':
     VAR_SOLVER_TYPE = _ModelPERMON.SolverType.MPGP
     VAR_MPGP_GAMMA = 10
 
+    # executable
+
+    # VAR_PRECISION = 'single'
+    VAR_PRECISION = 'double'
+
+    if VAR_PROBABILITY_OUTPUT:
+        VAR_EXECUTABLE_PATH = _os.path.join(VAR_PERMON_SVM_DIR, f'src/tutorials/ex5_{VAR_PRECISION}')
+    else:
+        PETSC_ARCH = f'intel-cuda-{VAR_PRECISION}-opt'
+        VAR_EXECUTABLE_PATH = _os.path.join(VAR_PERMON_SVM_DIR, PETSC_ARCH, 'bin/permonsvm')
+
     script_builder = JobScriptBuilder(
         script_name=VAR_SCRIPT_NAME,
         project_id=VAR_PROJECT_ID,
+        partition=VAR_PARTITION,
+        nnodes=VAR_NNODES,
+        ntasks=VAR_NTASKS,
         wall_time=VAR_WALL_TIME,
-        resources=VAR_RESOURCES,
-        ranks_rs=VAR_RANKS_PER_RESOURCE,
         # locations
-        permonsvm_dir=VAR_PERMON_SVM_DIR,
-        petsc_arch=VAR_PETSC_ARCH,
+        executable_path=VAR_EXECUTABLE_PATH,
         remote_data_dir=VAR_DATA_DIR,
         remote_output_dir=VAR_OUTPUT_DIR,
         # prefix
