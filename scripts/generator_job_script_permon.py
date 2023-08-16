@@ -52,6 +52,8 @@ class JobScriptBuilder(object):
                  # solver
                  solver_type: _ModelPERMON.SolverType = _ModelPERMON.SolverType.MPGP,
                  mpgp_gamma: float = 10.,
+                 # functions trace
+                 trace_funcs: bool = True,
                  # device
                  device: _DeviceType = _DeviceType.CUDA):
 
@@ -99,6 +101,9 @@ class JobScriptBuilder(object):
         self._ds_prefix = None
         self.ds_prefix = ds_prefix
 
+        self._ds_calib_set = None
+        self.ds_calib_set = ds_calib_set
+
         # training model options
 
         self._probability_model = None
@@ -140,6 +145,11 @@ class JobScriptBuilder(object):
 
         self._mpgp_gamma = None
         self.mpgp_gamma = mpgp_gamma
+
+        # tracing functions
+
+        self._trace_funcs = None
+        self.trace_funcs = trace_funcs
 
         # device
 
@@ -286,6 +296,16 @@ class JobScriptBuilder(object):
 
         self._ds_prefix = prefix
 
+    @property
+    def ds_calib_set(self) -> str:
+
+        return self._ds_calib_set
+
+    @ds_calib_set.setter
+    def ds_calib_set(self, flg: bool) -> None:
+
+        self._ds_calib_set = flg
+
     """
     Training model options
     """
@@ -409,6 +429,20 @@ class JobScriptBuilder(object):
         self._solver_type = solver_type
 
     """
+    Tracing
+    """
+
+    @property
+    def trace_funcs(self) -> bool:
+
+        return self._trace_funcs
+
+    @trace_funcs.setter
+    def trace_funcs(self, flg) -> None:
+
+        self._trace_funcs = flg
+
+    """
     Device
     """
 
@@ -495,7 +529,6 @@ class JobScriptBuilder(object):
         # data set prefix
 
         DS_PREFIX = self.ds_prefix
-        if DS_PREFIX != '': DS_PREFIX = f'{DS_PREFIX}_'
 
         # output suffix
 
@@ -525,7 +558,15 @@ class JobScriptBuilder(object):
         ]
 
         if self.probability_model:
-            files.append('FN_CALIB=${DATA_DIR}/${DS_PREFIX}_calib.h5\n')
+
+            ds_calib_fn = 'FN_CALIB=${DATA_DIR}/${DS_PREFIX}'
+            ds_calib_suffix = 'calib' if self.ds_calib_set else 'training'
+
+            ds_calib_fn = f'{ds_calib_fn}_{ds_calib_suffix}.h5'
+            files.extend([
+                ds_calib_fn,
+                '\n'
+            ])
 
         files.extend([
             'FN_TEST=${DATA_DIR}/${DS_PREFIX}_test.h5\n',
@@ -658,13 +699,18 @@ class JobScriptBuilder(object):
         self._workload_manager.executable_path = self.executable_path
         run_options.extend(self._workload_manager.getRunOptions())
 
+        if self.trace_funcs:
+
+            run_options.extend([
+                '-fllop_trace \\\n',
+            ])
+
         if self.device == _DeviceType.CUDA:
 
             run_options.extend([
                 '-device_enable eager -use_gpu_aware_mpi 0 \\\n',
                 '-vec_type ${VEC_TYPE} \\\n'
-                ]
-            )
+            ])
 
         run_options.append(
             '-f_training ${FN_TRAIN} -Xt_training_mat_type ${MAT_TYPE}'
@@ -835,7 +881,7 @@ if __name__ == '__main__':
     VAR_REMOTE_APPS_DIR = _os.path.join('/scratch/user', VAR_USER, 'apps')
     VAR_REMOTE_PROJECT_DIR = '/mnt/proj2/open-27-10/wildfires'
 
-    VAR_DATA_DIR = _os.path.join(VAR_REMOTE_PROJECT_DIR, 'data')
+    VAR_DATA_DIR = _os.path.join(VAR_REMOTE_PROJECT_DIR, 'data/test')
     VAR_OUTPUT_DIR = _os.path.join(VAR_REMOTE_PROJECT_DIR, 'outputs')
 
     VAR_PERMON_SVM_DIR = _os.path.join(VAR_REMOTE_APPS_DIR, 'permonsvm')
