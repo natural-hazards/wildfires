@@ -1,4 +1,6 @@
 
+from typing import Union
+
 from mlfire.utils.functool import lazy_import
 
 # lazy imports
@@ -21,17 +23,20 @@ class JobScriptBuilder(object):
                  script_name: str = None,
                  project_id: str = None,
                  workload_manager_type: _WorkloadManagerType = _WorkloadManagerType.SLURM,
-                 # resources
+                 # directives values
                  nnodes: int = 1,
                  ntasks: int = 1,
                  partition: str = '',
                  wall_time: _datetime.time = _datetime.time(hour=0, minute=10),
+                 # command before run
+                 commands_before_run: Union[list[str], tuple[str]] = None,
                  # locations
                  executable_path: str = None,
                  remote_data_dir: str = None,
                  remote_output_dir: str = None,
                  # prefix
                  ds_prefix: str = None,
+                 ds_calib_set: bool = False,
                  # training model settings
                  probability_model: bool = False,
                  loss_type: _ModelPERMON.LossType = _ModelPERMON.LossType.L1,
@@ -72,6 +77,11 @@ class JobScriptBuilder(object):
 
         self._wall_time = None
         self.wall_time = wall_time
+
+        # command before run
+
+        self._commands_before_run = None
+        self.commands_before_run = commands_before_run
 
         # locations
 
@@ -217,6 +227,16 @@ class JobScriptBuilder(object):
     def wall_time(self, wtime: _datetime.time) -> None:
 
         self._wall_time = wtime
+
+    @property
+    def commands_before_run(self) -> Union[list[str], tuple[str]]:
+
+        return self._commands_before_run
+
+    @commands_before_run.setter
+    def commands_before_run(self, cmds: Union[list[str], tuple[str]]) -> None:
+
+        self._commands_before_run = cmds
 
     """
     Locations
@@ -419,15 +439,10 @@ class JobScriptBuilder(object):
             'PROBABILITY' if self.probability_model else 'LABEL'
         )
 
-        #
-        # if self.device == _DeviceType.CPU:
-        #     job_name = f'{job_name}_CPUS'
-        # else:
-        #     if self.resources == 1:
-        #         job_name = f'{job_name}_SINGLE_GPU'
-        #     else:
-        #         job_name = f'{job_name}_MULTIPLE_GPU'
-        #
+        if self.workload_manager_type == _WorkloadManagerType.SLURM:
+            mpiprocs = self.ntasks
+        else:
+            raise NotImplementedError
 
         job_name = f'{job_name}_{self.solver_type.value.upper()}'
 
@@ -436,6 +451,14 @@ class JobScriptBuilder(object):
             job_name = f'{job_name}_GRID_SEARCH'
             if self.hyperopt_warm_start: job_name = f'{job_name}_WITH_WARM_START'
             job_name += '\n'
+
+        job_name = f'{job_name}_'
+        if self.device == _DeviceType.CPU:
+            if mpiprocs > 1: job_name = f'{job_name}_{mpiprocs}'
+            job_name = f'{job_name}_CPU'
+            if mpiprocs > 1: job_name = f'{job_name}S'
+        else:
+            job_name = '{}{}'.format(job_name, 'SINGLE_GPU' if mpiprocs == 1 else f'{mpiprocs}_GPUS')
 
         self._workload_manager.project_id = self.project_id
         self._workload_manager.job_name = job_name
@@ -473,11 +496,6 @@ class JobScriptBuilder(object):
 
         DS_PREFIX = self.ds_prefix
         if DS_PREFIX != '': DS_PREFIX = f'{DS_PREFIX}_'
-
-        if self.probability_model:
-            DS_PREFIX = '{}{}'.format(DS_PREFIX, _ModelPERMON.ModelOutput.PROBABILITY.value)
-        else:
-            DS_PREFIX = '{}{}'.format(DS_PREFIX, _ModelPERMON.ModelOutput.LABEL.value)
 
         # output suffix
 
@@ -627,8 +645,18 @@ class JobScriptBuilder(object):
 
     def _writeRunOptions(self, f) -> None:
 
+        run_options = []
+
+        if self.commands_before_run is not None:
+
+            run_options.append('# Commands before training models\n\n')
+            run_options.extend(self.commands_before_run)
+            run_options.append('\n\n')
+
+        run_options.append('# Model training\n\n')
+
         self._workload_manager.executable_path = self.executable_path
-        run_options = self._workload_manager.getRunOptions()
+        run_options.extend(self._workload_manager.getRunOptions())
 
         if self.device == _DeviceType.CUDA:
 
@@ -741,19 +769,13 @@ class JobScriptBuilder(object):
             '-f_test_predictions ${FN_TEST_PREDICTS} \\\n'
         ])
 
-        if self.device == _DeviceType.CPU:
-            STR_DEVICE = ''
-            pass
-            # nprocs = self.nnodes * self.resources * self.rank_rs
-            # STR_DEVICE = '{}_cpu'.format(nprocs)
-            # if nprocs > 1: STR_DEVICE += 's'
+        if self.workload_manager_type == _WorkloadManagerType.SLURM:
+            nprocs = self.ntasks
         else:
-            STR_DEVICE = ''
-            pass
-            # if self.resources == 1:
-            #     STR_DEVICE = 'single_gpu'
-            # else:
-            #     STR_DEVICE = 'multiple_gpu'
+            raise NotImplementedError
+
+        STR_DEVICE = '{}_{}'.format(nprocs, 'cpu' if self.device == _DeviceType.CPU else 'gpu')
+        if nprocs > 1: STR_DEVICE += 's'
 
         run_options.extend([
             '2>&1 | tee ${OUTPUT_DIR}/${DS_PREFIX}_',
@@ -810,17 +832,17 @@ if __name__ == '__main__':
 
     # locations
 
-    VAR_REMOTE_HOME_DIR = _os.path.join('/scratch/user', VAR_USER)
+    VAR_REMOTE_APPS_DIR = _os.path.join('/scratch/user', VAR_USER, 'apps')
+    VAR_REMOTE_PROJECT_DIR = '/mnt/proj2/open-27-10/wildfires'
 
-    VAR_REMOTE_APPS_DIR = _os.path.join(VAR_REMOTE_HOME_DIR, 'apps')
-    VAR_PERMON_SVM_DIR = _os.path.join(VAR_REMOTE_APPS_DIR, 'permon', 'permonsvm')
+    VAR_DATA_DIR = _os.path.join(VAR_REMOTE_PROJECT_DIR, 'data')
+    VAR_OUTPUT_DIR = _os.path.join(VAR_REMOTE_PROJECT_DIR, 'outputs')
 
-    VAR_DATA_DIR = f'{VAR_REMOTE_HOME_DIR}/data'
-    VAR_OUTPUT_DIR = f'{VAR_REMOTE_HOME_DIR}/outputs'
+    VAR_PERMON_SVM_DIR = _os.path.join(VAR_REMOTE_APPS_DIR, 'permonsvm')
 
     # prefix
 
-    VAR_DS_PREFIX = 'ak_modis_2004_2005_100km'
+    VAR_DS_PREFIX = 'ak_modis_2004_850_horizontal_pca_80'
 
     # training model settings
 
@@ -841,6 +863,11 @@ if __name__ == '__main__':
     VAR_SOLVER_TYPE = _ModelPERMON.SolverType.MPGP
     VAR_MPGP_GAMMA = 10
 
+    # commands before training models
+
+    VAR_ENV_FILE = _os.path.join(VAR_REMOTE_APPS_DIR, 'env.env')
+    VAR_CMDS_BEFORE_TRAINING = (f'source {VAR_ENV_FILE}',)
+
     # executable
 
     # VAR_PRECISION = 'single'
@@ -854,11 +881,14 @@ if __name__ == '__main__':
 
     script_builder = JobScriptBuilder(
         script_name=VAR_SCRIPT_NAME,
+        #
         project_id=VAR_PROJECT_ID,
         partition=VAR_PARTITION,
         nnodes=VAR_NNODES,
         ntasks=VAR_NTASKS,
         wall_time=VAR_WALL_TIME,
+        # commands before training models
+        commands_before_run=VAR_CMDS_BEFORE_TRAINING,
         # locations
         executable_path=VAR_EXECUTABLE_PATH,
         remote_data_dir=VAR_DATA_DIR,
