@@ -894,6 +894,7 @@ if __name__ == '__main__':
 
     VAR_PROBABILITY_OUTPUT = True
     VAR_LOSS_TYPE = _ModelPERMON.LossType.L1
+    VAR_C_VALUE = 0.001
 
     # hyperparameters optimization
 
@@ -916,8 +917,8 @@ if __name__ == '__main__':
 
     # executable
 
-    # VAR_PRECISION = 'single'
-    VAR_PRECISION = 'double'
+    VAR_PRECISION = 'single'
+    # VAR_PRECISION = 'double'
 
     if VAR_PROBABILITY_OUTPUT:
         VAR_EXECUTABLE_PATH = _os.path.join(VAR_PERMON_SVM_DIR, f'src/tutorials/ex5_{VAR_PRECISION}')
@@ -944,6 +945,7 @@ if __name__ == '__main__':
         # training model
         probability_model=VAR_PROBABILITY_OUTPUT,
         loss_type=VAR_LOSS_TYPE,
+        svm_c_value=VAR_C_VALUE,
         # hyperparameters optimization
         run_hyperopt=VAR_RUN_HYPEROPT,
         hyperopt_warm_start=VAR_HYPEROPT_WARM_START,

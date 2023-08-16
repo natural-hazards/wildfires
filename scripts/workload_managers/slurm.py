@@ -118,6 +118,8 @@ class SlurmWorkloadManager(_BaseWorkloadManager):
             f'#SBATCH --nodes {self.nnodes}\n',
             f'#SBATCH --ntasks {self.ntasks}\n',
             f'#SBATCH --time {str_wtime_hours}:{str_wtime_minutes}:00\n'
+            f'#SBATCH --output {self.job_name.lower()}.%j.out\n',
+            f'#SBATCH --error {self.job_name.lower()}.%j.err\n',
         ]
 
         return directives
