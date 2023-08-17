@@ -109,16 +109,18 @@ if __name__ == '__main__':
 
     print('\n============================\nInference on a train data set\n')
 
-    labels_train_pred = _xgboost_inference.predict(
+    _xgboost_inference.predict(
         xgb=xgb,
         ds=ds_train,
-        with_report=True,
+        show_report=True,
+        report_with_scores=True
     )
 
     print('\n============================\nInference on a test data set\n')
 
-    labels_train_pred = _xgboost_inference.predict(
+    _xgboost_inference.predict(
         xgb=xgb,
         ds=ds_test,
-        with_report=True,
+        show_report=True,
+        report_with_scores=True
     )

@@ -538,9 +538,10 @@ class JobScriptBuilder(object):
             STR_GRID_SEARCH = _ModelPERMON.HyperParameterOptimization.GRID_SEARCH.value
             OUTPUT_SUFFIX = '{}_{}'.format(OUTPUT_SUFFIX, STR_GRID_SEARCH)
 
-        if self.hyperopt_warm_start:
-            STR_WARM_START = _ModelPERMON.HyperParameterOptimization.GRID_SEARCH.value
-            OUTPUT_SUFFIX = '{}_{}'.format(OUTPUT_SUFFIX, STR_WARM_START)
+            if self.hyperopt_warm_start:
+
+                STR_WARM_START = _ModelPERMON.HyperParameterOptimization.WARM_START.value
+                OUTPUT_SUFFIX = '{}_{}'.format(OUTPUT_SUFFIX, STR_WARM_START)
 
         prefixes_suffixes = [
             '# Prefixes and suffixes\n\n',
