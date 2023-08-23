@@ -28,6 +28,7 @@ class JobScriptBuilder(object):
                  ntasks: int = 1,
                  partition: str = '',
                  wall_time: _datetime.time = _datetime.time(hour=0, minute=10),
+                 add_manager_directives: bool = True,
                  # command before run
                  commands_before_run: Union[list[str], tuple[str]] = None,
                  # locations
@@ -62,6 +63,8 @@ class JobScriptBuilder(object):
         self._workload_manager_type = None
         self.workload_manager_type = workload_manager_type
 
+        # directives
+
         self._script_name = None
         self.script_name = script_name
 
@@ -79,6 +82,9 @@ class JobScriptBuilder(object):
 
         self._wall_time = None
         self.wall_time = wall_time
+
+        self._add_manager_directives = None
+        self.add_manager_directives = add_manager_directives
 
         # command before run
 
@@ -237,6 +243,16 @@ class JobScriptBuilder(object):
     def wall_time(self, wtime: _datetime.time) -> None:
 
         self._wall_time = wtime
+
+    @property
+    def add_manager_directives(self) -> bool:
+
+        return self._add_manager_directives
+
+    @add_manager_directives.setter
+    def add_manager_directives(self, flg: bool) -> None:
+
+        self._add_manager_directives = flg
 
     @property
     def commands_before_run(self) -> Union[list[str], tuple[str]]:
@@ -744,7 +760,7 @@ class JobScriptBuilder(object):
         if self.solver_type == _ModelPERMON.SolverType.MPGP:
 
             run_options.extend([
-                f'-{QPS_PREFIX}qps_type', '${SOLVER_QPS_TYPE} \\n',
+                f'-{QPS_PREFIX}qps_type ', '${SOLVER_QPS_TYPE} \\\n',
                 f'-{QPS_PREFIX}qps_mpgp_expansion_type projcg ',
                 f'-{QPS_PREFIX}mpgp_gamma ', '${MPGP_GAMMA}  \\\n'
             ])
@@ -841,7 +857,8 @@ class JobScriptBuilder(object):
         with open(self.script_name, 'w') as f:
 
             self._writeShebang(f)
-            self._writeBatchFileDirectives(f)
+            if self.add_manager_directives:
+                self._writeBatchFileDirectives(f)
             f.write('\n')
             self._writeDirectoryLocations(f)
             f.write('\n')
@@ -874,6 +891,8 @@ if __name__ == '__main__':
     VAR_NTASKS = 16
     VAR_NNODES = 1
     VAR_WALL_TIME = _datetime.time(hour=0, minute=10)
+
+    VAR_ADD_DIRECTIVES = False
 
     VAR_SCRIPT_NAME = 'test_{}.sh'.format(VAR_DEVICE.value)
 
@@ -935,6 +954,7 @@ if __name__ == '__main__':
         nnodes=VAR_NNODES,
         ntasks=VAR_NTASKS,
         wall_time=VAR_WALL_TIME,
+        add_manager_directives=VAR_ADD_DIRECTIVES,
         # commands before training models
         commands_before_run=VAR_CMDS_BEFORE_TRAINING,
         # locations
