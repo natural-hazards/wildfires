@@ -840,17 +840,29 @@ class DataAdapterTS(DatasetView):
         ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
         ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
-        _np.seterr(divide='ignore')
+        _np.seterr(divide='ignore', invalid='ignore')
 
         # constants
         L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
 
         evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
-        ninf = _np.count_nonzero(evi == _np.inf)
-        if ninf > 0:
-            print(f'#inf values = {ninf} in EVI. The will be removed from data set!')
-            labels[_np.any(evi == _np.inf, axis=2)] = _np.nan
-            evi = _np.where(evi == _np.inf, _np.nan, evi)
+
+        evi_infs = _np.isinf(evi)
+        evi_nans = _np.isnan(evi)
+
+        ninfs = _np.count_nonzero(evi_infs)
+        nnans = _np.count_nonzero(evi_nans)
+
+        if ninfs > 0:
+            print(f'#inf values = {ninfs} in EVI. The will be removed from data set!')
+
+            labels[_np.any(evi_infs, axis=2)] = _np.nan
+            evi = _np.where(evi_infs, _np.nan, evi)
+
+        if nnans > 0:
+            print(f'#NaN values = {nnans} in EVI. The will be removed from data set!')
+
+            labels[_np.any(evi_nans, axis=2)] = _np.nan
 
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
 
@@ -871,15 +883,27 @@ class DataAdapterTS(DatasetView):
         ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
         ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
-        _np.seterr(divide='ignore')
+        _np.seterr(divide='ignore', invalid='ignore')
 
         # compute EVI using 2 bands (nir and red)
         evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
-        ninf = _np.count_nonzero(evi2 == _np.inf)
-        if ninf > 0:
-            print(f'#inf values = {ninf} in EVI2. The will be removed from data set!')
-            labels[_np.any(evi2 == _np.inf, axis=2)] = _np.nan
-            evi2 = _np.where(evi2 == _np.inf, _np.nan, evi2)
+
+        evi2_infs = _np.isinf(evi2)
+        evi2_nans = _np.isnan(evi2)
+
+        ninfs = _np.count_nonzero(evi2_infs)
+        nnans = _np.count_nonzero(evi2_nans)
+
+        if ninfs > 0:
+            print(f'#inf values = {ninfs} in EVI2. The will be removed from data set!')
+
+            labels[_np.any(evi2_infs, axis=2)] = _np.nan
+            evi2 = _np.where(evi2_infs, _np.nan, evi2)
+
+        if nnans > 0:
+            print(f'#NaN values = {nnans} in EVI2. The will be removed from data set!')
+
+            labels[_np.any(evi2_nans, axis=2)] = _np.nan
 
         # add features
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
@@ -901,15 +925,27 @@ class DataAdapterTS(DatasetView):
         ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
         ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
 
-        _np.seterr(divide='ignore')
+        _np.seterr(divide='ignore', invalid='ignore')
 
         # compute NDVI
         ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
-        ninf = _np.count_nonzero(ndvi == _np.inf)
-        if ninf > 0:
-            print(f'#inf values = {ninf} in NDVI. The will be removed from data set!')
-            labels[_np.any(ndvi == _np.inf, axis=2)] = _np.nan
-            ndvi = _np.where(ndvi == _np.inf, _np.nan, ndvi)
+
+        ndvi_infs = _np.isinf(ndvi)
+        ndvi_nans = _np.isnan(ndvi)
+
+        ninfs = _np.count_nonzero(ndvi_infs)
+        nnans = _np.count_nonzero(ndvi_nans)
+
+        if ninfs > 0:
+            print(f'#inf values = {ninfs} in NDVI. The will be removed from data set!')
+
+            labels[_np.any(ndvi_infs, axis=2)] = _np.nan
+            ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
+
+        if nnans > 0:
+            print(f'#NaN values = {nnans} in NDVI. The will be removed from data set!')
+
+            labels[_np.any(ndvi_nans, axis=2)] = _np.nan
 
         # add to features
         ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), ndvi, axis=2)
