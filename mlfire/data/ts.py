@@ -49,8 +49,11 @@ class VegetationIndex(Enum):
 class DataAdapterTS(DatasetView):
 
     def __init__(self,
-                 lst_satimgs: Union[tuple[str], list[str]],
+                 # sources - labels and multi-spectral satellite images (reflectance and temperature)
                  lst_labels: Union[tuple[str], list[str]],
+                 lst_satimgs: Union[tuple[str], list[str], None] = None,
+                 lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
+                 # TODO comment
                  ds_start_date: lazy_import('datetime').date = None,
                  ds_end_date: lazy_import('datetime').date = None,
                  # transformer options
@@ -76,9 +79,11 @@ class DataAdapterTS(DatasetView):
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
+        # TODO inheritance from DatasetBase?
         super().__init__(
-            lst_satimgs=lst_satimgs,
             lst_labels=lst_labels,
+            lst_satimgs=lst_satimgs,
+            lst_satimgs_tempsurface=lst_satimgs_tempsurface,
             modis_collection=modis_collection,
             label_collection=label_collection,
             cci_confidence_level=cci_confidence_level,
@@ -346,6 +351,7 @@ class DataAdapterTS(DatasetView):
         for op in lst_ops: self._pca_ops |= op.value
 
     # load labels
+    # TODO move to loader?
 
     def __loadLabels_MTBS(self) -> _np.ndarray:
 
@@ -418,6 +424,9 @@ class DataAdapterTS(DatasetView):
             return self.__loadLabels_CCI()
         else:
             raise NotImplementedError
+
+    # load reflectance
+    # TODO move to loader
 
     def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:
 
@@ -827,6 +836,7 @@ class DataAdapterTS(DatasetView):
 
     """
     Vegetation index
+    TODO move to loader
     """
 
     def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
@@ -1186,7 +1196,11 @@ class DataAdapterTS(DatasetView):
 if __name__ == '__main__':
 
     VAR_DATA_DIR = 'data/tifs'
-    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+
+    VAR_PREFIX_REFLECTANCE_IMG = 'ak_reflec_january_december_{year}_100km'
+    VAR_PREFIX_TEMPSURFACE_IMG = 'ak_lst_january_december_{year}_100km'
+
+    VAR_PREFIX_LABEL = 'ak_january_december_{year}_100km'
 
     # VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
     VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
@@ -1199,24 +1213,32 @@ if __name__ == '__main__':
     VAR_TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS]
     VAR_PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
 
-    VAR_LST_SATIMGS = []
+    VAR_LST_SATIMGS_REFLECTANCE = []
+    VAR_LST_SATIMGS_TEMPSURFACE = []
     VAR_LST_LABELS = []
 
     VAR_CCI_CONFIDENCE_LEVEL = 70
 
     for year in range(2004, 2006):
 
-        PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
+        VAR_PREFIX_REFLECTANCE_IMG_YEAR = VAR_PREFIX_REFLECTANCE_IMG.format(year=year)
+        VAR_PREFIX_TEMPSURFACE_IMG_YEAR = VAR_PREFIX_TEMPSURFACE_IMG.format(year=year)
 
-        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        VAR_LST_SATIMGS.append(VAR_FN_SATIMG)
+        VAR_PREFIX_LABEL_IMG_YEAR = VAR_PREFIX_LABEL.format(year=year)
 
-        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
+        VAR_FN_SATIMG_REFLECTANCE = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_REFLECTANCE_IMG_YEAR))
+        VAR_LST_SATIMGS_REFLECTANCE.append(VAR_FN_SATIMG_REFLECTANCE)
+
+        VAR_FN_SATIMG_TEMPSURFACE = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_TEMPSURFACE_IMG_YEAR))
+        VAR_LST_SATIMGS_TEMPSURFACE.append(VAR_FN_SATIMG_TEMPSURFACE)
+
+        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(VAR_PREFIX_LABEL_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
         VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
         VAR_LST_LABELS.append(VAR_FN_LABELS)
 
     adapter_ts = DataAdapterTS(
-        lst_satimgs=VAR_LST_SATIMGS,
+        # lst_satimgs_tempsurface=VAR_LST_SATIMGS_TEMPSURFACE,
+        lst_satimgs=VAR_LST_SATIMGS_REFLECTANCE,  # TODO rename -> lst_satimgs_reflectance
         lst_labels=VAR_LST_LABELS,
         label_collection=VAR_LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
@@ -1235,10 +1257,10 @@ if __name__ == '__main__':
     VAR_INDEX_END_DATE = -1
 
     print(adapter_ts.satimg_dates)
-
-    VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
-    adapter_ts.ds_start_date = VAR_START_DATE
-    VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
-    adapter_ts.ds_end_date = VAR_END_DATE
-
-    adapter_ts.createDataset()
+    #
+    # VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
+    # adapter_ts.ds_start_date = VAR_START_DATE
+    # VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
+    # adapter_ts.ds_end_date = VAR_END_DATE
+    #
+    # adapter_ts.createDataset()

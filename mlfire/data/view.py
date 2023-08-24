@@ -39,19 +39,21 @@ class FireLabelsViewOpt(Enum):
 class DatasetView(DatasetLoader):
 
     def __init__(self,
-                 lst_satimgs: Union[tuple[str], list[str]],
                  lst_labels: Union[tuple[str], list[str]],
+                 lst_satimgs: Union[tuple[str], list[str], None],
+                 lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
                  modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
-                 ndvi_view_threshold: float = None,
+                 ndvi_view_threshold: Union[float, None] = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
         super().__init__(
             lst_satimgs=lst_satimgs,
+            lst_satimgs_tempsurface=lst_satimgs_tempsurface,
             lst_labels=lst_labels,
             modis_collection=modis_collection,
             label_collection=label_collection,
@@ -777,6 +779,7 @@ class DatasetView(DatasetLoader):
 if __name__ == '__main__':
 
     VAR_DATA_DIR = 'data/tifs'
+
     VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
     VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS

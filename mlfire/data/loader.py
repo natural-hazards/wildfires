@@ -17,8 +17,10 @@ from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 class DatasetLoader(object):  # TODO rename to data set base
 
     def __init__(self,
-                 lst_satimgs: Union[tuple[str], list[str]],
                  lst_labels: Union[tuple[str], list[str]],
+                 lst_satimgs: Union[tuple[str], list[str], None] = None,  # TODO rename lst_satimgs_reflec
+                 lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
+                 # TODO add here vegetation indices and infrared bands
                  test_ratio: float = .33,
                  val_ratio: float = .0,
                  modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
@@ -29,6 +31,8 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         self._ds_satimgs = None
         self._df_dates_satimgs = None
+
+        self._ds_satimgs_surtemp = None
 
         self._ds_labels = None
         self._df_dates_labels = None
@@ -55,10 +59,13 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._val_ratio = None
         self.val_ratio = val_ratio
 
-        # properties (multi spectral images - MODIS)
+        # properties sources - reflectance, land surface temperature, and labels
 
-        self._lst_satimgs = None
+        self._lst_satimgs = None  # TODO rename -> lst_satimgs_reflec
         self.lst_satimgs = lst_satimgs
+
+        self._lst_satimgs_tempsurface = None
+        self.lst_satimgs_tempsurface = lst_satimgs_tempsurface
 
         self._modis_collection = None
         self.modis_collection = modis_collection
@@ -85,7 +92,7 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._labels_processed = False
 
     """
-    Multispectral images properties
+    Properties and setter related to sources
     """
 
     @property
@@ -101,13 +108,31 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         for fn in lst_fn:
             if not os.path.exists(fn):
-                raise IOError('File {} does not exist!'.format(fn))
+                raise IOError(f'File {fn} does not exist!')
 
         self._reset()  # clean up
         self._lst_satimgs = lst_fn
 
     @property
-    def modis_collection(self) -> ModisCollection:
+    def lst_satimgs_tempsurface(self) -> Union[tuple[str], list[str]]:
+
+        return self._lst_satimgs_tempsurface
+
+    @lst_satimgs_tempsurface.setter
+    def lst_satimgs_tempsurface(self, lst_fn: Union[tuple[str], list[str]]):
+
+        if self._lst_satimgs_tempsurface == lst_fn:
+            return
+
+        for fn in lst_fn:
+            if not os.path.exists(fn):
+                raise IOError(f'File {fn} does not exitst!')
+
+        self._reset()  # clean up
+        self._lst_satimgs_tempsurface = lst_fn
+
+    @property
+    def modis_collection(self) -> ModisCollection:  # TODO change to list or remove
 
         return self._modis_collection
 
@@ -181,7 +206,7 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._mtbs_severity_from = severity
 
     """
-    Labels related to multispectral images
+    Labels related to wildfires 
     """
 
     @property
@@ -290,6 +315,8 @@ class DatasetLoader(object):  # TODO rename to data set base
     IO functionality
     """
 
+    # TODO merge __loadGeoTIFF_LABELS and __loadGeoTIFF_SATELLITE_IMGS
+
     def __loadGeoTIFF_SATELLITE_IMGS(self) -> None:
 
         # lazy import
@@ -336,6 +363,7 @@ class DatasetLoader(object):  # TODO rename to data set base
         if len(self._ds_labels) == 0:
             raise IOError('Cannot load any of following sources {}!'.format(self._lst_labels))
 
+    # TODO rename
     """
     Process meta data (MULTISPECTRAL SATELLITE IMAGE, MODIS)
     """
@@ -347,7 +375,7 @@ class DatasetLoader(object):  # TODO rename to data set base
         nbands = 0
         unique_dates = set()
 
-        with elapsed_timer('Processing band dates (satellite images, modis, reflectance)'):
+        with elapsed_timer('Processing band dates (reflectance)'):
 
             for id_ds, ds in enumerate(self._ds_satimgs):
 
@@ -374,6 +402,10 @@ class DatasetLoader(object):  # TODO rename to data set base
         del self._df_dates_satimgs; gc.collect()
         self._df_dates_satimgs = df_dates
 
+    def __processBandDates_SATIMG_MODIS_LAND_SURFACE_TEMPERATURE(self) -> None:
+
+        raise NotImplementedError
+
     def __processBandDates_SATELLITE_IMGS(self) -> None:
 
         if self._ds_satimgs is None:
@@ -382,13 +414,19 @@ class DatasetLoader(object):  # TODO rename to data set base
             except IOError:
                 raise IOError('Cannot load any of following satellite images: {}'.format(self.lst_satimgs))
 
-        if self.modis_collection == ModisCollection.REFLECTANCE:
+        if self.lst_satimgs is not None:
             try:
                 self.__processBandDates_SATIMG_MODIS_REFLECTANCE()
             except ValueError:
-                raise ValueError('')
-        else:
-            raise NotImplementedError
+                raise ValueError('')  # TODO add error message
+
+        # TODO load surface temperature geo tiffs?
+
+        if self.lst_satimgs_tempsurface is not None:
+            try:
+                self.__processBandDates_SATIMG_MODIS_LAND_SURFACE_TEMPERATURE()
+            except ValueError:
+                raise ValueError('')  # TODO add error message
 
     def __processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE(self):
 

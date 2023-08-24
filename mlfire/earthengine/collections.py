@@ -16,7 +16,7 @@ class ModisReflectanceSpectralBands(Enum):
 
 class ModisCollection(Enum):
 
-    LST = 'MODIS/0061/MOD11A2'  # land surface temperature
+    LST = 'MODIS/061/MOD11A1'  # land surface temperature # TODO rename to LAND_TEMPERATURE
     REFLECTANCE = 'MODIS/061/MOD09A1'  # spectral reflectance bands
 
 
