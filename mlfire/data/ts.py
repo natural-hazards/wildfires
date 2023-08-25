@@ -1236,8 +1236,12 @@ if __name__ == '__main__':
         VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
         VAR_LST_LABELS.append(VAR_FN_LABELS)
 
+    print(VAR_LST_SATIMGS_REFLECTANCE)
+    print(VAR_LST_SATIMGS_TEMPSURFACE)
+
     adapter_ts = DataAdapterTS(
-        # lst_satimgs_tempsurface=VAR_LST_SATIMGS_TEMPSURFACE,
+        lst_satimgs_tempsurface=VAR_LST_SATIMGS_TEMPSURFACE,
+        #
         lst_satimgs=VAR_LST_SATIMGS_REFLECTANCE,  # TODO rename -> lst_satimgs_reflectance
         lst_labels=VAR_LST_LABELS,
         label_collection=VAR_LABEL_COLLECTION,
@@ -1256,11 +1260,12 @@ if __name__ == '__main__':
     VAR_INDEX_BEGIN_DATE = 0
     VAR_INDEX_END_DATE = -1
 
-    print(adapter_ts.satimg_dates)
+    # print(adapter_ts.satimg_dates)
+    print(adapter_ts.dates_tempsurface)
     #
-    # VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
-    # adapter_ts.ds_start_date = VAR_START_DATE
-    # VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
-    # adapter_ts.ds_end_date = VAR_END_DATE
+    VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
+    adapter_ts.ds_start_date = VAR_START_DATE
+    VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
+    adapter_ts.ds_end_date = VAR_END_DATE
     #
-    # adapter_ts.createDataset()
+    adapter_ts.createDataset()

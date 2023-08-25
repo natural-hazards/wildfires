@@ -781,6 +781,7 @@ if __name__ == '__main__':
     VAR_DATA_DIR = 'data/tifs'
 
     VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+    VAR_PREFIX_LABEL = 'ak_january_december_{}_100km'
 
     VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
     # VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
@@ -792,11 +793,13 @@ if __name__ == '__main__':
     for year in range(2004, 2006):
 
         VAR_PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
+        VAR_PRFIX_LABEL_IMG_YEAR = VAR_PREFIX_LABEL.format(year)
 
-        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_YEAR))
+        VAR_FN_SATIMG = '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_YEAR)
+        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, VAR_FN_SATIMG)
         VAR_LST_SATIMGS.append(VAR_FN_SATIMG)
 
-        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(VAR_PREFIX_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
+        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(VAR_PRFIX_LABEL_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
         VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
         VAR_LST_LABELS.append(VAR_FN_LABELS)
 
