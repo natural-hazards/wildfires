@@ -20,7 +20,7 @@ from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 _pd = lazy_import('pandas')
 
 
-class CollectionOPS(Enum):  # TODO rename SourceSelection
+class SourceSelection(Enum):  # TODO rename SourceSelection
 
     NONE = 0
     REFLECTANCE = 1
@@ -28,13 +28,13 @@ class CollectionOPS(Enum):  # TODO rename SourceSelection
     ALL = 3
 
     def __and__(self, other):
-        return CollectionOPS(self.value & other.value)
+        return SourceSelection(self.value & other.value)
 
     def __eq__(self, other):
         return self.value == other.value
 
     def __or__(self, other):
-        return CollectionOPS(self.value | other.value)
+        return SourceSelection(self.value | other.value)
 
 
 class DatasetLoader(object):  # TODO rename to data set base
@@ -43,18 +43,18 @@ class DatasetLoader(object):  # TODO rename to data set base
                  lst_labels: Union[tuple[str], list[str]],
                  lst_satimgs_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
-                 # TODO comment
-                 test_ratio: float = .33,
-                 val_ratio: float = .0,
-                 # TODO comment
-                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,  # TODO change SourceSelection
                  # TODO add here vegetation indices and infrared bands
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 # TODO comment
+                 source_select_opt: Union[SourceSelection, list[SourceSelection]] = SourceSelection.ALL,
                  # TODO comment
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
-                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA) -> None:
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 # TODO comment
+                 test_ratio: float = .33,
+                 val_ratio: float = .0) -> None:
 
         self._ds_satimgs_reflectance = None
         self._df_satimgs_reflectance = None
@@ -96,7 +96,7 @@ class DatasetLoader(object):  # TODO rename to data set base
         self.lst_satimgs_tempsurface = lst_satimgs_tempsurface
 
         self._modis_collection = None  # TODO rename
-        self.modis_collection = modis_collection  # TODO rename
+        self.modis_collection = source_select_opt  # TODO rename
 
         self._satimgs_processed = False
 
@@ -130,6 +130,8 @@ class DatasetLoader(object):  # TODO rename to data set base
 
     @modis_collection.setter
     def modis_collection(self, collection: ModisCollection) -> None:
+
+        # TODO improve an implementation
 
         if self.modis_collection == collection:
             return
@@ -181,7 +183,7 @@ class DatasetLoader(object):  # TODO rename to data set base
     def dates_reflectance(self) -> lazy_import('pandas').DataFrame:
 
         if self._df_satimgs_reflectance is None:
-            self.__processDates_SATELLITE_IMGS_MODIS(selection=CollectionOPS.REFLECTANCE)
+            self.__processDates_SATELLITE_IMGS_MODIS(selection=SourceSelection.REFLECTANCE)
 
         return self._df_satimgs_reflectance
 
@@ -189,7 +191,7 @@ class DatasetLoader(object):  # TODO rename to data set base
     def dates_tempsurface(self) -> lazy_import('pandas').DataFrame:
 
         if self._df_dates_tempsurface is None:
-            self.__processDates_SATELLITE_IMGS_MODIS(selection=CollectionOPS.SURFACE_TEMPERATURE)
+            self.__processDates_SATELLITE_IMGS_MODIS(selection=SourceSelection.SURFACE_TEMPERATURE)
 
         return self._df_dates_tempsurface
 
@@ -494,11 +496,11 @@ class DatasetLoader(object):  # TODO rename to data set base
         del self._df_dates_tempsurface; gc.collect()
         self._df_dates_tempsurface = df_dates
 
-    def __processDates_SATELLITE_IMGS_MODIS(self, selection: CollectionOPS = CollectionOPS.ALL) -> None:
+    def __processDates_SATELLITE_IMGS_MODIS(self, selection: SourceSelection = SourceSelection.ALL) -> None:
 
         # processing reflectance (MOD09A1)
 
-        if self.lst_satimgs_reflectance is not None and (selection & CollectionOPS.REFLECTANCE == CollectionOPS.REFLECTANCE):
+        if self.lst_satimgs_reflectance is not None and (selection & SourceSelection.REFLECTANCE == SourceSelection.REFLECTANCE):
 
             if self._ds_satimgs_reflectance is None:
                 try:
@@ -516,7 +518,7 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         # processing land surface temperature (MOD11A2)
 
-        if self.lst_satimgs_tempsurface is not None and (selection & CollectionOPS.SURFACE_TEMPERATURE == CollectionOPS.SURFACE_TEMPERATURE):
+        if self.lst_satimgs_tempsurface is not None and (selection & SourceSelection.SURFACE_TEMPERATURE == SourceSelection.SURFACE_TEMPERATURE):
 
             if self._ds_satimgs_tempsurface is None:
                 try:

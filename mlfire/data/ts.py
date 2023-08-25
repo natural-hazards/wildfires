@@ -70,7 +70,7 @@ class DataAdapterTS(DatasetView):
                  pca_ops: list[FactorOP] = (FactorOP.USER_SET,),
                  pca_retained_variance: float = 0.95,
                  # view options
-                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
+                 source_select_opt: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -84,7 +84,7 @@ class DataAdapterTS(DatasetView):
             lst_labels=lst_labels,
             lst_satimgs_reflectance=lst_satimgs_reflectance,
             lst_satimgs_tempsurface=lst_satimgs_tempsurface,
-            modis_collection=modis_collection,
+            source_select_opt=source_select_opt,
             label_collection=label_collection,
             cci_confidence_level=cci_confidence_level,
             mtbs_severity_from=mtbs_severity_from,
