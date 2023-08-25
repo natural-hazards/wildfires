@@ -51,7 +51,7 @@ class DataAdapterTS(DatasetView):
     def __init__(self,
                  # sources - labels and multi-spectral satellite images (reflectance and temperature)
                  lst_labels: Union[tuple[str], list[str]],
-                 lst_satimgs: Union[tuple[str], list[str], None] = None,
+                 lst_satimgs_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
                  # TODO comment
                  ds_start_date: lazy_import('datetime').date = None,
@@ -82,7 +82,7 @@ class DataAdapterTS(DatasetView):
         # TODO inheritance from DatasetBase?
         super().__init__(
             lst_labels=lst_labels,
-            lst_satimgs=lst_satimgs,
+            lst_satimgs_reflectance=lst_satimgs_reflectance,
             lst_satimgs_tempsurface=lst_satimgs_tempsurface,
             modis_collection=modis_collection,
             label_collection=label_collection,
@@ -430,16 +430,16 @@ class DataAdapterTS(DatasetView):
 
     def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:
 
-        len_ds = len(self._ds_satimgs)
+        len_ds = len(self._ds_satimgs_reflectance)
 
         if len_ds > 1:
 
-            rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
-            nrasters = self._ds_satimgs[0].RasterCount
+            rows = self._ds_satimgs_reflectance[0].RasterYSize; cols = self._ds_satimgs_reflectance[0].RasterXSize
+            nrasters = self._ds_satimgs_reflectance[0].RasterCount
 
             for id_img in range(1, len_ds):
 
-                tmp_img = self._ds_satimgs[id_img]
+                tmp_img = self._ds_satimgs_reflectance[id_img]
 
                 if rows != tmp_img.RasterYSize or cols != tmp_img.RasterXSize:
                     raise RuntimeError('Inconsistent shape among sources!')
@@ -454,16 +454,16 @@ class DataAdapterTS(DatasetView):
 
                 gc.collect()  # invoke garbage collector
 
-                rend += self._ds_satimgs[id_img].RasterCount
+                rend += self._ds_satimgs_reflectance[id_img].RasterCount
 
-                tmp_img = self._ds_satimgs[id_img].ReadAsArray()
+                tmp_img = self._ds_satimgs_reflectance[id_img].ReadAsArray()
                 satimg_ts[:, :, rstart:rend] = _np.moveaxis(tmp_img, 0, -1)
 
                 rstart = rend
 
         else:
 
-            satimg_ts = self._ds_satimgs[0].ReadAsArray()
+            satimg_ts = self._ds_satimgs_reflectance[0].ReadAsArray()
             satimg_ts = _np.moveaxis(satimg_ts, 0, -1)
             satimg_ts = satimg_ts.astype(_np.float32)
 
@@ -474,7 +474,7 @@ class DataAdapterTS(DatasetView):
         NBANDS_MODIS = 7
         rgn = range(start_id_img, end_id_img + 1)
 
-        rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
+        rows = self._ds_satimgs_reflectance[0].RasterYSize; cols = self._ds_satimgs_reflectance[0].RasterXSize
         nbands = NBANDS_MODIS * len(rgn)
 
         satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
@@ -483,7 +483,7 @@ class DataAdapterTS(DatasetView):
         for id_img in rgn:
 
             id_img, start_id_band = self._map_start_satimgs[id_img]
-            satimg = self._ds_satimgs[id_img]
+            satimg = self._ds_satimgs_reflectance[id_img]
 
             for id_band in range(0, NBANDS_MODIS):
 
@@ -497,10 +497,10 @@ class DataAdapterTS(DatasetView):
 
     def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:
 
-        start_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_start_date][0]
-        end_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_end_date][0]
+        start_img_id = self._df_satimgs_reflectance.index[self._df_satimgs_reflectance['Date'] == self.ds_start_date][0]
+        end_img_id = self._df_satimgs_reflectance.index[self._df_satimgs_reflectance['Date'] == self.ds_end_date][0]
 
-        if end_img_id - start_img_id + 1 == len(self._df_dates_satimgs['Date']):
+        if end_img_id - start_img_id + 1 == len(self._df_satimgs_reflectance['Date']):
             satimg_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
         else:
             satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
@@ -517,10 +517,10 @@ class DataAdapterTS(DatasetView):
     def __loadSatImg_TS(self) -> _np.ndarray:
 
         start_date = self.ds_start_date
-        if start_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('Start date does not correspond any band!')
+        if start_date not in self._df_satimgs_reflectance['Date'].values: raise AttributeError('Start date does not correspond any band!')
 
         end_date = self.ds_end_date
-        if end_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('End date does not correspond any band!')
+        if end_date not in self._df_satimgs_reflectance['Date'].values: raise AttributeError('End date does not correspond any band!')
 
         if self.modis_collection == ModisCollection.REFLECTANCE:
             return self.__loadSatImg_REFLECTANCE()
@@ -1240,10 +1240,11 @@ if __name__ == '__main__':
     print(VAR_LST_SATIMGS_TEMPSURFACE)
 
     adapter_ts = DataAdapterTS(
+        # sources
+        lst_satimgs_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
         lst_satimgs_tempsurface=VAR_LST_SATIMGS_TEMPSURFACE,
-        #
-        lst_satimgs=VAR_LST_SATIMGS_REFLECTANCE,  # TODO rename -> lst_satimgs_reflectance
         lst_labels=VAR_LST_LABELS,
+        # TODO comment
         label_collection=VAR_LABEL_COLLECTION,
         mtbs_severity_from=MTBSSeverity.LOW,
         cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
@@ -1251,7 +1252,7 @@ if __name__ == '__main__':
         transform_ops=VAR_TRANSFORM_OPS,
         pca_ops=VAR_PCA_OPS,
         # data set split options
-        ds_split_opt=VAR_DS_SPLIT_OPT,
+        ds_split_opt=VAR_DS_SPLIT_OPT,  # TODO rename -> split_ops
         test_ratio=VAR_TEST_RATIO,
         val_ratio=VAR_VALIDATION_RATIO
     )
@@ -1260,12 +1261,14 @@ if __name__ == '__main__':
     VAR_INDEX_BEGIN_DATE = 0
     VAR_INDEX_END_DATE = -1
 
-    # print(adapter_ts.satimg_dates)
+    print(adapter_ts.dates_reflectance)
     print(adapter_ts.dates_tempsurface)
-    #
-    VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
+
+    # TODO comment
+    VAR_START_DATE = adapter_ts.dates_reflectance.iloc[VAR_INDEX_BEGIN_DATE]['Date']
     adapter_ts.ds_start_date = VAR_START_DATE
-    VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
+    VAR_END_DATE = adapter_ts.dates_reflectance.iloc[VAR_INDEX_END_DATE]['Date']
     adapter_ts.ds_end_date = VAR_END_DATE
-    #
+
+    # TODO comment
     adapter_ts.createDataset()
