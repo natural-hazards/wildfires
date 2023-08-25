@@ -40,7 +40,7 @@ class DatasetView(DatasetLoader):
 
     def __init__(self,
                  lst_labels: Union[tuple[str], list[str]],
-                 lst_satimgs_reflectance: Union[tuple[str], list[str], None],
+                 lst_satimgs_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
                  modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,

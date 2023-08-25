@@ -43,13 +43,17 @@ class DatasetLoader(object):  # TODO rename to data set base
                  lst_labels: Union[tuple[str], list[str]],
                  lst_satimgs_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
-                 # TODO add here vegetation indices and infrared bands
+                 # TODO comment
                  test_ratio: float = .33,
                  val_ratio: float = .0,
-                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,  # TODO change CollectionOPS
+                 # TODO comment
+                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,  # TODO change SourceSelection
+                 # TODO add here vegetation indices and infrared bands
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 # TODO comment
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
+                 # TODO comment
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA) -> None:
 
         self._ds_satimgs_reflectance = None
@@ -91,8 +95,8 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._lst_satimgs_tempsurface = None
         self.lst_satimgs_tempsurface = lst_satimgs_tempsurface
 
-        self._modis_collection = None  # TODO remove
-        self.modis_collection = modis_collection  # TODO remove
+        self._modis_collection = None  # TODO rename
+        self.modis_collection = modis_collection  # TODO rename
 
         self._satimgs_processed = False
 
@@ -120,12 +124,26 @@ class DatasetLoader(object):  # TODO rename to data set base
     """
 
     @property
-    def lst_satimgs_reflectance(self) -> Union[tuple[str], list[str]]:  # TODO add suffix (reflectance)
+    def modis_collection(self) -> ModisCollection:  # TODO change to list of type CollectionOPS
+
+        return self._modis_collection
+
+    @modis_collection.setter
+    def modis_collection(self, collection: ModisCollection) -> None:
+
+        if self.modis_collection == collection:
+            return
+
+        self._reset()  # clean up
+        self._modis_collection = collection
+
+    @property
+    def lst_satimgs_reflectance(self) -> Union[tuple[str], list[str], None]:
 
         return self._lst_satimgs_reflectance
 
     @lst_satimgs_reflectance.setter
-    def lst_satimgs_reflectance(self, lst_fn: Union[tuple[str], list[str]]) -> None:  # TODO add suffix (reflectance)
+    def lst_satimgs_reflectance(self, lst_fn: Union[tuple[str], list[str]]) -> None:
 
         if self._lst_satimgs_reflectance == lst_fn:
             return
@@ -155,27 +173,15 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._reset()  # clean up
         self._lst_satimgs_tempsurface = lst_fn
 
-    @property
-    def modis_collection(self) -> ModisCollection:  # TODO change to list of type CollectionOPS
-
-        return self._modis_collection
-
-    @modis_collection.setter
-    def modis_collection(self, collection: ModisCollection) -> None:
-
-        if self.modis_collection == collection:
-            return
-
-        self._reset()  # clean up
-        self._modis_collection = collection
+    """
+    Dates - reflectance, land surface temperature
+    """
 
     @property
     def dates_reflectance(self) -> lazy_import('pandas').DataFrame:
 
-        # TODO rename -> dates_reflectance
-
         if self._df_satimgs_reflectance is None:
-            self.__processDates_SATELLITE_IMGS_MODIS(op=CollectionOPS.REFLECTANCE)
+            self.__processDates_SATELLITE_IMGS_MODIS(selection=CollectionOPS.REFLECTANCE)
 
         return self._df_satimgs_reflectance
 
@@ -183,12 +189,20 @@ class DatasetLoader(object):  # TODO rename to data set base
     def dates_tempsurface(self) -> lazy_import('pandas').DataFrame:
 
         if self._df_dates_tempsurface is None:
-            self.__processDates_SATELLITE_IMGS_MODIS(op=CollectionOPS.SURFACE_TEMPERATURE)
+            self.__processDates_SATELLITE_IMGS_MODIS(selection=CollectionOPS.SURFACE_TEMPERATURE)
 
         return self._df_dates_tempsurface
 
+    @property
+    def label_dates(self) -> lazy_import('pandas.DataFrame'):
+
+        if self._df_dates_labels is None:
+            self.__processBandDates_LABEL()
+
+        return self._df_dates_labels
+
     """
-    FireCII properties
+    FireCII labels properties
     """
 
     @property
@@ -283,14 +297,6 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         return self._nbands_label
 
-    @property
-    def label_dates(self) -> lazy_import('pandas.DataFrame'):
-
-        if self._df_dates_labels is None:
-            self.__processBandDates_LABEL()
-
-        return self._df_dates_labels
-
     """
     Training, test and validation data sets
     """
@@ -345,14 +351,12 @@ class DatasetLoader(object):  # TODO rename to data set base
         self._nbands_label = 0
 
         # set flags to false
-        self._satimgs_processed = False
+        self._satimgs_processed = False  # TODO rename?
         self._labels_processed = False
 
     """
-    IO functionality
+    Load sources - reflectance, land surface temperature, or labels
     """
-
-    # TODO merge __loadGeoTIFF_LABELS and __loadGeoTIFF_REFLECTANCE
 
     @staticmethod
     def __loadGeoTIFF_SOURCES(lst_sources: Union[list[str], tuple[str]]) -> list:
@@ -369,67 +373,52 @@ class DatasetLoader(object):  # TODO rename to data set base
                 raise RuntimeWarning(f'Cannot load source {fn}!')
 
             if ds is None:
-                raise RuntimeWarning(f'Data set is empty {fn}!')
+                raise RuntimeWarning(f'Source {fn} is empty!')
             lst_ds.append(ds)
 
         return lst_ds
 
-    def __loadGeoTIFF_REFLECTANCE(self) -> None:  # TODO add suffix REFLECTANCE
-
-        # lazy import
-        gdal = lazy_import('osgeo.gdal')
+    def __loadGeoTIFF_REFLECTANCE(self) -> None:
 
         if self.lst_satimgs_reflectance is None:
-            raise IOError('Multispectral satellite data is not set!')
+            err_msg = 'Satellite data (reflectance) is not set!'
+            raise TypeError(err_msg)
 
         del self._ds_satimgs_reflectance; gc.collect()
-        self._ds_satimgs_reflectance = []
+        self._ds_satimgs_reflectance = None
 
-        for fn in self._lst_satimgs_reflectance:
-            try:
-                ds = gdal.Open(fn)
-            except IOError:
-                IOError('Cannot load source {}!'.format(fn))
-                continue
-
-            self._ds_satimgs_reflectance.append(ds)
-
-        if len(self._ds_satimgs_reflectance) == 0:
-            raise IOError('Cannot load any of following sources {}!'.format(self._lst_satimgs_reflectance))
+        self._ds_satimgs_reflectance = self.__loadGeoTIFF_SOURCES(self.lst_satimgs_reflectance)
+        if not self._ds_satimgs_reflectance:
+            err_msg = 'Satellite data (reflectance) was not loaded!'
+            raise IOError(err_msg)
 
     def __loadGeoTIFF_SURFACE_TEMPERATURE(self) -> None:
 
         if self.lst_satimgs_tempsurface is None:
-            msg = 'Satellite data related to surface temperature is not set!'
-            raise IOError(msg)
+            err_msg = 'Satellite data (land surface temperature) is not set!'
+            raise TypeError(err_msg)
 
         del self._ds_satimgs_tempsurface; gc.collect()
-        self._ds_satimgs_tempsurface = []
+        self._ds_satimgs_tempsurface = None
 
         self._ds_satimgs_tempsurface = self.__loadGeoTIFF_SOURCES(self.lst_satimgs_tempsurface)
+        if not self._ds_satimgs_tempsurface:
+            err_msg = 'Satellite data (land surface temperature) was not loaded!'
+            raise IOError(err_msg)
 
     def __loadGeoTIFF_LABELS(self) -> None:
 
-        # lazy import
-        gdal = lazy_import('osgeo.gdal')
-
-        if self._lst_labels is None:
-            raise IOError('Labels related to satellite images are not set!')
+        if not self.lst_labels or self.lst_labels is None:
+            err_msg = 'Satellite data (labels - wildfires localization) is not set!'
+            raise TypeError(err_msg)
 
         del self._ds_labels; gc.collect()
-        self._ds_labels = []
+        self._ds_labels = None
 
-        for fn in self._lst_labels:
-            try:
-                ds = gdal.Open(fn)
-            except IOError:
-                IOError('Cannot load source {}!'.format(fn))
-                continue
-
-            self._ds_labels.append(ds)
-
-        if len(self._ds_labels) == 0:
-            raise IOError('Cannot load any of following sources {}!'.format(self._lst_labels))
+        self._ds_labels = self.__loadGeoTIFF_SOURCES(self.lst_labels)
+        if not self._ds_labels:
+            err_msg = 'Satellite data (labels - wildfires localization) is not set!'
+            raise IOError(err_msg)
 
     # TODO rename
     """
@@ -505,11 +494,11 @@ class DatasetLoader(object):  # TODO rename to data set base
         del self._df_dates_tempsurface; gc.collect()
         self._df_dates_tempsurface = df_dates
 
-    def __processDates_SATELLITE_IMGS_MODIS(self, op: CollectionOPS = CollectionOPS.ALL) -> None:
+    def __processDates_SATELLITE_IMGS_MODIS(self, selection: CollectionOPS = CollectionOPS.ALL) -> None:
 
         # processing reflectance (MOD09A1)
 
-        if self.lst_satimgs_reflectance is not None and (op & CollectionOPS.REFLECTANCE == CollectionOPS.REFLECTANCE):
+        if self.lst_satimgs_reflectance is not None and (selection & CollectionOPS.REFLECTANCE == CollectionOPS.REFLECTANCE):
 
             if self._ds_satimgs_reflectance is None:
                 try:
@@ -527,7 +516,7 @@ class DatasetLoader(object):  # TODO rename to data set base
 
         # processing land surface temperature (MOD11A2)
 
-        if self.lst_satimgs_tempsurface is not None and (op & CollectionOPS.SURFACE_TEMPERATURE == CollectionOPS.SURFACE_TEMPERATURE):
+        if self.lst_satimgs_tempsurface is not None and (selection & CollectionOPS.SURFACE_TEMPERATURE == CollectionOPS.SURFACE_TEMPERATURE):
 
             if self._ds_satimgs_tempsurface is None:
                 try:
@@ -787,18 +776,23 @@ class DatasetLoader(object):  # TODO rename to data set base
 if __name__ == '__main__':
 
     VAR_DATA_DIR = 'data/tifs'
-    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
+
+    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
+    VAR_PREFIX_IMG_LABELS = 'ak_january_december_{}_100km'
 
     VAR_LST_SATIMGS = []
     VAR_LST_LABELS_MTBS = []
 
     for year in range(2004, 2006):
-        PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
+        VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
+        VAR_PREFIX_IMG_LABELS_YEAR = VAR_PREFIX_IMG_LABELS.format(year)
 
-        fn_satimg = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        VAR_LST_SATIMGS.append(fn_satimg)
+        fn_satimg_reflec = '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_REFLECTANCE_YEAR)
+        fn_satimg_reflec = os.path.join(VAR_DATA_DIR, fn_satimg_reflec)
+        VAR_LST_SATIMGS.append(fn_satimg_reflec)
 
-        fn_labels_mtbs = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0_mtbs_labels.tif'.format(PREFIX_IMG_YEAR))
+        fn_labels_mtbs = '{}_epsg3338_area_0_mtbs_labels.tif'.format(VAR_PREFIX_IMG_LABELS_YEAR)
+        fn_labels_mtbs = os.path.join(VAR_DATA_DIR, fn_labels_mtbs)
         VAR_LST_LABELS_MTBS.append(fn_labels_mtbs)
 
     # setup of data set loader
@@ -806,3 +800,5 @@ if __name__ == '__main__':
         lst_satimgs_reflectance=VAR_LST_SATIMGS,
         lst_labels=VAR_LST_LABELS_MTBS
     )
+
+    print(dataset_loader.label_dates)
