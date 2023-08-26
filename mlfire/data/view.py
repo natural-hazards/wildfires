@@ -36,13 +36,13 @@ class FireLabelsViewOpt(Enum):
     SEVERITY = 3
 
 
-class DatasetView(DatasetLoader):
+class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
     def __init__(self,
                  lst_labels: Union[tuple[str], list[str]],
-                 lst_satimgs_reflectance: Union[tuple[str], list[str], None] = None,
-                 lst_satimgs_tempsurface: Union[tuple[str], list[str], None] = None,
-                 source_select_opt: ModisCollection = ModisCollection.REFLECTANCE,
+                 lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
+                 lst_satdata_tempsurface: Union[tuple[str], list[str], None] = None,
+                 satdata_select_opt: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
@@ -52,10 +52,10 @@ class DatasetView(DatasetLoader):
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
         super().__init__(
-            lst_satimgs_reflectance=lst_satimgs_reflectance,
-            lst_satimgs_tempsurface=lst_satimgs_tempsurface,
+            lst_satdata_reflectance=lst_satdata_reflectance,
+            lst_satdata_tempsurface=lst_satdata_tempsurface,
             lst_labels=lst_labels,
-            source_select_opt=source_select_opt,
+            satdata_select_opt=satdata_select_opt,
             label_collection=label_collection,
             cci_confidence_level=cci_confidence_level,
             mtbs_severity_from=mtbs_severity_from,
@@ -117,7 +117,7 @@ class DatasetView(DatasetLoader):
     def __getSatelliteImageArray_MODIS_CIR(self, img_id: int) -> _np.ndarray:
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # display CIR representation of MODIS input (color infrared - vegetation)
         # https://eos.com/make-an-analysis/color-infrared/
@@ -143,7 +143,7 @@ class DatasetView(DatasetLoader):
         cmap = lazy_import('mlfire.utils.cmap')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
         ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
@@ -187,7 +187,7 @@ class DatasetView(DatasetLoader):
         cmap = lazy_import('mlfire.utils.cmap')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
 
@@ -219,12 +219,12 @@ class DatasetView(DatasetLoader):
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.GREEN.value - 1
-        ref_green = self._ds_satimgs_reflectance[id_ds].GetRasterBand(band_id).ReadAsArray()
+        ref_green = self._ds_satdata_reflectance[id_ds].GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
         ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
@@ -243,7 +243,7 @@ class DatasetView(DatasetLoader):
         plt = lazy_import('matplotlib.pylab')
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # computing Normalized Difference Vegetation Index (NDVI)
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
@@ -273,7 +273,7 @@ class DatasetView(DatasetLoader):
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(self, img_id: int) -> _np.ndarray:
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # https://eos.com/make-an-analysis/vegetation-analysis/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR1.value - 1
@@ -295,7 +295,7 @@ class DatasetView(DatasetLoader):
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR2(self, img_id: int) -> _np.ndarray:
 
         id_ds, start_band_id = self._map_start_satimgs[img_id]
-        ds_satimg = self._ds_satimgs_reflectance[id_ds]
+        ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # https://eos.com/make-an-analysis/shortwave-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR2.value - 1
@@ -509,8 +509,8 @@ class DatasetView(DatasetLoader):
         # get date or start/end dates
         if isinstance(id_bands, range):
 
-            first_date = self.label_dates.iloc[id_bands[0]]['Date']
-            last_date = self.label_dates.iloc[id_bands[-1]]['Date']
+            first_date = self.dates_labels.iloc[id_bands[0]]['Date']
+            last_date = self.dates_labels.iloc[id_bands[-1]]['Date']
 
             if first_date.year == last_date.year:
 
@@ -526,7 +526,7 @@ class DatasetView(DatasetLoader):
 
         elif isinstance(id_bands, int):
 
-            label_date = self.label_dates.iloc[id_bands]['Date']
+            label_date = self.dates_labels.iloc[id_bands]['Date']
             str_date = f'{calendar.month_name[label_date.month]} {label_date.year}'
 
         else:
@@ -633,11 +633,11 @@ class DatasetView(DatasetLoader):
 
         # get date or start/end dates
         if isinstance(id_bands, range):
-            first_date = self.label_dates.iloc[id_bands[0]]['Date']
-            last_date = self.label_dates.iloc[id_bands[-1]]['Date']
+            first_date = self.dates_labels.iloc[id_bands[0]]['Date']
+            last_date = self.dates_labels.iloc[id_bands[-1]]['Date']
             str_date = '{}-{}'.format(first_date.year, last_date.year)
         elif isinstance(id_bands, int):
-            label_date = self.label_dates.iloc[id_bands]['Date']
+            label_date = self.dates_labels.iloc[id_bands]['Date']
             str_date = str(label_date.year)
         else:
             raise NotImplementedError
@@ -698,7 +698,7 @@ class DatasetView(DatasetLoader):
         date_label = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
 
         # get index of corresponding labels
-        label_index = int(self.label_dates.index[self._df_dates_labels['Date'] == date_label][0])
+        label_index = int(self.dates_labels.index[self._df_dates_labels['Date'] == date_label][0])
         label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
         return label, mask_fires
@@ -817,7 +817,7 @@ if __name__ == '__main__':
 
     # setup of data set loader
     dataset_view = DatasetView(
-        lst_satimgs_reflectance=VAR_LST_SATIMGS,
+        lst_satdata_reflectance=VAR_LST_SATIMGS,
         lst_labels=VAR_LST_LABELS,
         satimg_view_opt=VAR_SATIMG_VIEW_OPT,
         label_collection=VAR_LABEL_COLLECTION,
@@ -829,7 +829,7 @@ if __name__ == '__main__':
 
     print('#ts = {}'.format(len(dataset_view)))
     print(dataset_view.dates_reflectance)
-    print(dataset_view.label_dates)
+    print(dataset_view.dates_labels)
 
     dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 1)
     dataset_view.showSatImage(70)
