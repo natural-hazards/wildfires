@@ -1263,13 +1263,13 @@ if __name__ == '__main__':
     VAR_INDEX_BEGIN_DATE = 0
     VAR_INDEX_END_DATE = -1
 
-    print(adapter_ts.dates_reflectance)
-    print(adapter_ts.dates_tempsurface)
+    print(adapter_ts.timestamps_reflectance)
+    print(adapter_ts.timestamps_temperature)
 
     # TODO comment
-    VAR_START_DATE = adapter_ts.dates_reflectance.iloc[VAR_INDEX_BEGIN_DATE]['Date']
+    VAR_START_DATE = adapter_ts.timestamps_reflectance.iloc[VAR_INDEX_BEGIN_DATE]['Date']
     adapter_ts.ds_start_date = VAR_START_DATE
-    VAR_END_DATE = adapter_ts.dates_reflectance.iloc[VAR_INDEX_END_DATE]['Date']
+    VAR_END_DATE = adapter_ts.timestamps_reflectance.iloc[VAR_INDEX_END_DATE]['Date']
     adapter_ts.ds_end_date = VAR_END_DATE
 
     # TODO comment

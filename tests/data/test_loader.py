@@ -19,6 +19,8 @@ _PandasDataFrame = _pd.DataFrame
 
 class TestSatDataType(Enum):
 
+    __test__ = False
+
     REFLECTANCE = 'reflec'
     TEMPERATURE = 'lst'
 
@@ -48,7 +50,7 @@ def lst_satdata(data_type: TestSatDataType) -> list[str]:
 @pytest.fixture(scope='module')
 def expected_satdata_timestamps() -> _PandasDataFrame:
 
-    lst_dates = []
+    lst_dates: list[tuple] = []
 
     for year in range(2004, 2006):
         start_date = _datetime.date(year=year, month=1, day=1)
@@ -77,19 +79,19 @@ Testing functiononality for SatDataLoader
 
 
 @pytest.mark.data
-def test_satdata_loader_reflectance_dates(satdata_reflectance, expected_satdata_timestamps):
+def test_satdata_loader_reflectance_timestamps(satdata_reflectance, expected_satdata_timestamps):
 
     satdata_loader = _SatDataLoader(
         lst_labels=None,
         lst_satdata_reflectance=satdata_reflectance
     )
 
-    df_dates = satdata_loader.dates_reflectance
-    _pd.testing.assert_frame_equal(df_dates, expected_satdata_timestamps)
+    df_timestamps = satdata_loader.timestamps_reflectance
+    _pd.testing.assert_frame_equal(df_timestamps, expected_satdata_timestamps)
 
 
 @pytest.mark.data
-def test_satdata_loader_temperature_dates(satdata_temperature, expected_satdata_timestamps):
+def test_satdata_loader_temperature_timestamps(satdata_temperature, expected_satdata_timestamps):
 
     satdata_loader = _SatDataLoader(
         lst_labels=None,
@@ -98,8 +100,8 @@ def test_satdata_loader_temperature_dates(satdata_temperature, expected_satdata_
 
     # TODO check when ask from satdata are not set
 
-    df_dates = satdata_loader.dates_tempsurface
-    _pd.testing.assert_frame_equal(df_dates, expected_satdata_timestamps)
+    df_timestamps = satdata_loader.timestamps_temperature
+    _pd.testing.assert_frame_equal(df_timestamps, expected_satdata_timestamps)
 
 
 # TODO fire dates

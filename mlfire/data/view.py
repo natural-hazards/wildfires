@@ -369,7 +369,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         # figure title
         img_type = self.satimg_view_opt.value
-        str_title = 'MODIS ({}, {})'.format(img_type, self.dates_reflectance.iloc[id_img]['Date'])
+        str_title = 'MODIS ({}, {})'.format(img_type, self.timestamps_reflectance.iloc[id_img]['Date'])
 
         if self.satimg_view_opt == SatImgViewOpt.NDVI and self.ndvi_view_threshold > -1:
             str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
@@ -694,7 +694,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         datetime = lazy_import('datetime')
 
         # get label date time
-        date_satimg = self.dates_reflectance.iloc[id_img]['Date']
+        date_satimg = self.timestamps_reflectance.iloc[id_img]['Date']
         date_label = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
 
         # get index of corresponding labels
@@ -708,7 +708,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         # lazy import
         datetime = lazy_import('datetime')
 
-        date_satimg = self.dates_reflectance.iloc[id_img]['Date']
+        date_satimg = self.timestamps_reflectance.iloc[id_img]['Date']
         date_label = datetime.date(year=date_satimg.year, month=1, day=1)
 
         # get index of corresponding labels
@@ -744,7 +744,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         labels, mask = self.__getLabelsForSatImg(id_img)
         satimg[mask, :] = labels[mask, :]
 
-        ref_date = self.dates_reflectance.iloc[id_img]['Date']
+        ref_date = self.timestamps_reflectance.iloc[id_img]['Date']
         img_type = self.satimg_view_opt.value
         str_title = 'MODIS ({}, {}, labels={})'.format(img_type, ref_date, self.label_collection.name)
 
@@ -828,7 +828,7 @@ if __name__ == '__main__':
     )
 
     print('#ts = {}'.format(len(dataset_view)))
-    print(dataset_view.dates_reflectance)
+    print(dataset_view.timestamps_reflectance)
     print(dataset_view.dates_labels)
 
     dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelsCollection.CCI else 1)

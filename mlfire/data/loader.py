@@ -181,7 +181,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     """
 
     @property
-    def dates_reflectance(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_reflectance
+    def timestamps_reflectance(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_reflectance
 
         if self._df_dates_reflectance is None:
             self.__processDates_SATDATA(selection=SatDataSelectOpt.REFLECTANCE)
@@ -189,7 +189,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         return self._df_dates_reflectance
 
     @property
-    def dates_tempsurface(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_temperature
+    def timestamps_temperature(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_temperature
 
         if self._df_dates_temperature is None:
             self.__processDates_SATDATA(selection=SatDataSelectOpt.SURFACE_TEMPERATURE)
