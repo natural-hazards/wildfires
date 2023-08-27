@@ -41,7 +41,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
     def __init__(self,
                  lst_labels: Union[tuple[str], list[str]],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
-                 lst_satdata_tempsurface: Union[tuple[str], list[str], None] = None,
+                 lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  satdata_select_opt: ModisCollection = ModisCollection.REFLECTANCE,
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  cci_confidence_level: int = 70,
@@ -53,7 +53,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         super().__init__(
             lst_satdata_reflectance=lst_satdata_reflectance,
-            lst_satdata_tempsurface=lst_satdata_tempsurface,
+            lst_satdata_temperature=lst_satdata_temperature,
             lst_labels=lst_labels,
             satdata_select_opt=satdata_select_opt,
             label_collection=label_collection,

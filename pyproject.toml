@@ -1,0 +1,8 @@
+
+# pytest configuration
+[tools.pytest.ini_options]
+testpath = ['tests']
+python_files = 'test_*.py'
+markers = [
+    'data: '
+]

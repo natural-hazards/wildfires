@@ -31,18 +31,19 @@ class SatDataSelectOpt(Enum):
         return SatDataSelectOpt(self.value & other.value)
 
     def __eq__(self, other):
+        if other is None: return False
         return self.value == other.value
 
     def __or__(self, other):
         return SatDataSelectOpt(self.value | other.value)
 
 
-class DatasetLoader(object):  # TODO rename to SatDataLoader
+class DatasetLoader(object):  # TODO rename to SatDataLoader and split for labels
 
     def __init__(self,
                  lst_labels: Union[tuple[str], list[str]],  # TODO rename lst_fire_labels
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
-                 lst_satdata_tempsurface: Union[tuple[str], list[str], None] = None,
+                 lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  # TODO add here vegetation indices and infrared bands
                  label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
                  # TODO comment
@@ -65,8 +66,8 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
         self._ds_labels = None
         self._df_dates_labels = None
 
-        self._map_start_satimgs = None
-        self._map_band_id_label = None
+        self._map_start_satimgs = None  # TODO rename
+        self._map_band_id_label = None  # TODO rename
 
         self._nimgs = 0  # TODO rename
         self._nbands_label = 0  # TODO rename
@@ -89,11 +90,11 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
 
         # properties sources - reflectance, land surface temperature, and labels
 
-        self._lst_satdata_reflectance = None
+        self.__lst_satdata_reflectance = None
         self.lst_satdata_reflectance = lst_satdata_reflectance
 
-        self._lst_satdata_tempsurface = None
-        self.lst_satdata_tempsurface = lst_satdata_tempsurface
+        self.__lst_satdata_temperature = None
+        self.lst_satdata_temperature = lst_satdata_temperature
 
         self._modis_collection = None  # TODO rename
         self.modis_collection = satdata_select_opt  # TODO rename
@@ -117,7 +118,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
         self._cci_confidence_level = -1
         if label_collection == FireLabelsCollection.CCI: self.cci_confidence_level = cci_confidence_level
 
-        self._labels_processed = False
+        self._labels_processed = False  # TODO rename
 
     """
     Properties and setter related to sources
@@ -142,12 +143,12 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
     @property
     def lst_satdata_reflectance(self) -> Union[tuple[str], list[str], None]:
 
-        return self._lst_satdata_reflectance
+        return self.__lst_satdata_reflectance
 
     @lst_satdata_reflectance.setter
     def lst_satdata_reflectance(self, lst_fn: Union[tuple[str], list[str]]) -> None:
 
-        if self._lst_satdata_reflectance == lst_fn:
+        if self.__lst_satdata_reflectance == lst_fn:
             return
 
         for fn in lst_fn:
@@ -155,17 +156,17 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
                 raise IOError(f'File {fn} does not exist!')
 
         self._reset()  # clean up
-        self._lst_satdata_reflectance = lst_fn
+        self.__lst_satdata_reflectance = lst_fn
 
     @property
-    def lst_satdata_tempsurface(self) -> Union[tuple[str], list[str]]:
+    def lst_satdata_temperature(self) -> Union[tuple[str], list[str]]:
 
-        return self._lst_satdata_tempsurface
+        return self.__lst_satdata_temperature
 
-    @lst_satdata_tempsurface.setter
-    def lst_satdata_tempsurface(self, lst_fn: Union[tuple[str], list[str]]):
+    @lst_satdata_temperature.setter
+    def lst_satdata_temperature(self, lst_fn: Union[tuple[str], list[str]]):
 
-        if self._lst_satdata_tempsurface == lst_fn:
+        if self.__lst_satdata_temperature == lst_fn:
             return
 
         for fn in lst_fn:
@@ -173,14 +174,14 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
                 raise IOError(f'File {fn} does not exitst!')
 
         self._reset()  # clean up
-        self._lst_satdata_tempsurface = lst_fn
+        self.__lst_satdata_temperature = lst_fn
 
     """
     Dates - reflectance, land surface temperature
     """
 
     @property
-    def dates_reflectance(self) -> lazy_import('pandas').DataFrame:
+    def dates_reflectance(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_reflectance
 
         if self._df_dates_reflectance is None:
             self.__processDates_SATDATA(selection=SatDataSelectOpt.REFLECTANCE)
@@ -188,7 +189,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
         return self._df_dates_reflectance
 
     @property
-    def dates_tempsurface(self) -> lazy_import('pandas').DataFrame:
+    def dates_tempsurface(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_temperature
 
         if self._df_dates_temperature is None:
             self.__processDates_SATDATA(selection=SatDataSelectOpt.SURFACE_TEMPERATURE)
@@ -196,7 +197,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
         return self._df_dates_temperature
 
     @property
-    def dates_labels(self) -> lazy_import('pandas').DataFrame:  # TODO rename dates_fire_labels?
+    def dates_labels(self) -> lazy_import('pandas').DataFrame:  # TODO rename dates_fire_label ?
 
         if self._df_dates_labels is None:
             self.__processBandDates_LABEL()
@@ -396,14 +397,14 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
 
     def __loadGeoTIFF_TEMPERATURE(self) -> None:
 
-        if self.lst_satdata_tempsurface is None:
+        if self.lst_satdata_temperature is None:
             err_msg = 'Satellite data (land surface temperature) is not set!'
             raise TypeError(err_msg)
 
         del self._ds_satdata_temperature; gc.collect()
         self._ds_satdata_temperature = None
 
-        self._ds_satdata_temperature = self.__loadGeoTIFF_SOURCES(self.lst_satdata_tempsurface)
+        self._ds_satdata_temperature = self.__loadGeoTIFF_SOURCES(self.lst_satdata_temperature)
         if not self._ds_satdata_temperature:
             err_msg = 'Satellite data (land surface temperature) was not loaded!'
             raise IOError(err_msg)
@@ -518,14 +519,14 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader
 
         # processing land surface temperature (MOD11A2)
 
-        if self.lst_satdata_tempsurface is not None and (selection & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
+        if self.lst_satdata_temperature is not None and (selection & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
 
             if self._ds_satdata_temperature is None:
                 try:
                     self.__loadGeoTIFF_TEMPERATURE()
                 except IOError:
                     err_msg = 'Cannot load any of MOD11A2 sources (land surface temperature): {}'
-                    err_msg = err_msg.format(self.lst_satdata_tempsurface)
+                    err_msg = err_msg.format(self.lst_satdata_temperature)
                     raise IOError(err_msg)
 
             try:

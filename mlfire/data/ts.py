@@ -52,7 +52,7 @@ class DataAdapterTS(DatasetView):
                  # sources - labels and satellite data (reflectance and temperature)
                  lst_labels: Union[tuple[str], list[str]],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
-                 lst_satdata_tempsurface: Union[tuple[str], list[str], None] = None,
+                 lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  # TODO comment
                  ds_start_date: lazy_import('datetime').date = None,
                  ds_end_date: lazy_import('datetime').date = None,
@@ -85,7 +85,7 @@ class DataAdapterTS(DatasetView):
         super().__init__(
             lst_labels=lst_labels,
             lst_satdata_reflectance=lst_satdata_reflectance,
-            lst_satdata_tempsurface=lst_satdata_tempsurface,
+            lst_satdata_temperature=lst_satdata_temperature,
             satdata_select_opt=satdata_select_opt,
             label_collection=label_collection,
             cci_confidence_level=cci_confidence_level,
@@ -1244,7 +1244,7 @@ if __name__ == '__main__':
     adapter_ts = DataAdapterTS(
         # sources
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
-        lst_satdata_tempsurface=VAR_LST_SATIMGS_TEMPSURFACE,
+        lst_satdata_temperature=VAR_LST_SATIMGS_TEMPSURFACE,
         lst_labels=VAR_LST_LABELS,
         # TODO comment
         label_collection=VAR_LABEL_COLLECTION,
