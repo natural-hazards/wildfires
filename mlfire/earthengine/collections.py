@@ -20,7 +20,7 @@ class ModisCollection(Enum):
     REFLECTANCE = 'MODIS/061/MOD09A1'  # spectral reflectance bands
 
 
-class FireLabelsCollection(Enum):
+class FireLabelCollection(Enum):
 
     CCI = 'ESA/CCI/FireCCI/5_1'
     MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'

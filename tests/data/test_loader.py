@@ -74,34 +74,60 @@ def satdata_temperature() -> list[str]:
 
 
 """
-Testing functiononality for SatDataLoader
+Testing functiononality for SatDataLoader (loader for satellite data - reflectance and temperature)
 """
 
 
 @pytest.mark.data
-def test_satdata_loader_reflectance_timestamps(satdata_reflectance, expected_satdata_timestamps):
+def TEST_SatDataLoaderReflectanceTimestamps(satdata_reflectance, expected_satdata_timestamps):
 
     satdata_loader = _SatDataLoader(
-        lst_labels=None,
-        lst_satdata_reflectance=satdata_reflectance
+        lst_labels_wildfires=None,
+        lst_satdata_reflectance=satdata_reflectance,
+        estimate_time=False
     )
 
-    df_timestamps = satdata_loader.timestamps_reflectance
-    _pd.testing.assert_frame_equal(df_timestamps, expected_satdata_timestamps)
+    timestamps_reflectance = satdata_loader.timestamps_reflectance
+    _pd.testing.assert_frame_equal(timestamps_reflectance, expected_satdata_timestamps)
 
 
 @pytest.mark.data
-def test_satdata_loader_temperature_timestamps(satdata_temperature, expected_satdata_timestamps):
+@pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
+def TEST_SatDataLoaderReflectanceSourcesNotSet(satdata_temperature, exception):
 
     satdata_loader = _SatDataLoader(
-        lst_labels=None,
-        lst_satdata_temperature=satdata_temperature
+        lst_labels_wildfires=None,
+        lst_satdata_temperature=satdata_temperature,
+        estimate_time=False
     )
 
-    # TODO check when ask from satdata are not set
-
-    df_timestamps = satdata_loader.timestamps_temperature
-    _pd.testing.assert_frame_equal(df_timestamps, expected_satdata_timestamps)
+    with exception:
+        _ = satdata_loader.timestamps_reflectance
 
 
-# TODO fire dates
+@pytest.mark.data
+def TEST_SatDataLoaderTemperatureTimestamps(satdata_temperature, expected_satdata_timestamps):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_wildfires=None,
+        lst_satdata_temperature=satdata_temperature,
+        estimate_time=False
+    )
+
+    timestamps_temperature = satdata_loader.timestamps_temperature
+    _pd.testing.assert_frame_equal(timestamps_temperature, expected_satdata_timestamps)
+
+
+@pytest.mark.data
+@pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
+def TEST_SatDataLoaderTemperatureSourcesNotSet(satdata_temperature, exception):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_wildfires=None,
+        lst_satdata_reflectance=satdata_temperature,
+        estimate_time=False
+    )
+
+    with exception:
+        _ = satdata_loader.timestamps_temperature
+

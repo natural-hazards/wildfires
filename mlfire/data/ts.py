@@ -8,9 +8,10 @@ from typing import Union
 
 import numpy as np  # TODO remove
 
+from mlfire.data.loader import SatDataSelectOpt
 from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
 from mlfire.earthengine.collections import ModisCollection
-from mlfire.earthengine.collections import FireLabelsCollection
+from mlfire.earthengine.collections import FireLabelCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 from mlfire.features.pca import FactorOP
 
@@ -50,7 +51,7 @@ class DataAdapterTS(DatasetView):
 
     def __init__(self,
                  # sources - labels and satellite data (reflectance and temperature)
-                 lst_labels: Union[tuple[str], list[str]],
+                 lst_loc_fires: Union[tuple[str], list[str]],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  # TODO comment
@@ -72,10 +73,10 @@ class DataAdapterTS(DatasetView):
                  pca_ops: list[FactorOP] = (FactorOP.USER_SET,),
                  pca_retained_variance: float = 0.95,
                  # view options
-                 satdata_select_opt: ModisCollection = ModisCollection.REFLECTANCE,
-                 label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
+                 label_collection: FireLabelCollection = FireLabelCollection.MTBS,
                  cci_confidence_level: int = 70,
-                 mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
+                 mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
                  ndvi_view_threshold: float = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
@@ -83,13 +84,13 @@ class DataAdapterTS(DatasetView):
 
         # TODO inheritance from DatasetBase?
         super().__init__(
-            lst_labels=lst_labels,
+            lst_loc_fires=lst_loc_fires,
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
-            satdata_select_opt=satdata_select_opt,
+            opt_select_satdata=opt_select_satdata,
             label_collection=label_collection,
             cci_confidence_level=cci_confidence_level,
-            mtbs_severity_from=mtbs_severity_from,
+            mtbs_min_severity=mtbs_min_severity,
             mtbs_region=mtbs_region,
             ndvi_view_threshold=ndvi_view_threshold,
             satimg_view_opt=satimg_view_opt,
@@ -362,12 +363,12 @@ class DataAdapterTS(DatasetView):
         # TODO check start and end date
 
         start_label_date = datetime.date(year=self.ds_start_date.year, month=1, day=1)
-        start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
+        start_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
 
             end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
-            end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
+            end_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == end_label_date][0])
             id_bands = range(start_label_index, end_label_index + 1)
 
         else:
@@ -392,12 +393,12 @@ class DataAdapterTS(DatasetView):
         # TODO check start and end date
 
         start_label_date = datetime.date(year=self.ds_start_date.year, month=self.ds_start_date.month, day=1)
-        start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
+        start_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
 
             end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
-            end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
+            end_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == end_label_date][0])
             id_bands = range(start_label_index, end_label_index + 1)
 
         else:
@@ -420,9 +421,9 @@ class DataAdapterTS(DatasetView):
 
     def __loadLabels(self) -> _np.ndarray:
 
-        if self.label_collection == FireLabelsCollection.MTBS:
+        if self.label_collection == FireLabelCollection.MTBS:
             return self.__loadLabels_MTBS()
-        elif self.label_collection == FireLabelsCollection.CCI:
+        elif self.label_collection == FireLabelCollection.CCI:
             return self.__loadLabels_CCI()
         else:
             raise NotImplementedError
@@ -499,10 +500,10 @@ class DataAdapterTS(DatasetView):
 
     def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:
 
-        start_img_id = self._df_dates_reflectance.index[self._df_dates_reflectance['Date'] == self.ds_start_date][0]
-        end_img_id = self._df_dates_reflectance.index[self._df_dates_reflectance['Date'] == self.ds_end_date][0]
+        start_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_start_date][0]
+        end_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_end_date][0]
 
-        if end_img_id - start_img_id + 1 == len(self._df_dates_reflectance['Date']):
+        if end_img_id - start_img_id + 1 == len(self._df_timestamps_reflectance['Date']):
             satimg_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
         else:
             satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
@@ -519,10 +520,10 @@ class DataAdapterTS(DatasetView):
     def __loadSatImg_TS(self) -> _np.ndarray:
 
         start_date = self.ds_start_date
-        if start_date not in self._df_dates_reflectance['Date'].values: raise AttributeError('Start date does not correspond any band!')
+        if start_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('Start date does not correspond any band!')
 
         end_date = self.ds_end_date
-        if end_date not in self._df_dates_reflectance['Date'].values: raise AttributeError('End date does not correspond any band!')
+        if end_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('End date does not correspond any band!')
 
         if self.modis_collection == ModisCollection.REFLECTANCE:
             return self.__loadSatImg_REFLECTANCE()
@@ -1204,8 +1205,8 @@ if __name__ == '__main__':
 
     VAR_PREFIX_LABEL = 'ak_january_december_{year}_100km'
 
-    # VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
-    VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
+    # VAR_LABEL_COLLECTION = FireLabelCollection.MTBS
+    VAR_LABEL_COLLECTION = FireLabelCollection.CCI
     VAR_STR_LABEL_COLLECTION = VAR_LABEL_COLLECTION.name.lower()
 
     VAR_DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
@@ -1245,10 +1246,10 @@ if __name__ == '__main__':
         # sources
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_SATIMGS_TEMPSURFACE,
-        lst_labels=VAR_LST_LABELS,
+        lst_loc_fires=VAR_LST_LABELS,
         # TODO comment
         label_collection=VAR_LABEL_COLLECTION,
-        mtbs_severity_from=MTBSSeverity.LOW,
+        mtbs_min_severity=MTBSSeverity.LOW,
         cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
         # transformation options
         transform_ops=VAR_TRANSFORM_OPS,

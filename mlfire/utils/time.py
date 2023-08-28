@@ -10,14 +10,17 @@ class TimePeriod(Enum):
 
 class elapsed_timer(object):
 
-    def __init__(self,
-                 title: str):
+    def __init__(self, msg: str, enable: bool = True):  # TODO rename measure
 
-        self._title = title
+        self._msg = msg
+        self._measure = enable
 
     def __enter__(self):
 
-        print('Start event: \'{}\'.'.format(self._title), flush=True)
+        if not self._measure:
+            return
+
+        print('Start event: \'{}\'.'.format(self._msg), flush=True)
         self._start = default_timer()
 
     def __exit__(self,
@@ -25,5 +28,8 @@ class elapsed_timer(object):
                  val,
                  traceback):
 
+        if not self._measure:
+            return
+
         self._end = default_timer()
-        print('Finnish event: \'{}\'. It takes {:.2f}s.'.format(self._title, self._end - self._start), flush=True)
+        print('Finnish event: \'{}\'. It takes {:.2f}s.'.format(self._msg, self._end - self._start), flush=True)

@@ -4,10 +4,8 @@ import os
 from enum import Enum
 from typing import Union
 
-import pandas as pd  # TODO remove
-
 # collections
-from mlfire.earthengine.collections import FireLabelsCollection, ModisCollection
+from mlfire.earthengine.collections import FireLabelCollection, ModisCollection
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
 # import utils
@@ -18,6 +16,9 @@ from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 
 # lazy imports
 _pd = lazy_import('pandas')
+
+# lazy imports - classes
+PandasDataFrame = _pd.DataFrame
 
 
 class SatDataSelectOpt(Enum):
@@ -41,30 +42,32 @@ class SatDataSelectOpt(Enum):
 class DatasetLoader(object):  # TODO rename to SatDataLoader and split for labels
 
     def __init__(self,
-                 lst_labels: Union[tuple[str], list[str]],  # TODO rename lst_fire_labels
+                 lst_labels_locfires: Union[tuple[str], list[str]],  # TODO rename
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  # TODO add here vegetation indices and infrared bands
-                 label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
+                 label_collection: FireLabelCollection = FireLabelCollection.MTBS,
                  # TODO comment
-                 satdata_select_opt: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
+                 opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
                  # TODO comment
-                 cci_confidence_level: int = 70,  # TODO -> rename cci_min_level
-                 mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,  # TODO rename -> mtbs_min_severity
+                 cci_confidence_level: int = 70,
                  # TODO comment
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
                  test_ratio: float = .33,
-                 val_ratio: float = .0) -> None:
+                 val_ratio: float = .0,
+                 # TODO comment
+                 estimate_time: bool = True):
 
         self._ds_satdata_reflectance = None
-        self._df_dates_reflectance = None
+        self._df_timestamps_reflectance = None
 
         self._ds_satdata_temperature = None
-        self._df_dates_temperature = None
+        self._df_timestamps_temperature = None
 
-        self._ds_labels = None
-        self._df_dates_labels = None
+        self._ds_wildfires = None
+        self._df_timestamps_wildfires = None
 
         self._map_start_satimgs = None  # TODO rename
         self._map_band_id_label = None  # TODO rename
@@ -82,10 +85,10 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         self._ds_test = None
         self._ds_val = None
 
-        self._test_ratio = None
+        self.__test_ratio = None
         self.test_ratio = test_ratio
 
-        self._val_ratio = None
+        self.__val_ratio = None
         self.val_ratio = val_ratio
 
         # properties sources - reflectance, land surface temperature, and labels
@@ -96,49 +99,50 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         self.__lst_satdata_temperature = None
         self.lst_satdata_temperature = lst_satdata_temperature
 
-        self._modis_collection = None  # TODO rename
-        self.modis_collection = satdata_select_opt  # TODO rename
+        self.__opt_select_satdata = None
+        self.opt_select_satdata = opt_select_satdata
 
         self._satimgs_processed = False  # TODO rename
 
-        # properties source - labels
+        # properties source - labels (wildfire locations)
 
-        self._lst_labels = None
-        self.lst_labels = lst_labels
+        self.__lst_labels_wildfires = None
+        self.lst_labels_wildfires = lst_labels_locfires
 
-        self._label_collection = None
+        self.__label_collection = None
         self.label_collection = label_collection
 
-        self._mtbs_region = None
-        if label_collection == FireLabelsCollection.MTBS: self.mtbs_region = mtbs_region
+        self.__mtbs_region = None
+        if label_collection == FireLabelCollection.MTBS: self.mtbs_region = mtbs_region
 
-        self._mtbs_severity_from = None
-        if label_collection == FireLabelsCollection.MTBS: self.mtbs_severity_from = mtbs_severity_from
+        self.__mtbs_min_severity = None
+        if label_collection == FireLabelCollection.MTBS: self.mtbs_min_severity = mtbs_min_severity
 
-        self._cci_confidence_level = -1
-        if label_collection == FireLabelsCollection.CCI: self.cci_confidence_level = cci_confidence_level
+        self.__cci_confidence_level = -1
+        if label_collection == FireLabelCollection.CCI: self.cci_confidence_level = cci_confidence_level
 
         self._labels_processed = False  # TODO rename
 
+        self.__estimate_time = None
+        self.estimate_time = estimate_time
+
     """
-    Properties and setter related to sources
+    Satellite data (sources) - reflectance and temperature
     """
 
     @property
-    def modis_collection(self) -> ModisCollection:  # TODO change to list of type CollectionOPT
+    def opt_select_satdata(self) -> SatDataSelectOpt:
 
-        return self._modis_collection
+        return self.__opt_select_satdata
 
-    @modis_collection.setter
-    def modis_collection(self, collection: ModisCollection) -> None:
+    @opt_select_satdata.setter
+    def opt_select_satdata(self, opt_select: SatDataSelectOpt) -> None:
 
-        # TODO improve an implementation
-
-        if self.modis_collection == collection:
+        if self.opt_select_satdata == opt_select:
             return
 
         self._reset()  # clean up
-        self._modis_collection = collection
+        self.__opt_select_satdata = opt_select
 
     @property
     def lst_satdata_reflectance(self) -> Union[tuple[str], list[str], None]:
@@ -177,32 +181,44 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         self.__lst_satdata_temperature = lst_fn
 
     """
-    Dates - reflectance, land surface temperature
+    Timestamps - reflectance, land surface temperature, and labels for wildfire localization
     """
 
     @property
-    def timestamps_reflectance(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_reflectance
+    def timestamps_reflectance(self) -> PandasDataFrame:
 
-        if self._df_dates_reflectance is None:
-            self.__processDates_SATDATA(selection=SatDataSelectOpt.REFLECTANCE)
+        if self._df_timestamps_reflectance is None:
+            self.__processTimestamps_SATDATA(select_opt=SatDataSelectOpt.REFLECTANCE)
 
-        return self._df_dates_reflectance
+            if self._df_timestamps_reflectance is None:
+                err_msg = 'DataFrame containing timestamps (reflectance) was not created!'
+                raise TypeError(err_msg)
 
-    @property
-    def timestamps_temperature(self) -> lazy_import('pandas').DataFrame:  # TODO rename timestamps_temperature
-
-        if self._df_dates_temperature is None:
-            self.__processDates_SATDATA(selection=SatDataSelectOpt.SURFACE_TEMPERATURE)
-
-        return self._df_dates_temperature
+        return self._df_timestamps_reflectance
 
     @property
-    def dates_labels(self) -> lazy_import('pandas').DataFrame:  # TODO rename dates_fire_label ?
+    def timestamps_temperature(self) -> PandasDataFrame:
 
-        if self._df_dates_labels is None:
-            self.__processBandDates_LABEL()
+        if self._df_timestamps_temperature is None:
+            self.__processTimestamps_SATDATA(select_opt=SatDataSelectOpt.SURFACE_TEMPERATURE)
 
-        return self._df_dates_labels
+            if self._df_timestamps_temperature is None:
+                err_msg = 'DataFrame containing timestamps (temperature) was not created!'
+                raise TypeError(err_msg)
+
+        return self._df_timestamps_temperature
+
+    @property
+    def timestamps_locfire_labels(self) -> PandasDataFrame:
+
+        if self._df_timestamps_wildfires is None:
+            self.__processTimestamps_LABEL()
+
+            if self._df_timestamps_wildfires is None:
+                err_msg = 'DataFrame containing timestamps (fire location) was not created!'
+                raise TypeError(err_msg)
+
+        return self._df_timestamps_wildfires
 
     """
     FireCII labels properties
@@ -211,18 +227,18 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     @property
     def cci_confidence_level(self) -> int:
 
-        return self._cci_confidence_level
+        return self.__cci_confidence_level
 
     @cci_confidence_level.setter
     def cci_confidence_level(self, level: int) -> None:
 
-        if self._cci_confidence_level == level:
+        if self.__cci_confidence_level == level:
             return
 
         if level < 0 or level > 100:
             raise ValueError('Confidence level for FireCCI labels must be positive int between 0 and 100!')
 
-        self._cci_confidence_level = level
+        self.__cci_confidence_level = level
 
     """
     MTBS labels properties
@@ -231,66 +247,66 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     @property
     def mtbs_region(self) -> MTBSRegion:
 
-        return self._mtbs_region
+        return self.__mtbs_region
 
     @mtbs_region.setter
     def mtbs_region(self, region: MTBSRegion) -> None:
 
-        if self._mtbs_region == region:
+        if self.__mtbs_region == region:
             return
 
         self._reset()
-        self._mtbs_region = region
+        self.__mtbs_region = region
 
     @property
-    def mtbs_severity_from(self) -> MTBSSeverity:
+    def mtbs_min_severity(self) -> MTBSSeverity:
 
-        return self._mtbs_severity_from
+        return self.__mtbs_min_severity
 
-    @mtbs_severity_from.setter
-    def mtbs_severity_from(self, severity: MTBSSeverity) -> None:
+    @mtbs_min_severity.setter
+    def mtbs_min_severity(self, severity: MTBSSeverity) -> None:
 
-        if self._mtbs_severity_from == severity:
+        if self.__mtbs_min_severity == severity:
             return
 
         self._reset()
-        self._mtbs_severity_from = severity
+        self.__mtbs_min_severity = severity
 
     """
     Labels related to wildfires 
     """
 
     @property
-    def lst_labels(self) -> Union[tuple[str], list[str]]:
+    def lst_labels_wildfires(self) -> Union[tuple[str], list[str]]:
 
-        return self._lst_labels
+        return self.__lst_labels_wildfires
 
-    @lst_labels.setter
-    def lst_labels(self, lst_labels: Union[tuple[str], list[str]]) -> None:
+    @lst_labels_wildfires.setter
+    def lst_labels_wildfires(self, lst_labels: Union[tuple[str], list[str]]) -> None:
 
-        if self._lst_labels == lst_labels:
+        if self.__lst_labels_wildfires == lst_labels:
             return
 
         for fn in lst_labels:
             if not os.path.exists(fn):
-                raise IOError('File {} does not exist!'.format(fn))
+                raise IOError(f'File {fn} does not exist!')
 
         self._reset()  # clean up
-        self._lst_labels = lst_labels
+        self.__lst_labels_wildfires = lst_labels
 
     @property
-    def label_collection(self) -> FireLabelsCollection:
+    def label_collection(self) -> FireLabelCollection:
 
-        return self._label_collection
+        return self.__label_collection
 
     @label_collection.setter
-    def label_collection(self, collection: FireLabelsCollection) -> None:
+    def label_collection(self, collection: FireLabelCollection) -> None:
 
         if self.label_collection == collection:
             return
 
         self._reset()  # clean up
-        self._label_collection = collection
+        self.__label_collection = collection
 
     @property
     def nbands_label(self) -> int:  # TODO rename?
@@ -307,7 +323,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     @property
     def test_ratio(self) -> float:
 
-        return self._test_ratio
+        return self.__test_ratio
 
     @test_ratio.setter
     def test_ratio(self, ratio: float) -> None:
@@ -316,12 +332,12 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             return
 
         self._reset()  # clean up
-        self._test_ratio = ratio
+        self.__test_ratio = ratio
 
     @property
     def val_ratio(self) -> float:
 
-        return self._val_ratio
+        return self.__val_ratio
 
     @val_ratio.setter
     def val_ratio(self, ratio: float) -> None:
@@ -330,7 +346,19 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             return
 
         self._reset()
-        self._val_ratio = ratio
+        self.__val_ratio = ratio
+
+    # Time measure
+
+    @property
+    def estimate_time(self) -> bool:
+
+        return self.__estimate_time
+
+    @estimate_time.setter
+    def estimate_time(self, flg: bool) -> None:
+
+        self.__estimate_time = flg
 
     def _reset(self):
 
@@ -338,13 +366,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         del self._ds_test; self._ds_test = None
         del self._ds_val; self._ds_val = None
 
-        del self._df_dates_reflectance; self._df_dates_reflectance = None
+        del self._df_timestamps_reflectance; self._df_timestamps_reflectance = None
         del self._map_start_satimgs; self._map_start_satimgs = None
 
-        del self._df_dates_temperature; self._df_dates_temperature = None
+        del self._df_timestamps_temperature; self._df_timestamps_temperature = None
         # TODO map start?
 
-        del self._df_dates_labels; self._df_dates_labels = None
+        del self._df_timestamps_wildfires; self._df_timestamps_wildfires = None
         del self._map_band_id_label; self._map_band_id_label = None
 
         gc.collect()  # invoke garbage collector
@@ -411,31 +439,30 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
     def __loadGeoTIFF_LABELS(self) -> None:
 
-        if not self.lst_labels or self.lst_labels is None:
+        if not self.lst_labels_wildfires or self.lst_labels_wildfires is None:
             err_msg = 'Satellite data (labels - wildfires localization) is not set!'
             raise TypeError(err_msg)
 
-        del self._ds_labels; gc.collect()
-        self._ds_labels = None
+        del self._ds_wildfires; gc.collect()
+        self._ds_wildfires = None
 
-        self._ds_labels = self.__loadGeoTIFF_SOURCES(self.lst_labels)
-        if not self._ds_labels:
+        self._ds_wildfires = self.__loadGeoTIFF_SOURCES(self.lst_labels_wildfires)
+        if not self._ds_wildfires:
             err_msg = 'Satellite data (labels - wildfires localization) is not set!'
             raise IOError(err_msg)
 
-    # TODO rename
     """
-    Process meta data (MULTISPECTRAL SATELLITE IMAGE, MODIS)
+    Processing timestamps - satellite data (reflectance and temperature)  
     """
 
-    def __processDates_SATDATA_REFLECTANCE(self) -> None:
+    def __processTimestamps_SATDATA_REFLECTANCE(self) -> None:
 
-        if self._df_dates_reflectance is not None:
+        if self._df_timestamps_reflectance is not None:
             return
 
         unique_dates = set()
 
-        with elapsed_timer('Processing band dates (reflectance)'):
+        with elapsed_timer(msg='Processing band dates (reflectance)', enable=self.estimate_time):
 
             for i, img_ds in enumerate(self._ds_satdata_reflectance):
                 for rs_id in range(0, img_ds.RasterCount):
@@ -452,24 +479,25 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 raise ValueError(err_msg)
 
             try:
-                df_dates = pd.DataFrame(sorted(unique_dates), columns=['Date', 'Image ID'])
+                df_dates = _pd.DataFrame(sorted(unique_dates), columns=['Date', 'Image ID'])
             except MemoryError:
-                raise MemoryError
+                err_msg = 'DataFrame (reflectance) was not created!'
+                raise MemoryError(err_msg)
 
             # clean up
             del unique_dates; gc.collect()
 
-        del self._df_dates_reflectance; gc.collect()
-        self._df_dates_reflectance = df_dates
+        del self._df_timestamps_reflectance; gc.collect()
+        self._df_timestamps_reflectance = df_dates
 
-    def __processDates_SATDATA_TEMPERATURE(self) -> None:
+    def __processTimestamps_SATDATA_TEMPERATURE(self) -> None:
 
-        if self._df_dates_temperature is not None:
+        if self._df_timestamps_temperature is not None:
             return
 
         lst_dates = []
 
-        with elapsed_timer('Processing dates (land surface temperature)'):
+        with elapsed_timer(msg='Processing dates (land surface temperature)', enable=self.estimate_time):
 
             for i, img_ds in enumerate(self._ds_satdata_temperature):
                 for rs_id in range(0, img_ds.RasterCount):
@@ -482,26 +510,27 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                         lst_dates.append((tempsurf_date, i))
 
             if not lst_dates:
-                err_msg = 'Surface temperature sources do not contain any useful information about dates'
+                err_msg = 'Surface temperature sources do not contain any useful information about dates!'
                 raise ValueError(err_msg)
 
             try:
-                df_dates = pd.DataFrame(sorted(lst_dates), columns=['Date', 'Image ID'])
+                df_dates = _pd.DataFrame(sorted(lst_dates), columns=['Date', 'Image ID'])
             except MemoryError:
-                err_msg = 'DataFrame was not created!'
+                err_msg = 'DataFrame (temperature) was not created!'
                 raise MemoryError(err_msg)
 
             # clean up
             del lst_dates; gc.collect()
 
-        del self._df_dates_temperature; gc.collect()
-        self._df_dates_temperature = df_dates
+        del self._df_timestamps_temperature; gc.collect()
+        self._df_timestamps_temperature = df_dates
 
-    def __processDates_SATDATA(self, selection: SatDataSelectOpt = SatDataSelectOpt.ALL) -> None:
+    def __processTimestamps_SATDATA(self, select_opt: SatDataSelectOpt = SatDataSelectOpt.ALL) -> None:
 
         # processing reflectance (MOD09A1)
 
-        if self.lst_satdata_reflectance is not None and (selection & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE):
+        if self.lst_satdata_reflectance is not None and \
+           (select_opt & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE):
 
             if self._ds_satdata_reflectance is None:
                 try:
@@ -512,14 +541,15 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                     raise IOError(err_msg)
 
             try:
-                self.__processDates_SATDATA_REFLECTANCE()
+                self.__processTimestamps_SATDATA_REFLECTANCE()
             except ValueError:
                 err_msg = 'Cannot process dates of MOD09A1 sources (reflectance)!'
                 raise ValueError(err_msg)
 
         # processing land surface temperature (MOD11A2)
 
-        if self.lst_satdata_temperature is not None and (selection & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
+        if self.lst_satdata_temperature is not None and \
+           (select_opt & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
 
             if self._ds_satdata_temperature is None:
                 try:
@@ -530,14 +560,16 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                     raise IOError(err_msg)
 
             try:
-                self.__processDates_SATDATA_TEMPERATURE()
+                self.__processTimestamps_SATDATA_TEMPERATURE()
             except ValueError:
                 err_msg = 'Cannot process dates of MOD11A2 sources (land surface temperature)!'
                 raise ValueError(err_msg)
 
-    # meta data?
+    """
+    Meta data?
+    """
 
-    def __processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE(self):
+    def __processLayers_SATDATA_REFLECTANCE(self) -> None:  # TODO rename
 
         if self._map_start_satimgs is not None:
             del self._map_start_satimgs; self._map_band_id_satimg = None
@@ -546,7 +578,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         map_start_satimg = {}
         pos = 0
 
-        with elapsed_timer('Processing multi spectral bands (satellite images, modis, reflectance)'):
+        with elapsed_timer('Processing bands (satellite images, modis, reflectance)'):
 
             for id_ds, ds in enumerate(self._ds_satdata_reflectance):
 
@@ -570,24 +602,27 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         self._map_start_satimgs = map_start_satimg
         self._nimgs = pos
 
-    def _processMetaData_SATELLITE_IMG(self) -> None:
+    def _processMetaData_SATELLITE_IMG(self) -> None:  # TODO rename
 
         if self._ds_satdata_reflectance is None:
             try:
                 self.__loadGeoTIFF_REFLECTANCE()
             except IOError:
-                raise IOError('Cannot load any following satellite images: {}'.format(self.lst_satdata_reflectance))
+                err_msg = 'Cannot load any following satellite images: {}'
+                err_msg = err_msg.format(self.lst_satdata_reflectance)
+                raise IOError(err_msg)
 
-        if self._df_dates_reflectance is None:
+        if self._df_timestamps_reflectance is None:
             try:
-                self.__processDates_SATDATA()
+                self.__processTimestamps_SATDATA()
             except ValueError:
-                msg = 'Cannot process band dates of any following satellite images: {}'
-                raise ValueError(msg.format(self.lst_satdata_reflectance))
+                err_msg = 'Cannot process band dates of any following satellite images: {}'
+                err_msg = err_msg.format(self.lst_satdata_reflectance)
+                raise ValueError(err_msg)
 
         try:
-            if self.modis_collection == ModisCollection.REFLECTANCE:
-                self.__processMultiSpectralBands_SATIMG_MODIS_REFLECTANCE()
+            if self.opt_select_satdata == ModisCollection.REFLECTANCE:
+                self.__processLayers_SATDATA_REFLECTANCE()
             else:
                 raise NotImplementedError
         except ValueError or NotImplementedError:
@@ -604,15 +639,15 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         # lazy imports
         pd = lazy_import('pandas')
 
-        if self._df_dates_labels is not None:
-            del self._df_dates_labels; self._df_dates_reflectance = None
+        if self._df_timestamps_wildfires is not None:
+            del self._df_timestamps_wildfires; self._df_timestamps_reflectance = None
             gc.collect()
 
         lst = []
 
         with elapsed_timer('Processing band dates (labels, CCI)'):
 
-            for id_ds, ds in enumerate(self._ds_labels):
+            for id_ds, ds in enumerate(self._ds_wildfires):
                 for band_id in range(ds.RasterCount):
 
                     rs_band = ds.GetRasterBand(band_id + 1)
@@ -628,22 +663,22 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         df_dates = pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
         del lst; gc.collect()
 
-        self._df_dates_labels = df_dates
+        self._df_timestamps_wildfires = df_dates
 
     def __processBandDates_LABEL_MTBS(self) -> None:
 
         # lazy imports
-        pd = lazy_import('pandas')
+        pd = lazy_import('pandas')  # TODO remove
 
-        if self._df_dates_labels is not None:
-            del self._df_dates_labels; self._df_dates_reflectance = None
+        if self._df_timestamps_wildfires is not None:
+            del self._df_timestamps_wildfires; self._df_timestamps_reflectance = None
             gc.collect()
 
         lst = []
 
         with elapsed_timer('Processing band dates (labels, MTBS)'):
 
-            for id_ds, ds in enumerate(self._ds_labels):
+            for id_ds, ds in enumerate(self._ds_wildfires):
                 for band_id in range(ds.RasterCount):
 
                     rs_band = ds.GetRasterBand(band_id + 1)
@@ -659,25 +694,29 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         df_dates = pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
         del lst; gc.collect()
 
-        self._df_dates_labels = df_dates
+        self._df_timestamps_wildfires = df_dates
 
-    def __processBandDates_LABEL(self) -> None:
+    def __processTimestamps_LABEL(self) -> None:
 
-        if self._ds_labels is None:
+        if self._ds_wildfires is None:
             try:
                 self.__loadGeoTIFF_LABELS()
             except IOError:
-                raise IOError('Cannot load any following label sources: {}'.format(self.lst_labels))
+                raise IOError('Cannot load any following label sources: {}'.format(self.lst_labels_wildfires))
 
         try:
-            if self.label_collection == FireLabelsCollection.CCI:
+            if self.label_collection == FireLabelCollection.CCI:
                 self.__processBandDates_LABEL_CCI()
-            elif self.label_collection == FireLabelsCollection.MTBS:
+            elif self.label_collection == FireLabelCollection.MTBS:
                 self.__processBandDates_LABEL_MTBS()
             else:
                 raise NotImplementedError
         except ValueError or NotImplementedError:
             raise ValueError('Cannot process band dates related to labels ({})!'.format(self.label_collection.name))
+
+    """
+    labels
+    """
 
     def __processLabels_CCI(self) -> None:
 
@@ -690,7 +729,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         with elapsed_timer('Processing fire labels ({})'.format(self.label_collection.name)):
 
-            for id_ds, ds in enumerate(self._ds_labels):
+            for id_ds, ds in enumerate(self._ds_wildfires):
                 for band_id in range(ds.RasterCount):
 
                     rs_band = ds.GetRasterBand(band_id + 1)
@@ -708,7 +747,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
     def __processLabels_MTBS(self) -> None:
 
-        # determine bands and their ids for region selection
+        # determine bands and their ids for region select_opt
         if self._map_band_id_label is None:
             del self._map_band_id_label; self._map_band_id_label = None
             gc.collect()  # invoke garbage collector
@@ -718,7 +757,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         with elapsed_timer('Processing fire labels ({})'.format(self.label_collection.name)):
 
-            for id_ds, ds in enumerate(self._ds_labels):
+            for id_ds, ds in enumerate(self._ds_wildfires):
                 for band_id in range(ds.RasterCount):
 
                     rs_band = ds.GetRasterBand(band_id + 1)
@@ -729,7 +768,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                         map_band_ids[pos] = (id_ds, band_id + 1); pos += 1
 
         if not map_band_ids:
-            msg = 'Any labels ({}) do not contain any useful information: {}'.format(self.label_collection.name, self._lst_labels)
+            msg = 'Any labels ({}) do not contain any useful information: {}'.format(self.label_collection.name, self.__lst_labels_wildfires)
             raise ValueError(msg)
 
         self._map_band_id_label = map_band_ids
@@ -737,22 +776,22 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
     def _processMetaData_LABELS(self) -> None:
 
-        if self._ds_labels is None:
+        if self._ds_wildfires is None:
             try:
                 self.__loadGeoTIFF_LABELS()
             except IOError:
-                raise IOError('Cannot load any following label sources: {}'.format(self.lst_labels))
+                raise IOError('Cannot load any following label sources: {}'.format(self.lst_labels_wildfires))
 
-        if self._df_dates_labels is None:
+        if self._df_timestamps_wildfires is None:
             try:
-                self.__processBandDates_LABEL()
+                self.__processTimestamps_LABEL()
             except ValueError or AttributeError:
                 raise ValueError('Cannot process band dates related labels ({})!'.format(self.label_collection.name))
 
         try:
-            if self.label_collection == FireLabelsCollection.CCI:
+            if self.label_collection == FireLabelCollection.CCI:
                 self.__processLabels_CCI()
-            elif self.label_collection == FireLabelsCollection.MTBS:
+            elif self.label_collection == FireLabelCollection.MTBS:
                 self.__processLabels_MTBS()
             else:
                 raise NotImplementedError
@@ -801,7 +840,7 @@ if __name__ == '__main__':
     # setup of data set loader
     dataset_loader = DatasetLoader(
         lst_satdata_reflectance=VAR_LST_SATIMGS,
-        lst_labels=VAR_LST_LABELS_MTBS
+        lst_loc_fires=VAR_LST_LABELS_MTBS
     )
 
-    print(dataset_loader.dates_labels)
+    print(dataset_loader.timestamps_locfire_labels)
