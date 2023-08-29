@@ -11,7 +11,7 @@ from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 # import utils
 from mlfire.utils.functool import lazy_import
 from mlfire.utils.time import elapsed_timer
-from mlfire.utils.utils_string import band2date_reflectance, band2date_tempsurface
+from mlfire.utils.utils_string import satdata_dsc2date
 from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 
 # lazy imports
@@ -25,7 +25,7 @@ class SatDataSelectOpt(Enum):
 
     NONE = 0
     REFLECTANCE = 1
-    SURFACE_TEMPERATURE = 2
+    SURFACE_TEMPERATURE = 2  # TODO rename -> TEMPERATURE
     ALL = 3
 
     def __and__(self, other):
@@ -69,10 +69,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         self._ds_wildfires = None
         self._df_timestamps_wildfires = None
 
-        self._map_start_satimgs = None  # TODO rename
+        self._map_layout_relectance = None
+        self._map_layout_temperature = None
+
         self._map_band_id_label = None  # TODO rename
 
-        self._nimgs = 0  # TODO rename
+        self.__len_ts_reflectance = 0
+        self.__len_ts_temperature = 0
         self._nbands_label = 0  # TODO rename
 
         # training, test, and validation data sets
@@ -141,6 +144,12 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         if self.opt_select_satdata == opt_select:
             return
 
+        if isinstance(opt_select, (list, tuple)):
+            _flgs = 0
+
+            for opt in opt_select: _flgs |= opt
+            opt_select = _flgs
+
         self._reset()  # clean up
         self.__opt_select_satdata = opt_select
 
@@ -154,6 +163,10 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         if self.__lst_satdata_reflectance == lst_fn:
             return
+
+        if not isinstance(lst_fn, (tuple, list)):
+            err_msg = ''
+            raise TypeError(err_msg)
 
         for fn in lst_fn:
             if not os.path.exists(fn):
@@ -172,6 +185,10 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         if self.__lst_satdata_temperature == lst_fn:
             return
+
+        if not isinstance(lst_fn, (tuple, list)):
+            err_msg = ''
+            raise TypeError(err_msg)
 
         for fn in lst_fn:
             if not os.path.exists(fn):
@@ -367,10 +384,10 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         del self._ds_val; self._ds_val = None
 
         del self._df_timestamps_reflectance; self._df_timestamps_reflectance = None
-        del self._map_start_satimgs; self._map_start_satimgs = None
+        del self._map_layout_relectance; self._map_layout_relectance = None
 
         del self._df_timestamps_temperature; self._df_timestamps_temperature = None
-        # TODO map start?
+        del self._map_layout_temperature; self._map_layout_temperature = None
 
         del self._df_timestamps_wildfires; self._df_timestamps_wildfires = None
         del self._map_band_id_label; self._map_band_id_label = None
@@ -378,7 +395,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         gc.collect()  # invoke garbage collector
 
         self._nfeatures_ts = 0  # TODO rename nbands_img?
-        self._nimgs = 0
+        self.__len_ts_reflectance = 0
         self._nbands_label = 0
 
         # set flags to false
@@ -460,6 +477,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         if self._df_timestamps_reflectance is not None:
             return
 
+        if self._ds_satdata_reflectance is None:
+            try:
+                self.__loadGeoTIFF_REFLECTANCE()
+            except IOError:
+                err_msg = ''
+                raise IOError(err_msg)
+
         unique_dates = set()
 
         with elapsed_timer(msg='Processing band dates (reflectance)', enable=self.estimate_time):
@@ -471,7 +495,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                     rs_dsc = rs_band.GetDescription()
 
                     if '_sur_refl_' in rs_dsc:
-                        reflec_date = band2date_reflectance(rs_dsc)
+                        reflec_date = satdata_dsc2date(rs_dsc)
                         unique_dates.add((reflec_date, i))
 
             if not unique_dates:
@@ -495,6 +519,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         if self._df_timestamps_temperature is not None:
             return
 
+        if self._ds_satdata_temperature is None:
+            try:
+                self.__loadGeoTIFF_TEMPERATURE()
+            except IOError:
+                err_msg = ''
+                raise IOError(err_msg)
+
         lst_dates = []
 
         with elapsed_timer(msg='Processing dates (land surface temperature)', enable=self.estimate_time):
@@ -506,7 +537,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                     rs_dsc = rs_band.GetDescription()
 
                     if 'lst_day_1km' in rs_dsc.lower():
-                        tempsurf_date = band2date_tempsurface(rs_dsc)
+                        tempsurf_date = satdata_dsc2date(rs_dsc)
                         lst_dates.append((tempsurf_date, i))
 
             if not lst_dates:
@@ -514,7 +545,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 raise ValueError(err_msg)
 
             try:
-                df_dates = _pd.DataFrame(sorted(lst_dates), columns=['Date', 'Image ID'])
+                df_dates = _pd.DataFrame(sorted(lst_dates), columns=['Date', 'Image ID']) # TODO case when nsources = 1
             except MemoryError:
                 err_msg = 'DataFrame (temperature) was not created!'
                 raise MemoryError(err_msg)
@@ -566,69 +597,125 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 raise ValueError(err_msg)
 
     """
-    Meta data?
+    Processing metadata - reflectance and temperature
     """
 
-    def __processLayers_SATDATA_REFLECTANCE(self) -> None:  # TODO rename
+    def __processLayersLayout_SATDATA_REFLECTANCE(self) -> None:
 
-        if self._map_start_satimgs is not None:
-            del self._map_start_satimgs; self._map_band_id_satimg = None
-            gc.collect()
-
-        map_start_satimg = {}
-        pos = 0
-
-        with elapsed_timer('Processing bands (satellite images, modis, reflectance)'):
-
-            for id_ds, ds in enumerate(self._ds_satdata_reflectance):
-
-                last_date = 0  # reset last date
-                nbands = ds.RasterCount  # get number of bands in GeoTIFF data set
-
-                for band_id in range(nbands):
-
-                    rs_band = ds.GetRasterBand(band_id + 1)
-                    band_dsc = rs_band.GetDescription()
-                    band_date = band2date_reflectance(band_dsc)
-
-                    # determine where a multi spectral image begins
-                    if '_sur_refl_' in band_dsc and last_date != band_date:
-                        map_start_satimg[pos] = (id_ds, band_id + 1); pos += 1
-                        last_date = band_date
-
-        if not map_start_satimg:
-            raise ValueError('Any satellite image do not contain any useful data!')
-
-        self._map_start_satimgs = map_start_satimg
-        self._nimgs = pos
-
-    def _processMetaData_SATELLITE_IMG(self) -> None:  # TODO rename
+        if self._map_layout_relectance is not None:
+            return
 
         if self._ds_satdata_reflectance is None:
             try:
                 self.__loadGeoTIFF_REFLECTANCE()
             except IOError:
-                err_msg = 'Cannot load any following satellite images: {}'
-                err_msg = err_msg.format(self.lst_satdata_reflectance)
+                err_msg = ''
                 raise IOError(err_msg)
 
-        if self._df_timestamps_reflectance is None:
+        map_layout_satdata = {}
+        pos = 0
+
+        nsources = len(self._ds_satdata_reflectance)
+
+        with elapsed_timer('Processing layout of layers (reflectance)', enable=self.estimate_time):
+
+            for i, img_ds in enumerate(self._ds_satdata_reflectance):
+                last_date = 0  # reset value of last date
+                for rs_id in range(0, img_ds.RasterCount):
+
+                    rs_band = img_ds.GetRasterBand(rs_id + 1)
+                    rs_dsc = rs_band.GetDescription()
+
+                    reflec_date = satdata_dsc2date(rs_dsc)
+
+                    if ('_sur_refl_' in rs_dsc.lower()) and (reflec_date != last_date):
+                        map_layout_satdata[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1; pos += 1
+                        last_date = reflec_date
+
+        if not map_layout_satdata:
+            raise TypeError('Satellite data (reflectance) do not contain any useful layer!')
+
+        self._map_layout_relectance = map_layout_satdata
+        self.__len_ts_reflectance = pos
+
+    def __processLayersLayout_SATDATA_TEMPERATURE(self) -> None:
+
+        if self._map_layout_temperature is not None:
+            return
+
+        if self._ds_satdata_temperature is None:
             try:
-                self.__processTimestamps_SATDATA()
-            except ValueError:
-                err_msg = 'Cannot process band dates of any following satellite images: {}'
-                err_msg = err_msg.format(self.lst_satdata_reflectance)
-                raise ValueError(err_msg)
+                self.__loadGeoTIFF_TEMPERATURE()
+            except IOError:
+                err_msg = ''
+                raise IOError(err_msg)
 
-        try:
-            if self.opt_select_satdata == ModisCollection.REFLECTANCE:
-                self.__processLayers_SATDATA_REFLECTANCE()
-            else:
-                raise NotImplementedError
-        except ValueError or NotImplementedError:
-            raise ValueError('Cannot process multi spectral bands meta data!')
+        map_layout_satdata = {}
+        pos = 0
 
-        self._satimgs_processed = True
+        nsources = len(self._ds_satdata_temperature)
+
+        with elapsed_timer('Processing layout of layers (temperature)', enable=self.estimate_time):
+
+            for i, img_ds in enumerate(self._ds_satdata_temperature):
+                last_date = 0  # reset value of last date
+                for rs_id in range(0, img_ds.RasterCount):
+
+                    rs_band = img_ds.GetRasterBand(rs_id + 1)
+                    rs_dsc = rs_band.GetDescription()
+
+                    temperature_date = satdata_dsc2date(rs_dsc)
+
+                    if ('lst_day_1km' in rs_dsc.lower()) and (temperature_date != last_date):
+                        map_layout_satdata[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1; pos += 1
+                        last_date = temperature_date
+
+        if not map_layout_satdata:
+            raise TypeError('Satellite data (temperature) do not contain any useful layer!')
+
+        self._map_layout_temperature = map_layout_satdata
+        self.__len_ts_temperature = pos
+
+    def _processMetadata_SATDATA(self) -> None:
+
+        # processing reflectance (MOD09A1)
+
+        if self.lst_satdata_reflectance is not None and \
+           (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE):
+
+            if self._df_timestamps_reflectance is None:
+                try:
+                    self.__processTimestamps_SATDATA(select_opt=SatDataSelectOpt.REFLECTANCE)
+                except IOError or ValueError:
+                    err_msg = ''
+                    raise TypeError(err_msg)
+
+            try:
+                self.__processLayersLayout_SATDATA_REFLECTANCE()
+            except TypeError:
+                err_msg = ''
+                raise TypeError(err_msg)
+
+        # processing land surface temperature (MOD11A2)
+
+        if self.lst_satdata_temperature is not None and \
+           (self.opt_select_satdata & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
+
+            if self._df_timestamps_temperature is None:
+                try:
+                    self.__processTimestamps_SATDATA_TEMPERATURE()
+                except IOError or ValueError:
+                    err_msg = ''
+                    raise TypeError(err_msg)
+
+            try:
+                self.__processLayersLayout_SATDATA_TEMPERATURE()
+            except TypeError:
+                err_msg = ''
+                raise TypeError(err_msg)
+
+        # TODO comment
+        self._satimgs_processed = True  # TODO rename
 
     """
     Process meta data (LABELS)
@@ -799,23 +886,49 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             msg = 'Cannot process labels meta data!'
             raise ValueError(msg)
 
-        # set that everything is done
+        # everything is done
         self._labels_processed = True
 
     """
-    Magic methods
+    TODO comment
     """
 
-    def __len__(self) -> int:
+    def getLengthTimeseries(self, opt_select: SatDataSelectOpt) -> int:
 
-        if not self._satimgs_processed:
-            self._processMetaData_SATELLITE_IMG()
+        if not isinstance(opt_select, SatDataSelectOpt):
+            err_msg = ''
+            raise TypeError(err_msg)
 
-        return self._nimgs
+        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
+            self.__processLayersLayout_SATDATA_REFLECTANCE()
+            return self.__len_ts_reflectance
+        elif opt_select & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE:
+            self.__processLayersLayout_SATDATA_TEMPERATURE()
+            return self.__len_ts_temperature
+        else:
+            raise NotImplementedError
+
+    @property
+    def len_ts(self) -> int:
+
+        len_ts_reflectance = len_ts_temperature = length_ts = 0
+
+        if self.lst_satdata_reflectance is not None:
+            length_ts = len_ts_reflectance = self.getLengthTimeseries(opt_select=SatDataSelectOpt.REFLECTANCE)
+        if self.lst_satdata_temperature is not None:
+            length_ts = len_ts_temperature = self.getLengthTimeseries(opt_select=SatDataSelectOpt.SURFACE_TEMPERATURE)
+
+        if self.lst_satdata_temperature is not None and self.lst_satdata_reflectance is not None:
+            if len_ts_reflectance != len_ts_temperature:
+                err_msg = ''
+                raise ValueError(err_msg)
+
+        return length_ts
 
 
-# tests
 if __name__ == '__main__':
+
+    # TODO fix
 
     VAR_DATA_DIR = 'data/tifs'
 

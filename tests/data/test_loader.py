@@ -13,6 +13,7 @@ _pd = lazy_import('pandas')
 _mlfire_data_loader = lazy_import('mlfire.data.loader')
 
 # lazy imports - classes
+_SatDataSelectOpt = _mlfire_data_loader.SatDataSelectOpt
 _SatDataLoader = _mlfire_data_loader.DatasetLoader
 _PandasDataFrame = _pd.DataFrame
 
@@ -82,7 +83,7 @@ Testing functiononality for SatDataLoader (loader for satellite data - reflectan
 def TEST_SatDataLoaderReflectanceTimestamps(satdata_reflectance, expected_satdata_timestamps):
 
     satdata_loader = _SatDataLoader(
-        lst_labels_wildfires=None,
+        lst_labels_locfires=None,
         lst_satdata_reflectance=satdata_reflectance,
         estimate_time=False
     )
@@ -92,11 +93,25 @@ def TEST_SatDataLoaderReflectanceTimestamps(satdata_reflectance, expected_satdat
 
 
 @pytest.mark.data
+@pytest.mark.parametrize('len_ts', [92])
+def TEST_SatDataLoaderReflectanceLengthTimeseries(satdata_reflectance, len_ts):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_locfires=None,
+        lst_satdata_reflectance=satdata_reflectance,
+        estimate_time=False
+    )
+
+    assert satdata_loader.getLengthTimeseries(opt_select=_SatDataSelectOpt.REFLECTANCE) == len_ts
+    assert satdata_loader.len_ts == len_ts
+
+
+@pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
 def TEST_SatDataLoaderReflectanceSourcesNotSet(satdata_temperature, exception):
 
     satdata_loader = _SatDataLoader(
-        lst_labels_wildfires=None,
+        lst_labels_locfires=None,
         lst_satdata_temperature=satdata_temperature,
         estimate_time=False
     )
@@ -109,7 +124,7 @@ def TEST_SatDataLoaderReflectanceSourcesNotSet(satdata_temperature, exception):
 def TEST_SatDataLoaderTemperatureTimestamps(satdata_temperature, expected_satdata_timestamps):
 
     satdata_loader = _SatDataLoader(
-        lst_labels_wildfires=None,
+        lst_labels_locfires=None,
         lst_satdata_temperature=satdata_temperature,
         estimate_time=False
     )
@@ -119,15 +134,28 @@ def TEST_SatDataLoaderTemperatureTimestamps(satdata_temperature, expected_satdat
 
 
 @pytest.mark.data
+@pytest.mark.parametrize('len_ts', [92])
+def TEST_SatDataLoaderTemperatureLengthTimeseries(satdata_temperature, len_ts):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_locfires=None,
+        lst_satdata_temperature=satdata_temperature,
+        estimate_time=False
+    )
+
+    assert satdata_loader.getLengthTimeseries(opt_select=_SatDataSelectOpt.SURFACE_TEMPERATURE) == len_ts
+    assert satdata_loader.len_ts == len_ts
+
+
+@pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
 def TEST_SatDataLoaderTemperatureSourcesNotSet(satdata_temperature, exception):
 
     satdata_loader = _SatDataLoader(
-        lst_labels_wildfires=None,
+        lst_labels_locfires=None,
         lst_satdata_reflectance=satdata_temperature,
         estimate_time=False
     )
 
     with exception:
         _ = satdata_loader.timestamps_temperature
-
