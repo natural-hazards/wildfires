@@ -30,15 +30,29 @@ class TestSatDataType(Enum):
         return self.value
 
 
-def lst_satdata(data_type: TestSatDataType) -> list[str]:
+def lst_satdata_year(type_satdata: TestSatDataType, year: int = 2004) -> tuple[str]:
+
+    satdata_dir = _os.path.abspath('data/tifs')
+    prefix_satdata = 'ak_{}_january_december_{}_100km'
+
+    prefix_satdata_yr = prefix_satdata.format(type_satdata, year)
+
+    fn_satimg = '{}_epsg3338_area_0.tif'.format(prefix_satdata_yr)
+    fn_satimg = _os.path.join(satdata_dir, fn_satimg)
+    fn_satimg = _os.path.join(satdata_dir, fn_satimg)
+
+    return (fn_satimg,)
+
+
+def lst_satdata_multi_year(type_satdata: TestSatDataType, range_year: range = range(2004, 2006)) -> list[str]:
 
     lst_satadata_reflec: list[str] = []
 
     satdata_dir = _os.path.abspath('data/tifs')
-    prefix_satdata_reflectance = 'ak_{}_january_december_{}_100km'
+    prefix_satdata_reflectance = 'ak_{}_january_december_{}_100km' # TODO renmae
 
-    for year in range(2004, 2006):
-        prefix_satdata_reflectance_yr = prefix_satdata_reflectance.format(data_type, year)
+    for year in range_year:
+        prefix_satdata_reflectance_yr = prefix_satdata_reflectance.format(type_satdata, year) # TODO rename
 
         fn_satimg_reflec = '{}_epsg3338_area_0.tif'.format(prefix_satdata_reflectance_yr)
         fn_satimg_reflec = _os.path.join(satdata_dir, fn_satimg_reflec)
@@ -49,7 +63,20 @@ def lst_satdata(data_type: TestSatDataType) -> list[str]:
 
 
 @pytest.fixture(scope='module')
-def expected_satdata_timestamps() -> _PandasDataFrame:
+def expected_satdata_timestamps_2004() -> _PandasDataFrame:
+
+    lst_timestamps: list = []
+
+    start_date = _datetime.date(year=2004, month=1, day=1)
+    lst_timestamps.extend([
+        start_date + i * _datetime.timedelta(days=8) for i in range(0, 46)
+    ])
+
+    return _pd.DataFrame(lst_timestamps, columns=('Timestamps',))
+
+
+@pytest.fixture(scope='module')
+def expected_satdata_timestamps_2004_2005() -> _PandasDataFrame:
 
     lst_dates: list[tuple] = []
 
@@ -59,19 +86,31 @@ def expected_satdata_timestamps() -> _PandasDataFrame:
             (start_date + i * _datetime.timedelta(days=8), 0 if year == 2004 else 1) for i in range(0, 46)
         ])
 
-    return _pd.DataFrame(lst_dates, columns=('Date', 'Image ID'))
+    return _pd.DataFrame(lst_dates, columns=('Timestamps', 'Image ID'))
 
 
 @pytest.fixture(scope='module')
-def satdata_reflectance() -> list[str]:
+def satdata_reflectance_2004() -> tuple[str]:
 
-    return lst_satdata(TestSatDataType.REFLECTANCE)
+    return lst_satdata_year(type_satdata=TestSatDataType.REFLECTANCE, year=2004)
 
 
 @pytest.fixture(scope='module')
-def satdata_temperature() -> list[str]:
+def satdata_reflectance_2004_2005() -> list[str]:
 
-    return lst_satdata(TestSatDataType.TEMPERATURE)
+    return lst_satdata_multi_year(type_satdata=TestSatDataType.REFLECTANCE, range_year=range(2004, 2006))
+
+
+@pytest.fixture(scope='module')
+def satdata_temperature_2004() -> tuple[str]:
+
+    return lst_satdata_year(type_satdata=TestSatDataType.TEMPERATURE, year=2004)
+
+
+@pytest.fixture(scope='module')
+def satdata_temperature_2004_2005() -> list[str]:
+
+    return lst_satdata_multi_year(type_satdata=TestSatDataType.TEMPERATURE, range_year=range(2004, 2006))
 
 
 """
@@ -80,25 +119,52 @@ Testing functiononality for SatDataLoader (loader for satellite data - reflectan
 
 
 @pytest.mark.data
-def TEST_SatDataLoaderReflectanceTimestamps(satdata_reflectance, expected_satdata_timestamps):
+def TEST_SatDataLoaderReflectanceTimestamps_2004(satdata_reflectance_2004, expected_satdata_timestamps_2004):
 
     satdata_loader = _SatDataLoader(
         lst_labels_locfires=None,
-        lst_satdata_reflectance=satdata_reflectance,
+        lst_satdata_reflectance=satdata_reflectance_2004,
         estimate_time=False
     )
 
     timestamps_reflectance = satdata_loader.timestamps_reflectance
-    _pd.testing.assert_frame_equal(timestamps_reflectance, expected_satdata_timestamps)
+    _pd.testing.assert_frame_equal(timestamps_reflectance, expected_satdata_timestamps_2004)
+
+
+@pytest.mark.data
+def TEST_SatDataLoaderReflectanceTimestamps_2004_2005(satdata_reflectance_2004_2005, expected_satdata_timestamps_2004_2005):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_locfires=None,
+        lst_satdata_reflectance=satdata_reflectance_2004_2005,
+        estimate_time=False
+    )
+
+    timestamps_reflectance = satdata_loader.timestamps_reflectance
+    _pd.testing.assert_frame_equal(timestamps_reflectance, expected_satdata_timestamps_2004_2005)
+
+
+@pytest.mark.data
+@pytest.mark.parametrize('len_ts', [46])
+def TEST_SatDataLoaderReflectanceLengthTimeseries_2004(satdata_reflectance_2004, len_ts):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_locfires=None,
+        lst_satdata_reflectance=satdata_reflectance_2004,
+        estimate_time=False
+    )
+
+    assert satdata_loader.getLengthTimeseries(opt_select=_SatDataSelectOpt.REFLECTANCE) == len_ts
+    assert satdata_loader.len_ts == len_ts
 
 
 @pytest.mark.data
 @pytest.mark.parametrize('len_ts', [92])
-def TEST_SatDataLoaderReflectanceLengthTimeseries(satdata_reflectance, len_ts):
+def TEST_SatDataLoaderReflectanceLengthTimeseries_2004_2005(satdata_reflectance_2004_2005, len_ts):
 
     satdata_loader = _SatDataLoader(
         lst_labels_locfires=None,
-        lst_satdata_reflectance=satdata_reflectance,
+        lst_satdata_reflectance=satdata_reflectance_2004_2005,
         estimate_time=False
     )
 
@@ -108,11 +174,11 @@ def TEST_SatDataLoaderReflectanceLengthTimeseries(satdata_reflectance, len_ts):
 
 @pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
-def TEST_SatDataLoaderReflectanceSourcesNotSet(satdata_temperature, exception):
+def TEST_SatDataLoaderReflectanceSourcesNotSet(satdata_temperature_2004, exception):
 
     satdata_loader = _SatDataLoader(
         lst_labels_locfires=None,
-        lst_satdata_temperature=satdata_temperature,
+        lst_satdata_temperature=satdata_temperature_2004,
         estimate_time=False
     )
 
@@ -121,25 +187,52 @@ def TEST_SatDataLoaderReflectanceSourcesNotSet(satdata_temperature, exception):
 
 
 @pytest.mark.data
-def TEST_SatDataLoaderTemperatureTimestamps(satdata_temperature, expected_satdata_timestamps):
+def TEST_SatDataLoaderTemperatureTimestamps_2004(satdata_temperature_2004, expected_satdata_timestamps_2004):
 
     satdata_loader = _SatDataLoader(
         lst_labels_locfires=None,
-        lst_satdata_temperature=satdata_temperature,
+        lst_satdata_temperature=satdata_temperature_2004,
         estimate_time=False
     )
 
     timestamps_temperature = satdata_loader.timestamps_temperature
-    _pd.testing.assert_frame_equal(timestamps_temperature, expected_satdata_timestamps)
+    _pd.testing.assert_frame_equal(timestamps_temperature, expected_satdata_timestamps_2004)
+
+
+@pytest.mark.data
+def TEST_SatDataLoaderTemperatureTimestamps_2004_2005(satdata_temperature_2004_2005, expected_satdata_timestamps_2004_2005):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_locfires=None,
+        lst_satdata_temperature=satdata_temperature_2004_2005,
+        estimate_time=False
+    )
+
+    timestamps_temperature = satdata_loader.timestamps_temperature
+    _pd.testing.assert_frame_equal(timestamps_temperature, expected_satdata_timestamps_2004_2005)
+
+
+@pytest.mark.data
+@pytest.mark.parametrize('len_ts', [46])
+def TEST_SatDataLoaderTemperatureLengthTimeseries_2004(satdata_temperature_2004, len_ts):
+
+    satdata_loader = _SatDataLoader(
+        lst_labels_locfires=None,
+        lst_satdata_temperature=satdata_temperature_2004,
+        estimate_time=False
+    )
+
+    assert satdata_loader.getLengthTimeseries(opt_select=_SatDataSelectOpt.SURFACE_TEMPERATURE) == len_ts
+    assert satdata_loader.len_ts == len_ts
 
 
 @pytest.mark.data
 @pytest.mark.parametrize('len_ts', [92])
-def TEST_SatDataLoaderTemperatureLengthTimeseries(satdata_temperature, len_ts):
+def TEST_SatDataLoaderTemperatureLengthTimeseries_2004_2005(satdata_temperature_2004_2005, len_ts):
 
     satdata_loader = _SatDataLoader(
         lst_labels_locfires=None,
-        lst_satdata_temperature=satdata_temperature,
+        lst_satdata_temperature=satdata_temperature_2004_2005,
         estimate_time=False
     )
 
@@ -149,11 +242,11 @@ def TEST_SatDataLoaderTemperatureLengthTimeseries(satdata_temperature, len_ts):
 
 @pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
-def TEST_SatDataLoaderTemperatureSourcesNotSet(satdata_temperature, exception):
+def TEST_SatDataLoaderTemperatureSourcesNotSet(satdata_reflectance_2004, exception):
 
     satdata_loader = _SatDataLoader(
         lst_labels_locfires=None,
-        lst_satdata_reflectance=satdata_temperature,
+        lst_satdata_reflectance=satdata_reflectance_2004,
         estimate_time=False
     )
 

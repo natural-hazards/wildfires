@@ -170,7 +170,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         for fn in lst_fn:
             if not os.path.exists(fn):
-                raise IOError(f'File {fn} does not exist!')
+                raise IOError(f'file {fn} does not exist')
 
         self._reset()  # clean up
         self.__lst_satdata_reflectance = lst_fn
@@ -192,7 +192,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         for fn in lst_fn:
             if not os.path.exists(fn):
-                raise IOError(f'File {fn} does not exitst!')
+                raise IOError(f'file {fn} does not exitst')
 
         self._reset()  # clean up
         self.__lst_satdata_temperature = lst_fn
@@ -208,7 +208,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             self.__processTimestamps_SATDATA(select_opt=SatDataSelectOpt.REFLECTANCE)
 
             if self._df_timestamps_reflectance is None:
-                err_msg = 'DataFrame containing timestamps (reflectance) was not created!'
+                err_msg = 'data frame containing timestamps (reflectance) was not created'
                 raise TypeError(err_msg)
 
         return self._df_timestamps_reflectance
@@ -220,7 +220,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             self.__processTimestamps_SATDATA(select_opt=SatDataSelectOpt.SURFACE_TEMPERATURE)
 
             if self._df_timestamps_temperature is None:
-                err_msg = 'DataFrame containing timestamps (temperature) was not created!'
+                err_msg = 'data frame containing timestamps (temperature) was not created'
                 raise TypeError(err_msg)
 
         return self._df_timestamps_temperature
@@ -232,7 +232,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             self.__processTimestamps_LABEL()
 
             if self._df_timestamps_wildfires is None:
-                err_msg = 'DataFrame containing timestamps (fire location) was not created!'
+                err_msg = 'data frame containing timestamps (fire location) was not created!'
                 raise TypeError(err_msg)
 
         return self._df_timestamps_wildfires
@@ -253,7 +253,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             return
 
         if level < 0 or level > 100:
-            raise ValueError('Confidence level for FireCCI labels must be positive int between 0 and 100!')
+            raise ValueError('confidence level for FireCCI labels must be positive int between 0 and 100')
 
         self.__cci_confidence_level = level
 
@@ -306,7 +306,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         for fn in lst_labels:
             if not os.path.exists(fn):
-                raise IOError(f'File {fn} does not exist!')
+                raise IOError(f'file {fn} does not exist!')
 
         self._reset()  # clean up
         self.__lst_labels_wildfires = lst_labels
@@ -418,10 +418,10 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             try:
                 ds = gdal.Open(fn)
             except IOError:
-                raise RuntimeWarning(f'Cannot load source {fn}!')
+                raise RuntimeWarning(f'cannot load source {fn}')
 
             if ds is None:
-                raise RuntimeWarning(f'Source {fn} is empty!')
+                raise RuntimeWarning(f'source {fn} is empty')
             lst_ds.append(ds)
 
         return lst_ds
@@ -429,7 +429,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     def __loadGeoTIFF_REFLECTANCE(self) -> None:
 
         if self.lst_satdata_reflectance is None:
-            err_msg = 'Satellite data (reflectance) is not set!'
+            err_msg = 'satellite data (reflectance) is not set'
             raise TypeError(err_msg)
 
         del self._ds_satdata_reflectance; gc.collect()
@@ -437,13 +437,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         self._ds_satdata_reflectance = self.__loadGeoTIFF_SOURCES(self.lst_satdata_reflectance)
         if not self._ds_satdata_reflectance:
-            err_msg = 'Satellite data (reflectance) was not loaded!'
+            err_msg = 'satellite data (reflectance) was not loaded'
             raise IOError(err_msg)
 
     def __loadGeoTIFF_TEMPERATURE(self) -> None:
 
         if self.lst_satdata_temperature is None:
-            err_msg = 'Satellite data (land surface temperature) is not set!'
+            err_msg = 'satellite data (temperature) is not set'
             raise TypeError(err_msg)
 
         del self._ds_satdata_temperature; gc.collect()
@@ -451,7 +451,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
         self._ds_satdata_temperature = self.__loadGeoTIFF_SOURCES(self.lst_satdata_temperature)
         if not self._ds_satdata_temperature:
-            err_msg = 'Satellite data (land surface temperature) was not loaded!'
+            err_msg = 'satellite data (temperature) was not loaded'
             raise IOError(err_msg)
 
     def __loadGeoTIFF_LABELS(self) -> None:
@@ -481,12 +481,16 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             try:
                 self.__loadGeoTIFF_REFLECTANCE()
             except IOError:
-                err_msg = ''
+                err_msg = 'cannot load any source - satellite data (reflectance): {}'
+                err_msg = err_msg.format(self.lst_satdata_reflectance)
                 raise IOError(err_msg)
 
-        unique_dates = set()
+        nsources = len(self.lst_satdata_reflectance)
 
-        with elapsed_timer(msg='Processing band dates (reflectance)', enable=self.estimate_time):
+        unique_dates = set()
+        col_names = ['Timestamps', 'Image ID'] if nsources > 1 else ['Timestamps']
+
+        with elapsed_timer(msg='Processing timestamps (reflectance)', enable=self.estimate_time):
 
             for i, img_ds in enumerate(self._ds_satdata_reflectance):
                 for rs_id in range(0, img_ds.RasterCount):
@@ -496,16 +500,16 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
 
                     if '_sur_refl_' in rs_dsc:
                         reflec_date = satdata_dsc2date(rs_dsc)
-                        unique_dates.add((reflec_date, i))
+                        unique_dates.add((reflec_date, i) if nsources > 1 else reflec_date)
 
             if not unique_dates:
-                err_msg = ''
+                err_msg = 'sources (reflectance) do not contain any useful information about timestamps'
                 raise ValueError(err_msg)
 
             try:
-                df_dates = _pd.DataFrame(sorted(unique_dates), columns=['Date', 'Image ID'])
+                df_dates = _pd.DataFrame(sorted(unique_dates), columns=col_names)
             except MemoryError:
-                err_msg = 'DataFrame (reflectance) was not created!'
+                err_msg = 'pandas data frame (reflectance) was not created'
                 raise MemoryError(err_msg)
 
             # clean up
@@ -523,12 +527,16 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             try:
                 self.__loadGeoTIFF_TEMPERATURE()
             except IOError:
-                err_msg = ''
+                err_msg = 'cannot load any source - satellite data (temperature): {}'
+                err_msg = err_msg.format(self.lst_satdata_temperature)
                 raise IOError(err_msg)
 
-        lst_dates = []
+        nsources = len(self.lst_satdata_temperature)
 
-        with elapsed_timer(msg='Processing dates (land surface temperature)', enable=self.estimate_time):
+        lst_dates = []
+        col_names = ['Timestamps', 'Image ID'] if nsources > 1 else ['Timestamps']
+
+        with elapsed_timer(msg='Processing timestamps (temperature)', enable=self.estimate_time):
 
             for i, img_ds in enumerate(self._ds_satdata_temperature):
                 for rs_id in range(0, img_ds.RasterCount):
@@ -537,17 +545,17 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                     rs_dsc = rs_band.GetDescription()
 
                     if 'lst_day_1km' in rs_dsc.lower():
-                        tempsurf_date = satdata_dsc2date(rs_dsc)
-                        lst_dates.append((tempsurf_date, i))
+                        temperature_date = satdata_dsc2date(rs_dsc)
+                        lst_dates.append((temperature_date, i) if nsources > 1 else temperature_date)
 
             if not lst_dates:
-                err_msg = 'Surface temperature sources do not contain any useful information about dates!'
+                err_msg = 'sources (temperature) do not contain any useful information about dates'
                 raise ValueError(err_msg)
 
             try:
-                df_dates = _pd.DataFrame(sorted(lst_dates), columns=['Date', 'Image ID']) # TODO case when nsources = 1
+                df_dates = _pd.DataFrame(sorted(lst_dates), columns=col_names)
             except MemoryError:
-                err_msg = 'DataFrame (temperature) was not created!'
+                err_msg = 'pandas data frame (temperature) was not created'
                 raise MemoryError(err_msg)
 
             # clean up
@@ -567,14 +575,14 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 try:
                     self.__loadGeoTIFF_REFLECTANCE()
                 except IOError:
-                    err_msg = 'Cannot load any of MOD09A1 sources (reflectance): {}'
+                    err_msg = 'cannot load any source - satellite data (reflectance): {}'
                     err_msg = err_msg.format(self.lst_satdata_reflectance)
                     raise IOError(err_msg)
 
             try:
                 self.__processTimestamps_SATDATA_REFLECTANCE()
             except ValueError:
-                err_msg = 'Cannot process dates of MOD09A1 sources (reflectance)!'
+                err_msg = 'cannot process timestamps - satellite data (reflectance)'
                 raise ValueError(err_msg)
 
         # processing land surface temperature (MOD11A2)
@@ -586,14 +594,14 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 try:
                     self.__loadGeoTIFF_TEMPERATURE()
                 except IOError:
-                    err_msg = 'Cannot load any of MOD11A2 sources (land surface temperature): {}'
+                    err_msg = 'cannot load any source - satellite data (temperature): {}'
                     err_msg = err_msg.format(self.lst_satdata_temperature)
                     raise IOError(err_msg)
 
             try:
                 self.__processTimestamps_SATDATA_TEMPERATURE()
             except ValueError:
-                err_msg = 'Cannot process dates of MOD11A2 sources (land surface temperature)!'
+                err_msg = 'cannot process timestamps - satellite data (temperature)'
                 raise ValueError(err_msg)
 
     """
@@ -609,7 +617,8 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             try:
                 self.__loadGeoTIFF_REFLECTANCE()
             except IOError:
-                err_msg = ''
+                err_msg = 'cannot load any source - satellite data (reflectance): {}'
+                err_msg = err_msg.format(self.lst_satdata_reflectance)
                 raise IOError(err_msg)
 
         map_layout_satdata = {}
@@ -633,7 +642,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                         last_date = reflec_date
 
         if not map_layout_satdata:
-            raise TypeError('Satellite data (reflectance) do not contain any useful layer!')
+            raise TypeError('satellite data (reflectance) do not contain any useful layer')
 
         self._map_layout_relectance = map_layout_satdata
         self.__len_ts_reflectance = pos
@@ -647,7 +656,8 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             try:
                 self.__loadGeoTIFF_TEMPERATURE()
             except IOError:
-                err_msg = ''
+                err_msg = 'cannot load any source - satellite data (temperature): {}'
+                err_msg = err_msg.format(self.lst_satdata_temperature)
                 raise IOError(err_msg)
 
         map_layout_satdata = {}
@@ -671,7 +681,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                         last_date = temperature_date
 
         if not map_layout_satdata:
-            raise TypeError('Satellite data (temperature) do not contain any useful layer!')
+            raise TypeError('satellite data (temperature) do not contain any useful layer')
 
         self._map_layout_temperature = map_layout_satdata
         self.__len_ts_temperature = pos
@@ -687,13 +697,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 try:
                     self.__processTimestamps_SATDATA(select_opt=SatDataSelectOpt.REFLECTANCE)
                 except IOError or ValueError:
-                    err_msg = ''
+                    err_msg = 'cannot process timestamps - satellite data (reflectance)'
                     raise TypeError(err_msg)
 
             try:
                 self.__processLayersLayout_SATDATA_REFLECTANCE()
             except TypeError:
-                err_msg = ''
+                err_msg = 'cannot process a layout of layers - satellite data (reflectance)'
                 raise TypeError(err_msg)
 
         # processing land surface temperature (MOD11A2)
@@ -705,13 +715,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                 try:
                     self.__processTimestamps_SATDATA_TEMPERATURE()
                 except IOError or ValueError:
-                    err_msg = ''
+                    err_msg = 'cannot process timestamps - satellite data (temperature)'
                     raise TypeError(err_msg)
 
             try:
                 self.__processLayersLayout_SATDATA_TEMPERATURE()
             except TypeError:
-                err_msg = ''
+                err_msg = 'cannot process a layout of layers - satellite data (temperature)'
                 raise TypeError(err_msg)
 
         # TODO comment
@@ -722,9 +732,6 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     """
 
     def __processBandDates_LABEL_CCI(self) -> None:
-
-        # lazy imports
-        pd = lazy_import('pandas')
 
         if self._df_timestamps_wildfires is not None:
             del self._df_timestamps_wildfires; self._df_timestamps_reflectance = None
@@ -747,15 +754,12 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
         if not lst:
             raise ValueError('Label file does not contain any useful data!')
 
-        df_dates = pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
+        df_dates = _pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
         del lst; gc.collect()
 
         self._df_timestamps_wildfires = df_dates
 
     def __processBandDates_LABEL_MTBS(self) -> None:
-
-        # lazy imports
-        pd = lazy_import('pandas')  # TODO remove
 
         if self._df_timestamps_wildfires is not None:
             del self._df_timestamps_wildfires; self._df_timestamps_reflectance = None
@@ -776,9 +780,9 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
                         lst.append((band_date, id_ds))
 
         if not lst:
-            raise ValueError('Label file does not contain any useful data!')
+            raise ValueError('Sources do not contain any useful data!')
 
-        df_dates = pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
+        df_dates = _pd.DataFrame(sorted(lst), columns=['Date', 'Image ID'])
         del lst; gc.collect()
 
         self._df_timestamps_wildfires = df_dates
@@ -873,7 +877,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             try:
                 self.__processTimestamps_LABEL()
             except ValueError or AttributeError:
-                raise ValueError('Cannot process band dates related labels ({})!'.format(self.label_collection.name))
+                raise ValueError('Cannot process ban related labels ({})!'.format(self.label_collection.name))
 
         try:
             if self.label_collection == FireLabelCollection.CCI:
@@ -883,7 +887,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
             else:
                 raise NotImplementedError
         except ValueError or NotImplementedError:
-            msg = 'Cannot process labels meta data!'
+            msg = 'Cannot process labels metadata!'
             raise ValueError(msg)
 
         # everything is done
@@ -896,7 +900,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoader and split for label
     def getLengthTimeseries(self, opt_select: SatDataSelectOpt) -> int:
 
         if not isinstance(opt_select, SatDataSelectOpt):
-            err_msg = ''
+            err_msg = f'getLengthTimeseries() argument must be SatDataSelectOpt, not \'{type(opt_select)}\''
             raise TypeError(err_msg)
 
         if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
