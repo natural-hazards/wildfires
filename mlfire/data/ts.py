@@ -74,7 +74,7 @@ class DataAdapterTS(DatasetView):
                  pca_retained_variance: float = 0.95,
                  # view options
                  opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
-                 label_collection: FireLabelCollection = FireLabelCollection.MTBS,
+                 opt_select_firemap: FireLabelCollection = FireLabelCollection.MTBS,
                  cci_confidence_level: int = 70,
                  mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
@@ -88,7 +88,7 @@ class DataAdapterTS(DatasetView):
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
             opt_select_satdata=opt_select_satdata,
-            label_collection=label_collection,
+            opt_select_firemap=opt_select_firemap,
             cci_confidence_level=cci_confidence_level,
             mtbs_min_severity=mtbs_min_severity,
             mtbs_region=mtbs_region,
@@ -363,12 +363,12 @@ class DataAdapterTS(DatasetView):
         # TODO check start and end date
 
         start_label_date = datetime.date(year=self.ds_start_date.year, month=1, day=1)
-        start_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == start_label_date][0])
+        start_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
 
             end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
-            end_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == end_label_date][0])
+            end_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == end_label_date][0])
             id_bands = range(start_label_index, end_label_index + 1)
 
         else:
@@ -393,12 +393,12 @@ class DataAdapterTS(DatasetView):
         # TODO check start and end date
 
         start_label_date = datetime.date(year=self.ds_start_date.year, month=self.ds_start_date.month, day=1)
-        start_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == start_label_date][0])
+        start_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == start_label_date][0])
 
         if self.ds_start_date != self.ds_end_date:
 
             end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
-            end_label_index = int(self._df_timestamps_wildfires.index[self._df_timestamps_wildfires['Date'] == end_label_date][0])
+            end_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == end_label_date][0])
             id_bands = range(start_label_index, end_label_index + 1)
 
         else:
@@ -1248,7 +1248,7 @@ if __name__ == '__main__':
         lst_satdata_temperature=VAR_LST_SATIMGS_TEMPSURFACE,
         lst_loc_fires=VAR_LST_LABELS,
         # TODO comment
-        label_collection=VAR_LABEL_COLLECTION,
+        opt_select_firemap=VAR_LABEL_COLLECTION,
         mtbs_min_severity=MTBSSeverity.LOW,
         cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
         # transformation options
