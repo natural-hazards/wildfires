@@ -54,6 +54,27 @@ class FireMapSelectOpt(Enum):
 
         return self.value == other.value
 
+    def __str__(self):
+        return self.name
+
+
+class MetaDataSelectOpt(Enum):
+
+    NONE = 0
+    TIMESTAMPS = 1
+    LAYOUT = 2
+    ALL = 3
+
+    def __and__(self, other):
+        return SatDataSelectOpt(self.value & other.value)
+
+    def __eq__(self, other):
+        if other is None: return False
+        return self.value == other.value
+
+    def __or__(self, other):
+        return SatDataSelectOpt(self.value | other.value)
+
 
 class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
@@ -331,24 +352,24 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         self.__lst_firemap = lst_firemaps
 
     @property
-    def opt_select_firemap(self) -> FireMapSelectOpt:  # TODO rename
+    def opt_select_firemap(self) -> FireMapSelectOpt:
 
         return self.__opt_select_firemap
 
     @opt_select_firemap.setter
-    def opt_select_firemap(self, collection: FireMapSelectOpt) -> None:
+    def opt_select_firemap(self, opt_select: FireMapSelectOpt) -> None:
 
-        if self.opt_select_firemap == collection:
+        if self.opt_select_firemap == opt_select:
             return
 
         self._reset()  # clean up
-        self.__opt_select_firemap = collection
+        self.__opt_select_firemap = opt_select
 
     @property
     def nbands_label(self) -> int:  # TODO rename?
 
         if not self._labels_processed:
-            self._processMetaData_LABELS()
+            self._processMetaData_FIREMAPS()
 
         return self.__len_firemaps
 
@@ -878,18 +899,25 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
     labels
     """
 
-    def __processLayersLayout_FIREMAP_CCI(self) -> None:  # TODO merge with __processLayersLayout_FIREMAP_MTBS
+    def __processLayersLayout_FIREMAPS(self, opt_select: FireMapSelectOpt = None):
+
+        if not (isinstance(opt_select, FireMapSelectOpt) or None):
+            err_msg = f'__processLayersLayout_FIREMAPS() argument must be FireMapSelectOpt, not \'{type(opt_select)}\''
+            raise TypeError(err_msg)
 
         if self._map_layout_firemaps is not None:
-            return
+            return self._map_layout_firemaps
+
+        _opt_firemap = self.opt_select_firemap if opt_select is None else opt_select
+        firemap_name = _opt_firemap.name.lower()
 
         if self._ds_firemaps is None:
             try:
                 self.__loadGeoTIFF_FIREMAPS()
             except IOError:
-                err_msg = 'cannot load any source - fire maps ({}): {}'
+                err_msg = 'cannot load any fire map ({}): {}'
                 err_msg = err_msg.format(
-                    self.opt_select_firemap.name.lower(),
+                    firemap_name,
                     self.lst_firemaps
                 )
                 raise IOError(err_msg)
@@ -899,99 +927,55 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
         nsources = len(self._ds_firemaps)
 
-        proc_msg = 'Processing timestamps (CCI fire map{})'.format('s' if nsources > 1 else '')
+        proc_msg = '({} fire map{})'.format(firemap_name, 's' if nsources > 1 else '')
+        proc_msg = f'Processing layout of layers {proc_msg}'
         with elapsed_timer(proc_msg, enable=self.estimate_time):
+
             for i, img_ds in enumerate(self._ds_firemaps):
-                last_date = 0  # reset value of last date
+                last_timestamps = 0  # reset value of last date
                 for rs_id in range(0, img_ds.RasterCount):
 
                     rs_band = img_ds.GetRasterBand(rs_id + 1)
                     rs_dsc = rs_band.GetDescription()
 
-                    firemap_date = band2date_firecci(rs_dsc)
+                    if self.opt_select_firemap == FireMapSelectOpt.CCI and 'ConfidenceLevel' in rs_dsc:
+                        firemap_timestamp = band2date_firecci(rs_dsc)
+                    elif self.opt_select_firemap == FireMapSelectOpt.MTBS and self.mtbs_region.value in rs_dsc:
+                        firemap_timestamp = band2date_mtbs(rs_dsc)
 
-                    if 'ConfidenceLevel' in rs_dsc and (firemap_date != last_date):
-                        map_layout_firemaps[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1;
-                        pos += 1
-                        last_date = firemap_date
-
-        if not map_layout_firemaps:
-            raise TypeError('fire maps (CCI) do not contain any useful layer')
-
-        self._map_layout_firemaps = map_layout_firemaps
-        self.__len_firemaps = pos
-
-    def __processLayersLayout_FIREMAP_MTBS(self) -> None:  # TODO merge with __processLayersLayout_FIREMAP_CCI
-
-        if self._map_layout_firemaps is not None:
-            return
-
-        if self._ds_firemaps is None:
-            try:
-                self.__loadGeoTIFF_FIREMAPS()
-            except IOError:
-                err_msg = 'cannot load any source - fire maps ({}): {}'
-                err_msg = err_msg.format(
-                    self.opt_select_firemap.name.lower(),
-                    self.lst_firemaps
-                )
-                raise IOError(err_msg)
-
-        map_layout_firemaps = {}
-        pos = 0
-
-        nsources = len(self._ds_firemaps)
-
-        proc_msg = 'Processing timestamps (MTBS fire map{})'.format('s' if nsources > 1 else '')
-        with elapsed_timer(proc_msg, enable=self.estimate_time):
-            for i, img_ds in enumerate(self._ds_firemaps):
-                last_date = 0  # reset value of last date
-                for rs_id in range(0, img_ds.RasterCount):
-
-                    rs_band = img_ds.GetRasterBand(rs_id + 1)
-                    rs_dsc = rs_band.GetDescription()
-
-                    firemap_date = band2date_mtbs(rs_dsc)
-
-                    if self.mtbs_region.value in rs_dsc and (firemap_date != last_date):
+                    if firemap_timestamp != last_timestamps:
                         map_layout_firemaps[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1; pos += 1
-                        last_date = firemap_date
+                        last_timestamps = firemap_timestamp
 
         if not map_layout_firemaps:
-            raise TypeError('fire maps (MTBS) do not contain any useful layer')
+            err_msg = f'fire maps ({firemap_name}) do not contain any useful layer'
+            raise TypeError(err_msg)
 
         self._map_layout_firemaps = map_layout_firemaps
         self.__len_firemaps = pos
 
-    def _processMetaData_LABELS(self) -> None:
+    def _processMetaData_FIREMAPS(self, opt_select: MetaDataSelectOpt = MetaDataSelectOpt.ALL) -> None:
 
-        if self.opt_select_firemap == FireMapSelectOpt.MTBS:
+        if not isinstance(opt_select, MetaDataSelectOpt):
+            err_msg = f'_processMetaData_FIREMAPS() argument must be MetaDataSelectOpt, not \'{type(opt_select)}\''
+            raise TypeError(err_msg)
+
+        if opt_select & MetaDataSelectOpt.TIMESTAMPS == MetaDataSelectOpt.TIMESTAMPS:
             if self._df_timestamps_firemaps is None:
                 try:
-                    self.__processTimestamps_FIREMAPS()
+                    self.__processTimestamps_FIREMAPS()  # TODO add argument opt_select_firemaps
                 except IOError or ValueError:
                     err_msg = ''
                     raise TypeError(err_msg)
 
-            try:
-                self.__processLayersLayout_FIREMAP_MTBS()
-            except TypeError:
-                err_msg = ''
-                raise TypeError(err_msg)
-        else:
-
-            if self._df_timestamps_firemaps is None:
+        if opt_select & MetaDataSelectOpt.LAYOUT == MetaDataSelectOpt.LAYOUT:
+            if self._map_layout_firemaps is None:
                 try:
-                    self.__processTimestamps_FIREMAPS()
-                except IOError or ValueError:
-                    err_msg = ''
+                    self.__processLayersLayout_FIREMAPS(opt_select=self.opt_select_firemap)
+                except TypeError:
+                    firemap_name = self.opt_select_firemap.name.lower()
+                    err_msg = f'cannot process a layout of layers - fire maps ({firemap_name})'
                     raise TypeError(err_msg)
-
-            try:
-                self.__processLayersLayout_FIREMAP_CCI()
-            except TypeError:
-                err_msg = ''
-                raise TypeError(err_msg)
 
         self._labels_processed = True
 
@@ -1034,12 +1018,12 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
     @property
     def len_firemaps(self) -> int:
 
-        if self.opt_select_firemap == FireMapSelectOpt.MTBS:
-            self.__processLayersLayout_FIREMAP_MTBS()
-        elif self.opt_select_firemap == FireMapSelectOpt.CCI:
-            self.__processLayersLayout_FIREMAP_CCI()
-        else:
-            raise NotImplementedError
+        if not self._map_layout_firemaps:
+            try:
+                self._processMetaData_FIREMAPS(opt_select=MetaDataSelectOpt.LAYOUT)
+            except TypeError:
+                err_msg = ''
+                raise TypeError(err_msg)
 
         return self.__len_firemaps
 

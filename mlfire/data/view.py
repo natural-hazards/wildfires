@@ -660,7 +660,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         if not self._labels_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
             try:
-                self._processMetaData_LABELS()
+                self._processMetaData_FIREMAPS()
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
@@ -761,7 +761,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         if not self._labels_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
             try:
-                self._processMetaData_LABELS()
+                self._processMetaData_FIREMAPS()
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
