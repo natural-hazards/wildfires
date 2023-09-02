@@ -195,6 +195,20 @@ def TEST_SatDataLoaderLenFiremaps_MTBS_2004_2005(firemaps_mtbs_2004_2005, len_ts
 
 
 @pytest.mark.data
+@pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
+def TEST_SatDataLoaderSourcesNotSet_FIREMAP_MTBS(exception):
+
+    satdata_loader = _SatDataLoader(
+        lst_firemaps=None,
+        opt_select_firemap=_FireMapSelectOpt.MTBS,
+        estimate_time=False
+    )
+
+    with exception:
+        _ = satdata_loader.timestamps_firemaps
+
+
+@pytest.mark.data
 def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_CCI_2004(firemaps_cci_2004, expected_firemap_cci_timestamps_2004):
 
     satdata_loader = _SatDataLoader(
@@ -243,3 +257,17 @@ def TEST_SatDataLoaderLenFiremaps_CCI_2004_2005(firemaps_cci_2004_2005, len_ts):
     )
 
     assert satdata_loader.len_firemaps == len_ts
+
+
+@pytest.mark.data
+@pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
+def TEST_SatDataLoaderSourcesNotSet_FIREMAP_CCI(exception):
+
+    satdata_loader = _SatDataLoader(
+        lst_firemaps=None,
+        opt_select_firemap=_FireMapSelectOpt.CCI,
+        estimate_time=False
+    )
+
+    with exception:
+        _ = satdata_loader.timestamps_firemaps

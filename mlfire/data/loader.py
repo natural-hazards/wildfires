@@ -1046,7 +1046,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
 if __name__ == '__main__':
 
-    # TODO fix
+    # TODO fix constructor arguments
 
     VAR_DATA_DIR = 'data/tifs'
 
