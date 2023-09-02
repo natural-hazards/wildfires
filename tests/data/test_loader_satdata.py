@@ -262,4 +262,3 @@ def TEST_SatDataLoaderSourcesNotSet_TEMPERATURE(satdata_reflectance_2004, except
 
     with exception:
         _ = satdata_loader.timestamps_temperature
-

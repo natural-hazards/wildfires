@@ -399,7 +399,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         for id_band in id_bands:
 
-            id_ds, id_rs = self._map_band_id_label[id_band]
+            id_ds, id_rs = self._map_layout_firemaps[id_band]
 
             # get bands
             rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
@@ -439,7 +439,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         elif isinstance(id_bands, int):
 
-            id_ds, id_rs = self._map_band_id_label[id_bands]
+            id_ds, id_rs = self._map_layout_firemaps[id_bands]
 
             # get bands
             rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
@@ -550,7 +550,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         for id_band in id_bands:
 
-            id_ds, id_rs = self._map_band_id_label[id_band]
+            id_ds, id_rs = self._map_layout_firemaps[id_band]
             rs_severity = self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
 
             lst_severity.append(rs_severity)
@@ -573,7 +573,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         if isinstance(id_bands, range):
             return self.__readFireSeverity_RANGE_MTBS(id_bands)
         elif isinstance(id_bands, int):
-            id_ds, id_rs = self._map_band_id_label[id_bands]
+            id_ds, id_rs = self._map_layout_firemaps[id_bands]
             return self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
         else:
             raise NotImplementedError

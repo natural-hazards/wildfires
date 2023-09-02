@@ -88,7 +88,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         self._map_layout_relectance = None  # TODO rename -> _layers_layout_reflectance
         self._map_layout_temperature = None  # TODO rename -> _layers_layout_temperature
 
-        self._map_band_id_label = None  # TODO rename
+        self._map_layout_firemaps = None  # TODO rename
 
         self.__len_ts_reflectance = 0
         self.__len_ts_temperature = 0
@@ -127,7 +127,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         # properties source - labels (wildfire locations)
 
         self.__lst_firemap = None
-        self.lst_firemap = lst_firemaps
+        self.lst_firemaps = lst_firemaps
 
         self.__opt_select_firemap = None
         self.opt_select_firemap = opt_select_firemap
@@ -313,22 +313,22 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
     """
 
     @property
-    def lst_firemap(self) -> Union[tuple[str], list[str]]:
+    def lst_firemaps(self) -> Union[tuple[str], list[str]]:
 
         return self.__lst_firemap
 
-    @lst_firemap.setter
-    def lst_firemap(self, lst_labels: Union[tuple[str], list[str]]) -> None:
+    @lst_firemaps.setter
+    def lst_firemaps(self, lst_firemaps: Union[tuple[str], list[str]]) -> None:
 
-        if self.__lst_firemap == lst_labels:
+        if self.__lst_firemap == lst_firemaps:
             return
 
-        for fn in lst_labels:
+        for fn in lst_firemaps:
             if not os.path.exists(fn):
                 raise IOError(f'file {fn} does not exist!')
 
         self._reset()  # clean up
-        self.__lst_firemap = lst_labels
+        self.__lst_firemap = lst_firemaps
 
     @property
     def opt_select_firemap(self) -> FireMapSelectOpt:  # TODO rename
@@ -409,7 +409,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         del self._map_layout_temperature; self._map_layout_temperature = None
 
         del self._df_timestamps_firemaps; self._df_timestamps_firemaps = None
-        del self._map_band_id_label; self._map_band_id_label = None
+        del self._map_layout_firemaps; self._map_layout_firemaps = None
 
         gc.collect()  # invoke garbage collector
 
@@ -475,25 +475,25 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
             err_msg = 'satellite data (temperature) was not loaded'
             raise IOError(err_msg)
 
-    def __loadGeoTIFF_LABELS(self) -> None:
+    def __loadGeoTIFF_FIREMAPS(self) -> None:
 
-        if not self.lst_firemap or self.lst_firemap is None:
-            err_msg = 'Satellite data (labels - wildfires localization) is not set!'
+        if not self.lst_firemaps or self.lst_firemaps is None:
+            err_msg = 'Satellite data (labels - wildfires localization) is not set!'  # TODO rename
             raise TypeError(err_msg)
 
         del self._ds_firemaps; gc.collect()
         self._ds_firemaps = None
 
-        self._ds_firemaps = self.__loadGeoTIFF_SOURCES(self.lst_firemap)
+        self._ds_firemaps = self.__loadGeoTIFF_SOURCES(self.lst_firemaps)
         if not self._ds_firemaps:
-            err_msg = 'Satellite data (labels - wildfires localization) is not set!'
+            err_msg = 'Satellite data (labels - wildfires localization) is not set!'  # TODO rename
             raise IOError(err_msg)
 
     """
     Processing timestamps - satellite data (reflectance and temperature)  
     """
 
-    def __processTimestamps_SATDATA_REFLECTANCE(self) -> None:  # TODO merge with temperature
+    def __processTimestamps_SATDATA_REFLECTANCE(self) -> None:  # TODO merge with __processTimestamps_SATDATA_TEMPERATURE
 
         if self._df_timestamps_reflectance is not None:
             return
@@ -539,7 +539,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         del self._df_timestamps_reflectance; gc.collect()  # TODO remove?
         self._df_timestamps_reflectance = df_dates
 
-    def __processTimestamps_SATDATA_TEMPERATURE(self) -> None:
+    def __processTimestamps_SATDATA_TEMPERATURE(self) -> None:  # TODO merge with __processTimestamps_SATDATA_REFLECTANCE
 
         if self._df_timestamps_temperature is not None:
             return
@@ -697,7 +697,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
                     temperature_date = satdata_dsc2date(rs_dsc)
 
-                    if ('lst_day_1km' in rs_dsc.lower()) and (temperature_date != last_date):
+                    if ('lst_day_1km' in rs_dsc.lower()) and (temperature_date != last_date):  # is condition for date necessary?
                         map_layout_satdata[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1; pos += 1
                         last_date = temperature_date
 
@@ -759,13 +759,13 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
         if self._ds_firemaps is None:
             try:
-                self.__loadGeoTIFF_LABELS()
+                self.__loadGeoTIFF_FIREMAPS()
             except IOError:
                 err_msg = 'cannot load any source - FireCCI maps: {}'
-                err_msg = err_msg.format(self.lst_firemap)
+                err_msg = err_msg.format(self.lst_firemaps)
                 raise IOError(err_msg)
 
-        nsources = len(self.lst_firemap)
+        nsources = len(self.lst_firemaps)
 
         lst_dates = []
         col_names = ['Timestamps', 'Image ID'] if nsources > 1 else ['Timestamps']
@@ -806,18 +806,18 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
         if self._ds_firemaps is None:
             try:
-                self.__loadGeoTIFF_LABELS()
+                self.__loadGeoTIFF_FIREMAPS()
             except IOError:
                 err_msg = 'cannot load any source - MTBS maps: {}'
-                err_msg = err_msg.format(self.lst_firemap)
+                err_msg = err_msg.format(self.lst_firemaps)
                 raise IOError(err_msg)
 
-        nsources = len(self.lst_firemap)
+        nsources = len(self.lst_firemaps)
 
         lst_dates = []
         col_names = ['Timestamps', 'Image ID'] if nsources > 1 else ['Timestamps']
 
-        proc_msg = 'Processing timestamps (MTBS map{})'.format('s' if nsources > 1 else '')
+        proc_msg = 'Processing timestamps (MTBS fire map{})'.format('s' if nsources > 1 else '')
         with elapsed_timer(msg=proc_msg, enable=self.estimate_time):
 
             for i, img_ds in enumerate(self._ds_firemaps):
@@ -826,7 +826,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
                     rs_band = img_ds.GetRasterBand(rs_id + 1)
                     rs_dsc = rs_band.GetDescription()
 
-                    if self.mtbs_region.value in rs_dsc:
+                    if self.mtbs_region.value in rs_dsc:  # TODO last date?
 
                         map_date_mtbs = band2date_mtbs(rs_dsc)
                         lst_dates.append((map_date_mtbs, i) if nsources > 1 else map_date_mtbs)
@@ -849,17 +849,19 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
     def __processTimestamps_FIREMAPS(self) -> None:
 
+        # TODO improve implementation
+
         if self._df_timestamps_firemaps is not None:
             return
 
         if self._ds_firemaps is None:
             try:
-                self.__loadGeoTIFF_LABELS()
+                self.__loadGeoTIFF_FIREMAPS()
             except IOError:
                 err_msg = 'cannot load any source - fire maps ({}): {}'
                 err_msg = err_msg.format(
                     self.opt_select_firemap.name.lower(),
-                    self.lst_firemap
+                    self.lst_firemaps
                 )
                 raise IOError(err_msg)
 
@@ -876,98 +878,122 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
     labels
     """
 
-    def __processLabels_CCI(self) -> None:
+    def __processLayersLayout_FIREMAP_CCI(self) -> None:  # TODO merge with __processLayersLayout_FIREMAP_MTBS
 
-        raise NotImplementedError
+        if self._map_layout_firemaps is not None:
+            return
 
-        # if self._map_band_id_label is None:
-        #     del self._map_band_id_label; self._map_band_id_label = None
-        #     gc.collect()
-        #
-        # map_band_ids = {}
-        # pos = 0
-        #
-        # with elapsed_timer('Processing fire labels ({})'.format(self.opt_select_firemap.name)):
-        #
-        #     for id_ds, ds in enumerate(self._ds_firemaps):
-        #         for band_id in range(ds.RasterCount):
-        #
-        #             rs_band = ds.GetRasterBand(band_id + 1)
-        #             dsc_band = rs_band.GetDescription()
-        #
-        #             # map id data set for selected region to band id
-        #             if 'ConfidenceLevel' in dsc_band:
-        #                 map_band_ids[pos] = (id_ds, band_id + 1); pos += 1
-        #
-        # if not map_band_ids:
-        #     raise ValueError('Label file {} does not contain any useful information for a selected region.')
-        #
-        # self._map_band_id_label = map_band_ids
-        # self.__len_firemaps = pos
+        if self._ds_firemaps is None:
+            try:
+                self.__loadGeoTIFF_FIREMAPS()
+            except IOError:
+                err_msg = 'cannot load any source - fire maps ({}): {}'
+                err_msg = err_msg.format(
+                    self.opt_select_firemap.name.lower(),
+                    self.lst_firemaps
+                )
+                raise IOError(err_msg)
 
-    def __processLabels_MTBS(self) -> None:
+        map_layout_firemaps = {}
+        pos = 0
 
-        raise NotImplementedError
+        nsources = len(self._ds_firemaps)
 
-        # # determine bands and their ids for region select_opt
-        # if self._map_band_id_label is None:
-        #     del self._map_band_id_label; self._map_band_id_label = None
-        #     gc.collect()  # invoke garbage collector
-        #
-        # map_band_ids = {}
-        # pos = 0
-        #
-        # with elapsed_timer('Processing fire labels ({})'.format(self.opt_select_firemap.name)):
-        #
-        #     for id_ds, ds in enumerate(self._ds_firemaps):
-        #         for band_id in range(ds.RasterCount):
-        #
-        #             rs_band = ds.GetRasterBand(band_id + 1)
-        #             dsc_band = rs_band.GetDescription()
-        #
-        #             # map id data set for selected region to band id
-        #             if self.mtbs_region.value in dsc_band:
-        #                 map_band_ids[pos] = (id_ds, band_id + 1); pos += 1
-        #
-        # if not map_band_ids:
-        #     msg = 'Any labels ({}) do not contain any useful information: {}'.format(
-        #         self.opt_select_firemap.name,
-        #         self.__lst_firemap
-        #     )
-        #     raise ValueError(msg)
-        #
-        # self._map_band_id_label = map_band_ids
-        # self.__len_firemaps = pos
+        proc_msg = 'Processing timestamps (CCI fire map{})'.format('s' if nsources > 1 else '')
+        with elapsed_timer(proc_msg, enable=self.estimate_time):
+            for i, img_ds in enumerate(self._ds_firemaps):
+                last_date = 0  # reset value of last date
+                for rs_id in range(0, img_ds.RasterCount):
+
+                    rs_band = img_ds.GetRasterBand(rs_id + 1)
+                    rs_dsc = rs_band.GetDescription()
+
+                    firemap_date = band2date_firecci(rs_dsc)
+
+                    if 'ConfidenceLevel' in rs_dsc and (firemap_date != last_date):
+                        map_layout_firemaps[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1;
+                        pos += 1
+                        last_date = firemap_date
+
+        if not map_layout_firemaps:
+            raise TypeError('fire maps (CCI) do not contain any useful layer')
+
+        self._map_layout_firemaps = map_layout_firemaps
+        self.__len_firemaps = pos
+
+    def __processLayersLayout_FIREMAP_MTBS(self) -> None:  # TODO merge with __processLayersLayout_FIREMAP_CCI
+
+        if self._map_layout_firemaps is not None:
+            return
+
+        if self._ds_firemaps is None:
+            try:
+                self.__loadGeoTIFF_FIREMAPS()
+            except IOError:
+                err_msg = 'cannot load any source - fire maps ({}): {}'
+                err_msg = err_msg.format(
+                    self.opt_select_firemap.name.lower(),
+                    self.lst_firemaps
+                )
+                raise IOError(err_msg)
+
+        map_layout_firemaps = {}
+        pos = 0
+
+        nsources = len(self._ds_firemaps)
+
+        proc_msg = 'Processing timestamps (MTBS fire map{})'.format('s' if nsources > 1 else '')
+        with elapsed_timer(proc_msg, enable=self.estimate_time):
+            for i, img_ds in enumerate(self._ds_firemaps):
+                last_date = 0  # reset value of last date
+                for rs_id in range(0, img_ds.RasterCount):
+
+                    rs_band = img_ds.GetRasterBand(rs_id + 1)
+                    rs_dsc = rs_band.GetDescription()
+
+                    firemap_date = band2date_mtbs(rs_dsc)
+
+                    if self.mtbs_region.value in rs_dsc and (firemap_date != last_date):
+                        map_layout_firemaps[pos] = (i, rs_id + 1) if nsources > 1 else rs_id + 1; pos += 1
+                        last_date = firemap_date
+
+        if not map_layout_firemaps:
+            raise TypeError('fire maps (MTBS) do not contain any useful layer')
+
+        self._map_layout_firemaps = map_layout_firemaps
+        self.__len_firemaps = pos
 
     def _processMetaData_LABELS(self) -> None:
 
-        raise NotImplementedError
+        if self.opt_select_firemap == FireMapSelectOpt.MTBS:
+            if self._df_timestamps_firemaps is None:
+                try:
+                    self.__processTimestamps_FIREMAPS()
+                except IOError or ValueError:
+                    err_msg = ''
+                    raise TypeError(err_msg)
 
-        # if self._ds_firemaps is None:
-        #     try:
-        #         self.__loadGeoTIFF_LABELS()
-        #     except IOError:
-        #         raise IOError('Cannot load any following label sources: {}'.format(self.lst_firemap))
-        #
-        # if self._df_timestamps_firemaps is None:
-        #     try:
-        #         self.__processTimestamps_FIREMAPS()
-        #     except ValueError or AttributeError:
-        #         raise ValueError('Cannot process ban related labels ({})!'.format(self.opt_select_firemap.name))
-        #
-        # try:
-        #     if self.opt_select_firemap == FireMapSelectOpt.CCI:
-        #         self.__processLabels_CCI()
-        #     elif self.opt_select_firemap == FireMapSelectOpt.MTBS:
-        #         self.__processLabels_MTBS()
-        #     else:
-        #         raise NotImplementedError
-        # except ValueError or NotImplementedError:
-        #     msg = 'Cannot process labels metadata!'
-        #     raise ValueError(msg)
-        #
-        # # everything is done
-        # self._labels_processed = True
+            try:
+                self.__processLayersLayout_FIREMAP_MTBS()
+            except TypeError:
+                err_msg = ''
+                raise TypeError(err_msg)
+        else:
+
+            if self._df_timestamps_firemaps is None:
+                try:
+                    self.__processTimestamps_FIREMAPS()
+                except IOError or ValueError:
+                    err_msg = ''
+                    raise TypeError(err_msg)
+
+            try:
+                self.__processLayersLayout_FIREMAP_CCI()
+            except TypeError:
+                err_msg = ''
+                raise TypeError(err_msg)
+
+        self._labels_processed = True
 
     """
     TODO comment
@@ -1008,7 +1034,12 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
     @property
     def len_firemaps(self) -> int:
 
-        # TODO process fire maps timestamps
+        if self.opt_select_firemap == FireMapSelectOpt.MTBS:
+            self.__processLayersLayout_FIREMAP_MTBS()
+        elif self.opt_select_firemap == FireMapSelectOpt.CCI:
+            self.__processLayersLayout_FIREMAP_CCI()
+        else:
+            raise NotImplementedError
 
         return self.__len_firemaps
 
