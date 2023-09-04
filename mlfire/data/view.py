@@ -349,7 +349,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         # lazy imports
         opencv = lazy_import('cv2')
 
-        if not self._satimgs_processed:
+        if not self._satdata_processed:
             try:
                 self._processMetaData_SATELLITE_IMG()
             except IOError or ValueError:
@@ -657,7 +657,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
     def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                        show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
-        if not self._labels_processed:
+        if not self._firemaps_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_FIREMAPS()
@@ -758,14 +758,14 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
                                    brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.),
                                    show: bool = True, ax=None) -> None:
 
-        if not self._labels_processed:
+        if not self._firemaps_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_FIREMAPS()
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to labels!')
 
-        if not self._satimgs_processed:
+        if not self._satdata_processed:
             # process descriptions of bands related to satellite images and obtain dates from them
             try:
                 self._processMetaData_SATELLITE_IMG()

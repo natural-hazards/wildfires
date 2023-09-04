@@ -1128,14 +1128,14 @@ class DataAdapterTS(DatasetView):
         if self._ds_training:
             return
 
-        if not self._labels_processed:
+        if not self._firemaps_processed:
             # processing descriptions of bands related to fire labels and obtain dates from them
             try:
                 self._processMetaData_FIREMAPS()
             except IOError or ValueError:
                 raise RuntimeError('Cannot process meta data related to labels!')
 
-        if not self._satimgs_processed:
+        if not self._satdata_processed:
             # process descriptions of bands related to satellite images and obtain dates from them
             try:
                 self._processMetaData_SATELLITE_IMG()
