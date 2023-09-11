@@ -119,7 +119,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
     def __getSatelliteImageArray_MODIS_CIR(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # display CIR representation of MODIS input (color infrared - vegetation)
@@ -145,7 +145,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         cmap = lazy_import('mlfire.utils.cmap')
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
@@ -189,7 +189,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         cmap = lazy_import('mlfire.utils.cmap')
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
@@ -221,7 +221,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
@@ -245,7 +245,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         # lazy imports
         plt = lazy_import('matplotlib.pylab')
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # computing Normalized Difference Vegetation Index (NDVI)
@@ -275,7 +275,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # https://eos.com/make-an-analysis/vegetation-analysis/
@@ -297,7 +297,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR2(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._map_layout_relectance[img_id]
+        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
         # https://eos.com/make-an-analysis/shortwave-infrared/

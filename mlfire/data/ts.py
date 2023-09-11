@@ -485,7 +485,7 @@ class DataAdapterTS(DatasetView):
 
         for id_img in rgn:
 
-            id_img, start_id_band = self._map_layout_relectance[id_img]
+            id_img, start_id_band = self._layout_layers_reflectance[id_img]
             satimg = self._ds_satdata_reflectance[id_img]
 
             for id_band in range(0, NBANDS_MODIS):
