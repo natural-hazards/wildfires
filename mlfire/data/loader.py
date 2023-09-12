@@ -17,6 +17,7 @@ from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 
 # lazy imports
 _datetime = lazy_import('datetime')
+_np = lazy_import('numpy')
 _pd = lazy_import('pandas')
 
 # lazy imports - classes
@@ -27,7 +28,7 @@ class SatDataSelectOpt(Enum):
 
     NONE = 0
     REFLECTANCE = 1
-    SURFACE_TEMPERATURE = 2  # TODO rename -> TEMPERATURE
+    TEMPERATURE = 2  # TODO rename -> TEMPERATURE
     ALL = 3
 
     def __and__(self, other):
@@ -276,7 +277,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
     def timestamps_temperature(self) -> _PandasDataFrame:
 
         if self._df_timestamps_temperature is None:
-            self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.SURFACE_TEMPERATURE)
+            self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
 
             if self._df_timestamps_temperature is None:
                 err_msg = 'data frame containing timestamps (temperature) was not created'
@@ -653,7 +654,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         # processing land surface temperature (MOD11A2)
 
         if self.lst_satdata_temperature is not None and \
-           (opt_select & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
+           (opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE):
 
             if self._ds_satdata_temperature is None:
                 try:
@@ -774,11 +775,11 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         # processing land surface temperature (MOD11A2)
 
         if self.lst_satdata_temperature is not None and \
-           (self.opt_select_satdata & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE):
+           (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE):
 
             if self._df_timestamps_temperature is None:
                 try:
-                    self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.SURFACE_TEMPERATURE)
+                    self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
                 except IOError or ValueError:
                     err_msg = 'cannot process timestamps - satellite data (temperature)'
                     raise TypeError(err_msg)
@@ -952,16 +953,75 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
         pass
 
-    def _loadSatData_ALL_RASTERS(self) -> None:
+    def _loadSatData_ALL_RASTERS(self, ds_satdata) -> _np.ndarray:
 
-        pass
+        len_ds = len(ds_satdata)
 
-    def loadSatData(self) -> None:  # TODO -> private
+        if len_ds > 1:
+            rows = ds_satdata[0].RasterYSize; cols = ds_satdata[0].RasterXSize
+            nrasters = ds_satdata[0].RasterCount
 
-        pass
+            msg = ''
+            with elapsed_timer(msg=msg, enable=self.estimate_time):
+                for img_ds in ds_satdata[1:]:
 
-        # begin_timestamps = self.select_timestamps[0]
-        # end_timestamps = self.select_timestamps[0]
+                    if rows != img_ds.RasterYSize or cols != img_ds.RasterXSize:
+                        err_mgs = 'Inconsistent shape of rasters!'
+                        raise TypeError(err_mgs)
+
+                    nrasters += img_ds.RasterCount
+
+                np_satdata = _np.empty(shape=(rows, cols, nrasters), dtype=_np.float32)
+                rstart = rend = 0
+
+                for i, img_ds in enumerate(ds_satdata):
+                    gc.collect()
+
+                    msg = ''
+                    with elapsed_timer(msg=msg, enable=self.estimate_time):
+                        np_img_ds = img_ds.ReadAsArray(); rend += img_ds.RasterCount
+                    np_satdata[:, :, rstart:rend] = _np.moveaxis(np_img_ds, 0, -1)
+
+                    rstart = rend
+        else:
+            np_satdata = ds_satdata[0].ReadAsArray()
+            np_satdata = _np.moveaxis(np_satdata, 0, -1)
+            np_satdata = np_satdata.astype(_np.float32)
+
+        return np_satdata
+
+    def loadSatData(self) -> None:
+
+        if not self._satdata_processed: self._processMetadata_SATDATA()
+
+        # TODO check if reflectance and temperature timestamps are same
+        # TODO case int, list of list
+
+        begin_timestamp = self.select_timestamps[0]
+        end_timestamp = self.select_timestamps[1]
+
+        if (begin_timestamp == self._df_timestamps_reflectance['Timestamps'].iloc[0] and
+                end_timestamp == self._df_timestamps_reflectance['Timestamps'].iloc[-1]):
+
+            if (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
+                    self._ds_satdata_reflectance is not None):
+                self._loadSatData_ALL_RASTERS(ds_satdata=self._ds_satdata_reflectance)
+
+            if (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
+                    self._ds_satdata_temperature is not None):
+                self._loadSatData_ALL_RASTERS(ds_satdata=self._ds_satdata_temperature)
+
+        else:
+
+            pass
+
+            # begin_cond = self._df_timestamps_reflectance['Date'] == begin_timestamp
+            # end_cond = self._df_timestamps_reflectance['Date'] == end_timestamp
+            #
+            # rs_id = (
+            #     self._df_timestamps_reflectance.index[begin_cond][0],
+            #     self._df_timestamps_reflectance.index[end_cond][0]
+            # )
 
 
     """
@@ -974,10 +1034,10 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
             err_msg = f'getTimeseriesLength() argument must be SatDataSelectOpt, not \'{type(opt_select)}\''
             raise TypeError(err_msg)
 
-        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
+        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE :
             self.__processLayersLayout_SATDATA_REFLECTANCE()
             return self.__len_ts_reflectance
-        elif opt_select & SatDataSelectOpt.SURFACE_TEMPERATURE == SatDataSelectOpt.SURFACE_TEMPERATURE:
+        elif opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
             self.__processLayersLayout_SATDATA_TEMPERATURE()
             return self.__len_ts_temperature
         else:
@@ -991,7 +1051,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
         if self.lst_satdata_reflectance is not None:
             length_ts = len_ts_reflectance = self.getTimeseriesLength(opt_select=SatDataSelectOpt.REFLECTANCE)
         if self.lst_satdata_temperature is not None:
-            length_ts = len_ts_temperature = self.getTimeseriesLength(opt_select=SatDataSelectOpt.SURFACE_TEMPERATURE)
+            length_ts = len_ts_temperature = self.getTimeseriesLength(opt_select=SatDataSelectOpt.TEMPERATURE)
 
         if self.lst_satdata_temperature is not None and self.lst_satdata_reflectance is not None:
             if len_ts_reflectance != len_ts_temperature:
@@ -1015,17 +1075,16 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
 if __name__ == '__main__':
 
-    # TODO fix constructor arguments
-
     VAR_DATA_DIR = 'data/tifs'
 
     VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
     VAR_PREFIX_IMG_LABELS = 'ak_january_december_{}_100km'
 
     VAR_LST_SATIMGS = []
-    VAR_LST_LABELS_MTBS = []
+    VAR_LST_FIREMAPS = []
 
     for year in range(2004, 2006):
+
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
         VAR_PREFIX_IMG_LABELS_YEAR = VAR_PREFIX_IMG_LABELS.format(year)
 
@@ -1035,12 +1094,17 @@ if __name__ == '__main__':
 
         fn_labels_mtbs = '{}_epsg3338_area_0_mtbs_labels.tif'.format(VAR_PREFIX_IMG_LABELS_YEAR)
         fn_labels_mtbs = os.path.join(VAR_DATA_DIR, fn_labels_mtbs)
-        VAR_LST_LABELS_MTBS.append(fn_labels_mtbs)
+        VAR_LST_FIREMAPS.append(fn_labels_mtbs)
 
     # setup of data set loader
     dataset_loader = DatasetLoader(
+        lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS,
-        lst_loc_fires=VAR_LST_LABELS_MTBS
+        estimate_time=True
     )
 
-    print(dataset_loader.timestamps_wildfires)
+    VAR_START_DATE = dataset_loader.timestamps_reflectance.iloc[0]['Timestamps']
+    VAR_END_DATE = dataset_loader.timestamps_reflectance.iloc[-1]['Timestamps']
+    dataset_loader.select_timestamps = (VAR_START_DATE, VAR_END_DATE)
+
+    dataset_loader.loadSatData()
