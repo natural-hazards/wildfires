@@ -78,10 +78,10 @@ class MetaDataSelectOpt(Enum):
         return SatDataSelectOpt(self.value | other.value)
 
 
-class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
+class SatDataLoader(object):
 
     def __init__(self,
-                 lst_firemaps: Union[tuple[str], list[str]],
+                 lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  # TODO add here vegetation indices and infrared bands
@@ -101,11 +101,15 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
                  # TODO comment
                  estimate_time: bool = True):
 
+        self._np_satdata = None
+
         self._ds_satdata_reflectance = None
         self._df_timestamps_reflectance = None
+        self._np_satdata_reflectance = None
 
         self._ds_satdata_temperature = None
         self._df_timestamps_temperature = None
+        self._np_satdata_temperature = None
 
         self._ds_firemaps = None
         self._df_timestamps_firemaps = None
@@ -439,15 +443,17 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
     def _reset(self):
 
-        del self._ds_training; self._ds_training = None
-        del self._ds_test; self._ds_test = None
-        del self._ds_val; self._ds_val = None
+        del self._ds_training; self._ds_training = None # TODO move
+        del self._ds_test; self._ds_test = None  # TODO move
+        del self._ds_val; self._ds_val = None  # TODO move
 
         del self._df_timestamps_reflectance; self._df_timestamps_reflectance = None
         del self._layout_layers_reflectance; self._layout_layers_reflectance = None
+        del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
 
         del self._df_timestamps_temperature; self._df_timestamps_temperature = None
         del self._layout_layers_temperature; self._layout_layers_temperature = None
+        del self._ds_satdata_temperature; self._ds_satdata_temperature = None
 
         del self._df_timestamps_firemaps; self._df_timestamps_firemaps = None
         del self._map_layout_firemaps; self._map_layout_firemaps = None
@@ -951,9 +957,9 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
     def _loadSatData_SELECTED_RANGE(self) -> None:
 
-        pass
+        raise NotImplementedError
 
-    def _loadSatData_ALL_RASTERS(self, ds_satdata) -> _np.ndarray:
+    def _loadSatData_ALL_RASTERS(self, ds_satdata, type_name: str) -> _np.ndarray:
 
         len_ds = len(ds_satdata)
 
@@ -961,7 +967,7 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
             rows = ds_satdata[0].RasterYSize; cols = ds_satdata[0].RasterXSize
             nrasters = ds_satdata[0].RasterCount
 
-            msg = ''
+            msg = f'Loading satdata sources ({type_name})'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
                 for img_ds in ds_satdata[1:]:
 
@@ -971,22 +977,23 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
                     nrasters += img_ds.RasterCount
 
-                np_satdata = _np.empty(shape=(rows, cols, nrasters), dtype=_np.float32)
+                np_satdata = _np.empty(shape=(nrasters, rows, cols), dtype=_np.float32)
                 rstart = rend = 0
 
                 for i, img_ds in enumerate(ds_satdata):
-                    gc.collect()
-
-                    msg = ''
+                    msg = f'Loading data from img #{i} ({type_name})'
                     with elapsed_timer(msg=msg, enable=self.estimate_time):
-                        np_img_ds = img_ds.ReadAsArray(); rend += img_ds.RasterCount
-                    np_satdata[:, :, rstart:rend] = _np.moveaxis(np_img_ds, 0, -1)
+                        rend += img_ds.RasterCount; np_satdata[rstart:rend, :, :] = img_ds.ReadAsArray()
+                        rstart = rend
 
-                    rstart = rend
+                np_satdata = _np.moveaxis(np_satdata, 0, -1)
+
         else:
-            np_satdata = ds_satdata[0].ReadAsArray()
-            np_satdata = _np.moveaxis(np_satdata, 0, -1)
-            np_satdata = np_satdata.astype(_np.float32)
+            msg = f'Loading satdata source ({type_name})'
+            with elapsed_timer(msg=msg, enable=self.estimate_time):
+                np_satdata = ds_satdata[0].ReadAsArray()
+                np_satdata = _np.moveaxis(np_satdata, 0, -1)
+                np_satdata = np_satdata.astype(_np.float32)
 
         return np_satdata
 
@@ -1005,15 +1012,21 @@ class DatasetLoader(object):  # TODO rename to SatDataLoad and split for labels?
 
             if (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
                     self._ds_satdata_reflectance is not None):
-                self._loadSatData_ALL_RASTERS(ds_satdata=self._ds_satdata_reflectance)
+                type_name = SatDataSelectOpt.REFLECTANCE.name.lower()
+                self._np_satdata_reflectance = self._loadSatData_ALL_RASTERS(
+                    ds_satdata=self._ds_satdata_reflectance, type_name=type_name
+                )
 
             if (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
                     self._ds_satdata_temperature is not None):
-                self._loadSatData_ALL_RASTERS(ds_satdata=self._ds_satdata_temperature)
+                type_name = SatDataSelectOpt.TEMPERATURE.name.lower()
+                self._np_satdata_temperature = self._loadSatData_ALL_RASTERS(
+                    ds_satdata=self._ds_satdata_temperature, type_name=type_name
+                )
 
         else:
 
-            pass
+            raise NotImplementedError
 
             # begin_cond = self._df_timestamps_reflectance['Date'] == begin_timestamp
             # end_cond = self._df_timestamps_reflectance['Date'] == end_timestamp
@@ -1097,7 +1110,7 @@ if __name__ == '__main__':
         VAR_LST_FIREMAPS.append(fn_labels_mtbs)
 
     # setup of data set loader
-    dataset_loader = DatasetLoader(
+    dataset_loader = SatDataLoader(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS,
         estimate_time=True
