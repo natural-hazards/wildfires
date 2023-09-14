@@ -109,7 +109,7 @@ class SatDataLoader(object):
 
         self._ds_satdata_temperature = None
         self._df_timestamps_temperature = None
-        self._np_satdata_temperature = None
+        self._np_satdata_temperature = None  # TODO remove?
 
         self._ds_firemaps = None
         self._df_timestamps_firemaps = None
@@ -952,32 +952,70 @@ class SatDataLoader(object):
         self._firemaps_processed = True
 
     """
-    TODO comment
+    Loading sources - reflectance and temperature
     """
+
+    def __loadSatData_ALLOC(self, extra_features: int = 0) -> None:
+
+        if not self._satdata_processed: self._processMetadata_SATDATA()
+
+        if self._df_timestamps_reflectance is not None:
+            df_timestamps = self._df_timestamps_reflectance
+        elif self._df_timestamps_temperature is not None:
+            df_timestamps = self._df_timestamps_temperature
+        else:
+            err_msg = ''
+            raise TypeError(err_msg)
+
+        if isinstance(self.select_timestamps[0], _datetime.date):
+            begin_timestamp = self.select_timestamps[0]
+            end_timestamp = self.select_timestamps[1]
+
+            cond = (df_timestamps['Timestamps'] >= begin_timestamp) & (df_timestamps['Timestamps'] <= end_timestamp)
+            ntimestamps = len(df_timestamps[cond])
+        else:
+            raise NotImplementedError
+
+        cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
+                           self._ds_satdata_reflectance is not None)
+        cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
+                           self._ds_satdata_temperature is not None)
+
+        nfeatures = extra_features
+        if cnd_reflectance: nfeatures += 7
+        if cnd_temperature: nfeatures += 1
+
+        # TODO alloc large memory with memory map
+        rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
+        self._np_satdata = _np.empty(shape=(nfeatures * ntimestamps, rows, cols), dtype=_np.float32)
+
+        if cnd_reflectance:
+            idx = [True] * 7 + [False] * (nfeatures - 7)
+            idx = idx * ntimestamps
+            self._np_satdata_reflectance = self._np_satdata[idx, :, :]
+
+        if cnd_temperature:
+            idx = []
+            if cnd_reflectance: idx += [False] * 7
+            idx = idx + [True] + [False] * extra_features
+            idx = idx * ntimestamps
+
+            self._np_satdata_temperature = self._np_satdata[idx, :, :]
+
+        # raise NotImplementedError
 
     def _loadSatData_SELECTED_RANGE(self) -> None:
 
         raise NotImplementedError
 
-    def _loadSatData_ALL_RASTERS(self, ds_satdata, type_name: str) -> _np.ndarray:
+    def _loadSatData_ALL_RASTERS(self, ds_satdata, np_satdata: _np.ndarray, type_name: str) -> _np.ndarray:
 
         len_ds = len(ds_satdata)
 
         if len_ds > 1:
-            rows = ds_satdata[0].RasterYSize; cols = ds_satdata[0].RasterXSize
-            nrasters = ds_satdata[0].RasterCount
-
             msg = f'Loading satdata sources ({type_name})'
-            with elapsed_timer(msg=msg, enable=self.estimate_time):
-                for img_ds in ds_satdata[1:]:
+            with (elapsed_timer(msg=msg, enable=self.estimate_time)):
 
-                    if rows != img_ds.RasterYSize or cols != img_ds.RasterXSize:
-                        err_mgs = 'Inconsistent shape of rasters!'
-                        raise TypeError(err_mgs)
-
-                    nrasters += img_ds.RasterCount
-
-                np_satdata = _np.empty(shape=(nrasters, rows, cols), dtype=_np.float32)
                 rstart = rend = 0
 
                 for i, img_ds in enumerate(ds_satdata):
@@ -985,9 +1023,6 @@ class SatDataLoader(object):
                     with elapsed_timer(msg=msg, enable=self.estimate_time):
                         rend += img_ds.RasterCount; np_satdata[rstart:rend, :, :] = img_ds.ReadAsArray()
                         rstart = rend
-
-                np_satdata = _np.moveaxis(np_satdata, 0, -1)
-
         else:
             msg = f'Loading satdata source ({type_name})'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
@@ -997,31 +1032,35 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def loadSatData(self) -> None:
+    def loadSatData(self, extra_features: int = 0) -> None:
 
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
         # TODO check if reflectance and temperature timestamps are same
-        # TODO case int, list of list
+        # TODO case int, list of list for timestamps
 
-        begin_timestamp = self.select_timestamps[0]
-        end_timestamp = self.select_timestamps[1]
+        self.__loadSatData_ALLOC(extra_features=extra_features)
+
+        begin_timestamp = self.select_timestamps[0]; end_timestamp = self.select_timestamps[1]
+
+        cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
+                           self._ds_satdata_reflectance is not None)
+        cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
+                           self._ds_satdata_temperature is not None)
 
         if (begin_timestamp == self._df_timestamps_reflectance['Timestamps'].iloc[0] and
                 end_timestamp == self._df_timestamps_reflectance['Timestamps'].iloc[-1]):
 
-            if (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
-                    self._ds_satdata_reflectance is not None):
+            if cnd_reflectance:
                 type_name = SatDataSelectOpt.REFLECTANCE.name.lower()
                 self._np_satdata_reflectance = self._loadSatData_ALL_RASTERS(
-                    ds_satdata=self._ds_satdata_reflectance, type_name=type_name
+                    ds_satdata=self._ds_satdata_reflectance, np_satdata=self._np_satdata_reflectance, type_name=type_name
                 )
 
-            if (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
-                    self._ds_satdata_temperature is not None):
+            if cnd_temperature:
                 type_name = SatDataSelectOpt.TEMPERATURE.name.lower()
                 self._np_satdata_temperature = self._loadSatData_ALL_RASTERS(
-                    ds_satdata=self._ds_satdata_temperature, type_name=type_name
+                    ds_satdata=self._ds_satdata_temperature, np_satdata=self._np_satdata_temperature, type_name=type_name
                 )
 
         else:
@@ -1036,6 +1075,18 @@ class SatDataLoader(object):
             #     self._df_timestamps_reflectance.index[end_cond][0]
             # )
 
+        self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
+
+        self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)
+        self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)
+
+    """
+    Loading fire maps 
+    """
+
+    def loadFiremaps(self):
+
+        pass
 
     """
     TODO comment
@@ -1047,7 +1098,7 @@ class SatDataLoader(object):
             err_msg = f'getTimeseriesLength() argument must be SatDataSelectOpt, not \'{type(opt_select)}\''
             raise TypeError(err_msg)
 
-        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE :
+        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
             self.__processLayersLayout_SATDATA_REFLECTANCE()
             return self.__len_ts_reflectance
         elif opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
