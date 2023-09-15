@@ -4,7 +4,7 @@ import os
 from enum import Enum
 from typing import Union
 
-from mlfire.data.loader import DatasetLoader, SatDataSelectOpt
+from mlfire.data.loader import SatDataLoader, SatDataSelectOpt
 from mlfire.earthengine.collections import ModisCollection, ModisReflectanceSpectralBands
 from mlfire.earthengine.collections import FireLabelCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
@@ -36,7 +36,7 @@ class FireLabelsViewOpt(Enum):
     SEVERITY = 3
 
 
-class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
+class DatasetView(SatDataLoader):  # TODO rename -> SatDataView
 
     def __init__(self,
                  lst_firemaps: Union[tuple[str], list[str]],
@@ -392,7 +392,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
     Display functionality (LABELS)
     """
 
-    def __readFireConfidenceLevel_RANGE_CCI(self, id_bands: range) -> (_np.ndarray, _np.ndarray):
+    def __readFireConfidenceLevel_RANGE_CCI(self, id_bands: range) -> (_np.ndarray, _np.ndarray):  # TODO move to loader.py
 
         lst_cl = []
         lst_flags = []
@@ -429,7 +429,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         return np_cl_agg, np_flags_agg
 
-    def _readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray):
+    def _readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray): # TODO move to loader.py
 
         # TODO move to loader
 
@@ -456,6 +456,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         else:
             raise NotImplementedError
 
+    # TODO move to loader.py
     def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:
 
@@ -500,6 +501,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
             del mask_fires; gc.collect()
             return label
 
+    # TODO move to loader.py
     def __showFireLabels_CCI(self, id_bands: Union[int, range],  figsize: Union[tuple[float, float], list[float, float]],
                              show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
@@ -544,6 +546,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
+    # TODO move to loader.py
     def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:
 
         lst_severity = []
@@ -558,7 +561,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         np_severity = _np.array(lst_severity)
         del lst_severity; gc.collect()  # invoke garbage collector
 
-        np_severity_agg = _np.max(np_severity, axis=0)
+        np_severity_agg = _np.max(np_severity, axis=0)  # TODO mean
         np_non_mapped = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=0)
         np_severity_agg[np_non_mapped] = MTBSSeverity.NON_MAPPED_AREA.value
 
@@ -568,6 +571,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
 
         return np_severity_agg
 
+    # TODO move to loader.py
     def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:
 
         if isinstance(id_bands, range):
@@ -578,6 +582,7 @@ class DatasetView(DatasetLoader):  # TODO rename -> SatDataView
         else:
             raise NotImplementedError
 
+    # TODO move to loader.py
     def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:
 

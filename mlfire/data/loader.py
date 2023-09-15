@@ -102,6 +102,7 @@ class SatDataLoader(object):
                  estimate_time: bool = True):
 
         self._np_satdata = None
+        self._np_firemaps = None
 
         self._ds_satdata_reflectance = None
         self._df_timestamps_reflectance = None
@@ -109,7 +110,7 @@ class SatDataLoader(object):
 
         self._ds_satdata_temperature = None
         self._df_timestamps_temperature = None
-        self._np_satdata_temperature = None  # TODO remove?
+        self._np_satdata_temperature = None
 
         self._ds_firemaps = None
         self._df_timestamps_firemaps = None
@@ -923,7 +924,7 @@ class SatDataLoader(object):
         self._map_layout_firemaps = map_layout_firemaps
         self.__len_firemaps = pos
 
-    def _processMetaData_FIREMAPS(self, opt_select: MetaDataSelectOpt = MetaDataSelectOpt.ALL) -> None:
+    def _processMetaData_FIREMAPS(self, opt_select: MetaDataSelectOpt = MetaDataSelectOpt.ALL) -> None:  # TODO private?
 
         if self._firemaps_processed:
             return
@@ -959,12 +960,13 @@ class SatDataLoader(object):
 
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
+        # TODO remove and create self._df_timestamps after processing meta data
         if self._df_timestamps_reflectance is not None:
             df_timestamps = self._df_timestamps_reflectance
         elif self._df_timestamps_temperature is not None:
             df_timestamps = self._df_timestamps_temperature
         else:
-            err_msg = ''
+            err_msg = ''  # TODO error message
             raise TypeError(err_msg)
 
         if isinstance(self.select_timestamps[0], _datetime.date):
@@ -1008,7 +1010,7 @@ class SatDataLoader(object):
 
         raise NotImplementedError
 
-    def _loadSatData_ALL_RASTERS(self, ds_satdata, np_satdata: _np.ndarray, type_name: str) -> _np.ndarray:
+    def __loadSatData_ALL_RASTERS(self, ds_satdata, np_satdata: _np.ndarray, type_name: str) -> _np.ndarray:
 
         len_ds = len(ds_satdata)
 
@@ -1032,34 +1034,46 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def loadSatData(self, extra_features: int = 0) -> None:
+    def loadSatData(self, extra_features: int = 0) -> None:  # TODO private
 
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
-        # TODO check if reflectance and temperature timestamps are same
-        # TODO case int, list of list for timestamps
+        # TODO remove and create self._df_timestamps after processing meta data
+        if self._df_timestamps_reflectance is not None:
+            df_timestamps = self._df_timestamps_reflectance
+        elif self._df_timestamps_temperature is not None:
+            df_timestamps = self._df_timestamps_temperature
+        else:
+            err_msg = ''  # TODO error message
+            raise TypeError(err_msg)
 
         self.__loadSatData_ALLOC(extra_features=extra_features)
 
-        begin_timestamp = self.select_timestamps[0]; end_timestamp = self.select_timestamps[1]
+        # TODO check loaded
+        # TODO check if reflectance and temperature timestamps are same
+        if isinstance(self.select_timestamps[0], _datetime.date):
+            begin_timestamp = self.select_timestamps[0]
+            end_timestamp = self.select_timestamps[1]
+        else:
+            raise NotImplementedError
 
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
                            self._ds_satdata_reflectance is not None)
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
                            self._ds_satdata_temperature is not None)
 
-        if (begin_timestamp == self._df_timestamps_reflectance['Timestamps'].iloc[0] and
-                end_timestamp == self._df_timestamps_reflectance['Timestamps'].iloc[-1]):
+        if (begin_timestamp == df_timestamps['Timestamps'].iloc[0] and
+                end_timestamp == df_timestamps['Timestamps'].iloc[-1]):
 
             if cnd_reflectance:
                 type_name = SatDataSelectOpt.REFLECTANCE.name.lower()
-                self._np_satdata_reflectance = self._loadSatData_ALL_RASTERS(
+                self._np_satdata_reflectance = self.__loadSatData_ALL_RASTERS(
                     ds_satdata=self._ds_satdata_reflectance, np_satdata=self._np_satdata_reflectance, type_name=type_name
                 )
 
             if cnd_temperature:
                 type_name = SatDataSelectOpt.TEMPERATURE.name.lower()
-                self._np_satdata_temperature = self._loadSatData_ALL_RASTERS(
+                self._np_satdata_temperature = self.__loadSatData_ALL_RASTERS(
                     ds_satdata=self._ds_satdata_temperature, np_satdata=self._np_satdata_temperature, type_name=type_name
                 )
 
@@ -1077,16 +1091,77 @@ class SatDataLoader(object):
 
         self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
 
-        self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)
-        self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)
+        self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)  # TODO is this right?
+        self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)  # TODO is this right?
 
     """
-    Loading fire maps 
+    Loading fire maps - MTBS and FireCCI 
     """
 
-    def loadFiremaps(self):
+    def __loadFiremaps_CCI(self, rs_ids) -> _np.ndarray:
 
         pass
+
+    def __loadFiremaps_MTBS(self, rs_ids) -> _np.ndarray:
+
+        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
+        nmaps = len(rs_ids)
+
+        np_severity = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nmaps > 1 \
+            else _np.empty(shape=(rows, cols), dtype=_np.float32)
+
+        for sr_id, rs_id in enumerate(rs_ids):
+            ds_id, local_rs_id = self._map_layout_firemaps[rs_id]
+            if nmaps > 1:
+                np_severity[:, :, sr_id] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
+            else:
+                np_severity[:, :] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
+
+        if nmaps > 1:
+            np_uncharted = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=-1)
+            np_severity_agg = _np.max(np_severity, axis=-1)  # TODO mean
+            np_severity = np_severity_agg; gc.collect()  # clean up
+        else:
+            np_uncharted = np_severity == MTBSSeverity.NON_MAPPED_AREA.value
+
+        np_severity[np_uncharted] = MTBSSeverity.NON_MAPPED_AREA.value  # TODO get attribute
+        del np_uncharted; gc.collect()  # clean up
+
+        return np_severity
+
+    def loadFiremaps(self):  # TODO protected?
+
+        if self._np_firemaps is not None: return
+
+        if isinstance(self.select_timestamps[0], _datetime.date):
+            begin_timestamp = self.select_timestamps[0]; end_timestamp = self.select_timestamps[1]
+            months = [0] * 2
+
+            if self.opt_select_firemap == FireMapSelectOpt.MTBS:
+                months[0] = months[1] = 1
+            elif self.opt_select_firemap == FireMapSelectOpt.CCI:
+                months[0] = begin_timestamp.month
+                months[1] = end_timestamp.month
+
+            begin_timestamp = _datetime.date(year=begin_timestamp.year, month=months[0], day=1)
+            end_timestamp = _datetime.date(year=end_timestamp.year, month=months[1], day=1)
+
+            cnd_begin_idx = self._df_timestamps_firemaps['Timestamps'] == begin_timestamp
+            begin_idx = self._df_timestamps_firemaps.index[cnd_begin_idx][0]
+
+            if begin_timestamp != end_timestamp:
+                cnd_end_idx = self._df_timestamps_firemaps['Timestamps'] == end_timestamp
+                end_idx = self._df_timestamps_firemaps.index[cnd_end_idx][0]
+                rs_ids = range(begin_idx, end_idx + 1)
+            else:
+                rs_ids = [begin_idx]
+        else:
+            raise NotImplementedError
+
+        if self.opt_select_firemap == FireMapSelectOpt.MTBS:
+            self._np_firemaps = self.__loadFiremaps_MTBS(rs_ids=rs_ids)
+        elif self.opt_select_firemap == FireMapSelectOpt.CCI:
+            self._np_firemaps = self.__loadFiremaps_CCI(rs_ids=rs_ids)
 
     """
     TODO comment

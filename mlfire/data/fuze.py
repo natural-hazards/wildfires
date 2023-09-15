@@ -40,7 +40,7 @@ class SatDataFuze(SatDataLoader):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
-                 lst_vegetation_indexes: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),
+                 lst_vegetation_ops: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),  # TODO rename
                  ):
 
         SatDataLoader.__init__(
@@ -49,6 +49,27 @@ class SatDataFuze(SatDataLoader):
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature
         )
+
+        self._lst_vegetation_index = None
+        self._vi_ops = VegetationIndex.NONE.value
+        self.vegetation_index = lst_vegetation_ops
+
+    @property
+    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
+
+        return self._lst_vegetation_index
+
+    @vegetation_index.setter
+    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
+
+        if self.vegetation_index == lst_vi:
+            return
+
+        self._reset()
+
+        self._vi_ops = 0
+        self._lst_vegetation_index = lst_vi  # TODO remove?
+        for op in lst_vi: self._vi_ops |= op.value
 
     """
     Vegetation
@@ -106,25 +127,10 @@ class SatDataFuze(SatDataLoader):
 
     def fuzeData(self) -> None:  # rename
 
-        self.loadSatData()
-        # self.__computeVegetationIndexes()
-        # # TODO computer infra
-        #
-        # # fuze data to contiguous memory
-        # tmp_shape = self._np_satdata_reflectance.shape
-        #
-        # self._np_satdata_reflectance = self._np_satdata_reflectance.reshape(-1, 7)
-        # self._np_satdata_temperature = self._np_satdata_temperature.reshape(-1, 1)
-        #
-        # self._np_satdata_reflectance = _np.hstack((self._np_satdata_reflectance, self._np_satdata_temperature))
-        # del self._np_satdata_temperature; self._np_satdata_temperature = None
-        # gc.collect()  # clean up memory
-        # print(self._np_satdata_reflectance.flags)
-        #
-        # self._np_satdata = self._np_satdata_reflectance
-        # self._np_satdata_reflectance = None
-        #
-        # self._np_satdata = self._np_satdata.reshape(tmp_shape[0], tmp_shape[1], -1)
+        self.loadSatData()  # TODO extra features for vegetation indexes and infrared
+        self.loadFiremaps()
+        # TODO load labels
+        self.__computeVegetationIndexes()
 
 
 if __name__ == '__main__':

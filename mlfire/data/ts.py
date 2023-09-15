@@ -839,7 +839,7 @@ class DataAdapterTS(DatasetView):
 
     """
     Vegetation index
-    TODO move to loader
+    TODO move to fuze 
     """
 
     def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
