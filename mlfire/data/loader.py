@@ -1036,6 +1036,7 @@ class SatDataLoader(object):
 
     def loadSatData(self, extra_features: int = 0) -> None:  # TODO private
 
+        # TODO check allocated
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
         # TODO remove and create self._df_timestamps after processing meta data
@@ -1098,11 +1099,49 @@ class SatDataLoader(object):
     Loading fire maps - MTBS and FireCCI 
     """
 
-    def __loadFiremaps_CCI(self, rs_ids) -> _np.ndarray:
+    def __processConfidenceLevel_CCI(self, rs_ids) -> _np.ndarray:
 
-        pass
+        if isinstance(rs_ids, int): rs_ids = [rs_ids]
 
-    def __loadFiremaps_MTBS(self, rs_ids) -> _np.ndarray:
+        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
+        nmaps = len(rs_ids)
+
+        np_confidence = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nmaps > 1 \
+            else _np.empty(shape=(rows, cols), dtype=_np.float32)
+        np_flags = _np.copy(np_confidence)
+
+        for sr_id, rs_id in enumerate(rs_ids):
+            ds_id, local_rs_id = self._map_layout_firemaps[rs_id]
+
+            rs_cl = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id)
+            rs_flags = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id + 1)
+
+            # check date
+            if band2date_firecci(rs_cl.GetDescription()) != band2date_firecci(rs_flags.GetDescription()):
+                err_mgs = 'Dates between ConfidenceLevel and ObservedFlag bands are not same!'
+                raise ValueError(err_mgs)
+
+            if nmaps > 1:
+                np_confidence[:, :, sr_id] = rs_cl.ReadAsArray()
+                np_flags[:, :, sr_id] = rs_flags.ReadAsArray()
+            else:
+                np_confidence[:, :] = rs_cl.ReadAsArray()
+                np_flags[:, :] = rs_flags.ReadAsArray()
+
+        if nmaps > 1:
+            np_uncharted = _np.any(np_flags == -1, axis=-1)
+            np_confidence_agg = _np.max(np_confidence, axis=-1)  # TODO also mean?
+            np_confidence = np_confidence_agg; gc.collect()
+        else:
+            np_uncharted = np_confidence == -1
+
+        np_confidence[np_uncharted] = -1  # TODO set Nan
+
+        return np_confidence
+
+    def __processSeverity_MTBS(self, rs_ids) -> _np.ndarray:
+
+        if isinstance(rs_ids, int): rs_ids = [rs_ids]
 
         rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
         nmaps = len(rs_ids)
@@ -1124,7 +1163,7 @@ class SatDataLoader(object):
         else:
             np_uncharted = np_severity == MTBSSeverity.NON_MAPPED_AREA.value
 
-        np_severity[np_uncharted] = MTBSSeverity.NON_MAPPED_AREA.value  # TODO get attribute
+        np_severity[np_uncharted] = MTBSSeverity.NON_MAPPED_AREA.value  # TODO set nan?
         del np_uncharted; gc.collect()  # clean up
 
         return np_severity
@@ -1132,6 +1171,7 @@ class SatDataLoader(object):
     def loadFiremaps(self):  # TODO protected?
 
         if self._np_firemaps is not None: return
+        if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
         if isinstance(self.select_timestamps[0], _datetime.date):
             begin_timestamp = self.select_timestamps[0]; end_timestamp = self.select_timestamps[1]
@@ -1154,14 +1194,28 @@ class SatDataLoader(object):
                 end_idx = self._df_timestamps_firemaps.index[cnd_end_idx][0]
                 rs_ids = range(begin_idx, end_idx + 1)
             else:
-                rs_ids = [begin_idx]
+                rs_ids = begin_idx
         else:
             raise NotImplementedError
 
         if self.opt_select_firemap == FireMapSelectOpt.MTBS:
-            self._np_firemaps = self.__loadFiremaps_MTBS(rs_ids=rs_ids)
+            np_severity = self.__processSeverity_MTBS(rs_ids=rs_ids)
+
+            # convert severity to labels
+            c1 = np_severity >= self.mtbs_min_severity.value; c2 = np_severity <= MTBSSeverity.HIGH.value
+            self._np_firemaps = _np.logical_and(c1, c2).astype(_np.float32)
+
+            # clean up
+            del np_severity; gc.collect()
         elif self.opt_select_firemap == FireMapSelectOpt.CCI:
-            self._np_firemaps = self.__loadFiremaps_CCI(rs_ids=rs_ids)
+            np_confidence = self.__processConfidenceLevel_CCI(rs_ids=rs_ids)
+
+            # convert confidence level to labels
+            c1 = np_confidence >= self.cci_confidence_level
+            self._np_firemaps = c1.astype(_np.float32)
+
+            # clean up
+            del np_confidence; gc.collect()
 
     """
     TODO comment

@@ -68,7 +68,7 @@ class SatDataFuze(SatDataLoader):
         self._reset()
 
         self._vi_ops = 0
-        self._lst_vegetation_index = lst_vi  # TODO remove?
+        self._lst_vegetation_index = lst_vi
         for op in lst_vi: self._vi_ops |= op.value
 
     """
@@ -127,10 +127,11 @@ class SatDataFuze(SatDataLoader):
 
     def fuzeData(self) -> None:  # rename
 
-        self.loadSatData()  # TODO extra features for vegetation indexes and infrared
+        self.loadSatData()  # TODO extra features for vegetation indexes and infrared sat data representation
         self.loadFiremaps()
-        # TODO load labels
+
         self.__computeVegetationIndexes()
+        # TODO compute infrared sat data representation
 
 
 if __name__ == '__main__':

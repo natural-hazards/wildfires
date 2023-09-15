@@ -36,7 +36,7 @@ class FireLabelsViewOpt(Enum):
     SEVERITY = 3
 
 
-class DatasetView(SatDataLoader):  # TODO rename -> SatDataView
+class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
     def __init__(self,
                  lst_firemaps: Union[tuple[str], list[str]],
@@ -456,9 +456,8 @@ class DatasetView(SatDataLoader):  # TODO rename -> SatDataView
         else:
             raise NotImplementedError
 
-    # TODO move to loader.py
     def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_uncharted_areas: bool = True) -> \
-            Union[_np.ndarray, tuple[_np.ndarray]]:
+            Union[_np.ndarray, tuple[_np.ndarray]]:  # TODO rename that reflect the result is for visualization
 
         # lazy imports
         colors = lazy_import('mlfire.utils.colors')
@@ -501,12 +500,11 @@ class DatasetView(SatDataLoader):  # TODO rename -> SatDataView
             del mask_fires; gc.collect()
             return label
 
-    # TODO move to loader.py
     def __showFireLabels_CCI(self, id_bands: Union[int, range],  figsize: Union[tuple[float, float], list[float, float]],
                              show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         # lazy imports
-        calendar = lazy_import('calendar')
+        calendar = lazy_import('calendar')  # TODO move to begining of script
 
         # put a region name to a plot title
         str_title = 'CCI labels'
@@ -546,8 +544,7 @@ class DatasetView(SatDataLoader):  # TODO rename -> SatDataView
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
-    # TODO move to loader.py
-    def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:
+    def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:   # TODO move to loader.py
 
         lst_severity = []
 
@@ -572,7 +569,7 @@ class DatasetView(SatDataLoader):  # TODO rename -> SatDataView
         return np_severity_agg
 
     # TODO move to loader.py
-    def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:
+    def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:  # TODO move to loader.py
 
         if isinstance(id_bands, range):
             return self.__readFireSeverity_RANGE_MTBS(id_bands)
@@ -824,7 +821,7 @@ if __name__ == '__main__':
     VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
 
     # setup of data set loader
-    dataset_view = DatasetView(
+    dataset_view = SatDataView(
         lst_satdata_reflectance=VAR_LST_SATIMGS,
         lst_loc_fires=VAR_LST_LABELS,
         satimg_view_opt=VAR_SATIMG_VIEW_OPT,

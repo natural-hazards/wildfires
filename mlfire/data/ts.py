@@ -8,11 +8,14 @@ from typing import Union
 
 import numpy as np  # TODO remove
 
+from mlfire.data.fuze import SatDataFuze
 from mlfire.data.loader import SatDataSelectOpt
-from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
+from mlfire.data.view import SatDataView, FireLabelsViewOpt, SatImgViewOpt
+
 from mlfire.earthengine.collections import ModisCollection
 from mlfire.earthengine.collections import FireLabelCollection
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
+
 from mlfire.features.pca import FactorOP
 
 # utils imports
@@ -47,7 +50,7 @@ class VegetationIndex(Enum):
     NDVI = 8
 
 
-class DataAdapterTS(DatasetView):
+class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
 
     def __init__(self,
                  # sources - labels and satellite data (reflectance and temperature)
@@ -82,7 +85,6 @@ class DataAdapterTS(DatasetView):
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
-        # TODO inheritance from DatasetBase?
         super().__init__(
             lst_loc_fires=lst_loc_fires,
             lst_satdata_reflectance=lst_satdata_reflectance,
@@ -356,7 +358,7 @@ class DataAdapterTS(DatasetView):
     # load labels
     # TODO move to loader?
 
-    def __loadLabels_MTBS(self) -> _np.ndarray:
+    def __loadLabels_MTBS(self) -> _np.ndarray:  # TODO remove
 
         datetime = lazy_import('datetime')
 
@@ -386,7 +388,7 @@ class DataAdapterTS(DatasetView):
 
         return label
 
-    def __loadLabels_CCI(self) -> _np.ndarray:
+    def __loadLabels_CCI(self) -> _np.ndarray:  # TODO remove
 
         datetime = lazy_import('datetime')
 
@@ -419,7 +421,7 @@ class DataAdapterTS(DatasetView):
 
         return labels
 
-    def __loadLabels(self) -> _np.ndarray:
+    def __loadLabels(self) -> _np.ndarray:  # TODO remove
 
         if self.label_collection == FireLabelCollection.MTBS:
             return self.__loadLabels_MTBS()
@@ -431,7 +433,7 @@ class DataAdapterTS(DatasetView):
     # load reflectance
     # TODO move to loader
 
-    def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:
+    def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:  # TODO remove
 
         len_ds = len(self._ds_satdata_reflectance)
 
@@ -472,7 +474,7 @@ class DataAdapterTS(DatasetView):
 
         return satimg_ts
 
-    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_id_img: int, end_id_img: int) -> _np.ndarray:
+    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_id_img: int, end_id_img: int) -> _np.ndarray:  # TODO remove
 
         NBANDS_MODIS = 7
         rgn = range(start_id_img, end_id_img + 1)
@@ -498,7 +500,7 @@ class DataAdapterTS(DatasetView):
 
         return satimg_ts
 
-    def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:
+    def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:  # TODO remove
 
         start_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_start_date][0]
         end_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_end_date][0]
@@ -517,7 +519,7 @@ class DataAdapterTS(DatasetView):
 
         return satimg_ts
 
-    def __loadSatImg_TS(self) -> _np.ndarray:
+    def __loadSatImg_TS(self) -> _np.ndarray:  # TODO remove
 
         start_date = self.ds_start_date
         if start_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('Start date does not correspond any band!')
