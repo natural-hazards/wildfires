@@ -1,16 +1,18 @@
+
 import gc
 import os
 
 from enum import Enum
 from typing import Union
 
-from mlfire.data.loader import SatDataLoader, SatDataSelectOpt
-from mlfire.earthengine.collections import ModisCollection, ModisReflectanceSpectralBands
-from mlfire.earthengine.collections import FireLabelCollection
+from mlfire.data.loader import SatDataLoader, SatDataSelectOpt, FireMapSelectOpt
+from mlfire.earthengine.collections import ModisReflectanceSpectralBands
 from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 
 # utils imports
 from mlfire.utils.functool import lazy_import
+
+from mlfire.utils.cmap import CMapHelper
 from mlfire.utils.utils_string import band2date_firecci
 from mlfire.utils.plots import imshow
 
@@ -27,6 +29,8 @@ class SatImgViewOpt(Enum):
     NDVI = 'NVDI'
     SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
     SHORTWAVE_INFRARED2 = 'Shortwave Infrared using SWIR2'
+    TEMPERATURE = 'Land surface temperature'
+    # TODO temperature
 
 
 class FireLabelsViewOpt(Enum):
@@ -36,14 +40,14 @@ class FireLabelsViewOpt(Enum):
     SEVERITY = 3
 
 
-class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
+class SatDataView(SatDataLoader):
 
     def __init__(self,
                  lst_firemaps: Union[tuple[str], list[str]],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
-                 opt_select_firemap: FireLabelCollection = FireLabelCollection.MTBS,  # TODO rename -> WildfireMapCollection
+                 opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
                  cci_confidence_level: int = 70,
                  # TODO comment
@@ -52,7 +56,8 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
                  # TODO comment
                  ndvi_view_threshold: Union[float, None] = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
-                 labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
+                 labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL,
+                 estimate_time: bool = False) -> None:
 
         super().__init__(
             lst_firemaps=lst_firemaps,
@@ -62,7 +67,8 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
             opt_select_firemap=opt_select_firemap,
             cci_confidence_level=cci_confidence_level,
             mtbs_region=mtbs_region,
-            mtbs_min_severity=mtbs_min_severity
+            mtbs_min_severity=mtbs_min_severity,
+            estimate_time=estimate_time
         )
 
         self._satimg_view_opt = None
@@ -143,8 +149,6 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
     def __getSatelliteImageArray_MODIS_EVI(self, img_id: int) -> _np.ndarray:
 
-        cmap = lazy_import('mlfire.utils.cmap')
-
         id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
@@ -179,15 +183,13 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         ]
 
         # get EVI2 heat map
-        cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
+        cmap_helper = CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)  # TODO fix argument
         img_evi = cmap_helper.getRGBA(evi)[:, :, :-1]
         img_evi[evi == -99, :] = [0, 0, 0]
 
         return img_evi
 
     def __getSatelliteImageArray_MODIS_EVI2(self, img_id: int):
-
-        cmap = lazy_import('mlfire.utils.cmap')
 
         id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
@@ -213,7 +215,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         ]
 
         # get EVI2 heat map
-        cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
+        cmap_helper = CMapHelper(lst_colors=lst_colors, vmin=.2, vmax=.8)
         img_evi2 = cmap_helper.getRGBA(evi2)[:, :, :-1]
         img_evi2[evi2 == -99, :] = [0, 0, 0]
 
@@ -339,27 +341,29 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
     def __getSatelliteImageArray(self, img_id: int) -> _np.ndarray:
 
-        if self.modis_collection == ModisCollection.REFLECTANCE:
-            return self.__getSatelliteImageArray_MODIS(img_id)
-        else:
-            raise NotImplementedError
+        # TODO fix
+        # if self.modis_collection == ModisCollection.REFLECTANCE:
+        return self.__getSatelliteImageArray_MODIS(img_id)
+        # else:
+        #    raise NotImplementedError
 
     def __showSatImage_MODIS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
                              brightness_factors: Union[tuple[float, float], list[float, float]], show: bool = True, ax=None) -> None:
         # lazy imports
-        opencv = lazy_import('cv2')
+        opencv = lazy_import('cv2')  # TODO lazy import -
 
         if not self._satdata_processed:
             try:
-                self._processMetaData_SATELLITE_IMG()
+                self._processMetadata_SATDATA()  # TODO change to right method
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to satellite images!')
 
         if id_img < 0:
             raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
 
-        if len(self) - 1 < id_img:
-            raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
+        # TODO fix
+        # if len(self) - 1 < id_img:
+        #     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands!'.format(len(self)))
 
         satimg = self.__getSatelliteImageArray(id_img)
         if brightness_factors is not None and \
@@ -372,7 +376,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
         # figure title
         img_type = self.satimg_view_opt.value
-        str_title = 'MODIS ({}, {})'.format(img_type, self.timestamps_reflectance.iloc[id_img]['Date'])
+        str_title = 'MODIS ({}, {})'.format(img_type, self.timestamps_reflectance.iloc[id_img]['Timestamps'])
 
         if self.satimg_view_opt == SatImgViewOpt.NDVI and self.ndvi_view_threshold > -1:
             str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
@@ -383,78 +387,78 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                      brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.), show: bool = True, ax=None) -> None:
 
-        if self.modis_collection == ModisCollection.REFLECTANCE:
-            self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
-        else:
-            raise NotImplementedError
+        # if self.modis_collection == ModisCollection.REFLECTANCE:
+        self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)  # TODO reflectance
+        # else:
+        #    raise NotImplementedError
 
     """
     Display functionality (LABELS)
     """
 
-    def __readFireConfidenceLevel_RANGE_CCI(self, id_bands: range) -> (_np.ndarray, _np.ndarray):  # TODO move to loader.py
-
-        lst_cl = []
-        lst_flags = []
-
-        for id_band in id_bands:
-
-            id_ds, id_rs = self._map_layout_firemaps[id_band]
-
-            # get bands
-            rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
-            rs_flags = self._ds_firemaps[id_ds].GetRasterBand(id_rs + 1)
-
-            # get descriptions
-            dsc_cl = rs_cl.GetDescription()
-            dsc_flags = rs_flags.GetDescription()
-
-            if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
-                raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
-
-            lst_flags.append(rs_flags.ReadAsArray())
-            lst_cl.append(rs_cl.ReadAsArray())
-
-        np_cl = _np.array(lst_cl)
-        del lst_cl; gc.collect()  # invoke garbage collector
-
-        np_cl_agg = _np.max(np_cl, axis=0)
-        del np_cl; gc.collect()  # invoke garbage collector
-
-        np_flags = _np.array(lst_flags)
-        del lst_flags; gc.collect()  # invoke garbage collector
-
-        np_flags_agg = _np.max(np_flags, axis=0); np_flags_agg[_np.any(np_flags == -1, axis=0)] = -1
-        del np_flags; gc.collect()
-
-        return np_cl_agg, np_flags_agg
-
-    def _readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray): # TODO move to loader.py
-
-        # TODO move to loader
-
-        if isinstance(id_bands, range):
-
-            return self.__readFireConfidenceLevel_RANGE_CCI(id_bands)
-
-        elif isinstance(id_bands, int):
-
-            id_ds, id_rs = self._map_layout_firemaps[id_bands]
-
-            # get bands
-            rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
-            rs_flags = self._ds_firemaps[id_ds].GetRasterBand(id_rs + 1)
-
-            # get descriptions
-            dsc_cl = rs_cl.GetDescription()
-            dsc_flags = rs_flags.GetDescription()
-
-            if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
-                raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
-
-            return rs_cl.ReadAsArray(), rs_flags.ReadAsArray()
-        else:
-            raise NotImplementedError
+    # def __readFireConfidenceLevel_RANGE_CCI(self, id_bands: range) -> (_np.ndarray, _np.ndarray):  # TODO move to loader.py
+    #
+    #     lst_cl = []
+    #     lst_flags = []
+    #
+    #     for id_band in id_bands:
+    #
+    #         id_ds, id_rs = self._map_layout_firemaps[id_band]
+    #
+    #         # get bands
+    #         rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
+    #         rs_flags = self._ds_firemaps[id_ds].GetRasterBand(id_rs + 1)
+    #
+    #         # get descriptions
+    #         dsc_cl = rs_cl.GetDescription()
+    #         dsc_flags = rs_flags.GetDescription()
+    #
+    #         if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
+    #             raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+    #
+    #         lst_flags.append(rs_flags.ReadAsArray())
+    #         lst_cl.append(rs_cl.ReadAsArray())
+    #
+    #     np_cl = _np.array(lst_cl)
+    #     del lst_cl; gc.collect()  # invoke garbage collector
+    #
+    #     np_cl_agg = _np.max(np_cl, axis=0)
+    #     del np_cl; gc.collect()  # invoke garbage collector
+    #
+    #     np_flags = _np.array(lst_flags)
+    #     del lst_flags; gc.collect()  # invoke garbage collector
+    #
+    #     np_flags_agg = _np.max(np_flags, axis=0); np_flags_agg[_np.any(np_flags == -1, axis=0)] = -1
+    #     del np_flags; gc.collect()
+    #
+    #     return np_cl_agg, np_flags_agg
+    #
+    # def _readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray): # TODO move to loader.py
+    #
+    #     # TODO move to loader
+    #
+    #     if isinstance(id_bands, range):
+    #
+    #         return self.__readFireConfidenceLevel_RANGE_CCI(id_bands)
+    #
+    #     elif isinstance(id_bands, int):
+    #
+    #         id_ds, id_rs = self._map_layout_firemaps[id_bands]
+    #
+    #         # get bands
+    #         rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
+    #         rs_flags = self._ds_firemaps[id_ds].GetRasterBand(id_rs + 1)
+    #
+    #         # get descriptions
+    #         dsc_cl = rs_cl.GetDescription()
+    #         dsc_flags = rs_flags.GetDescription()
+    #
+    #         if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
+    #             raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
+    #
+    #         return rs_cl.ReadAsArray(), rs_flags.ReadAsArray()
+    #     else:
+    #         raise NotImplementedError
 
     def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:  # TODO rename that reflect the result is for visualization
@@ -462,7 +466,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         # lazy imports
         colors = lazy_import('mlfire.utils.colors')
 
-        rs_cl, rs_flags = self._readFireConfidenceLevel_CCI(id_bands=id_bands)
+        rs_cl = self._processConfidenceLevel_CCI(rs_ids=id_bands)  #, rs_flags = self._readFireConfidenceLevel_CCI(id_bands=id_bands)
         mask_fires = None
 
         label = _np.empty(shape=rs_cl.shape + (3,), dtype=_np.uint8)
@@ -492,7 +496,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
         if with_uncharted_areas:
             PIXEL_NOT_OBSERVED = -1
-            label[rs_flags == PIXEL_NOT_OBSERVED, :] = 0
+            label[rs_cl == PIXEL_NOT_OBSERVED, :] = 0
 
         if with_fire_mask:
             return label, mask_fires
@@ -512,16 +516,13 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         # get date or start/end dates
         if isinstance(id_bands, range):
 
-            first_date = self.timestamps_wildfires.iloc[id_bands[0]]['Date']
-            last_date = self.timestamps_wildfires.iloc[id_bands[-1]]['Date']
+            first_date = self.timestamps_firemaps.iloc[id_bands[0]]['Timestamps']
+            last_date = self.timestamps_firemaps.iloc[id_bands[-1]]['Timestamps']
 
             if first_date.year == last_date.year:
-
                 str_first_date = f'{calendar.month_name[first_date.month]}'
                 str_last_date = f'{calendar.month_name[last_date.month]} {last_date.year}'
-
             else:
-
                 str_first_date = f'{calendar.month_name[first_date.month]} {first_date.year}'
                 str_last_date = f'{calendar.month_name[last_date.month]} {last_date.year}'
 
@@ -529,7 +530,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
         elif isinstance(id_bands, int):
 
-            label_date = self.timestamps_wildfires.iloc[id_bands]['Date']
+            label_date = self.timestamps_firemaps.iloc[id_bands]['Timestamps']
             str_date = f'{calendar.month_name[label_date.month]} {label_date.year}'
 
         else:
@@ -544,50 +545,50 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         # show labels and binary mask related to localization of wildfires (CCI labels)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
-    def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:   # TODO move to loader.py
-
-        lst_severity = []
-
-        for id_band in id_bands:
-
-            id_ds, id_rs = self._map_layout_firemaps[id_band]
-            rs_severity = self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
-
-            lst_severity.append(rs_severity)
-
-        np_severity = _np.array(lst_severity)
-        del lst_severity; gc.collect()  # invoke garbage collector
-
-        np_severity_agg = _np.max(np_severity, axis=0)  # TODO mean
-        np_non_mapped = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=0)
-        np_severity_agg[np_non_mapped] = MTBSSeverity.NON_MAPPED_AREA.value
-
-        # invoke garbage collector
-        del np_severity, np_non_mapped
-        gc.collect()
-
-        return np_severity_agg
-
-    # TODO move to loader.py
-    def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:  # TODO move to loader.py
-
-        if isinstance(id_bands, range):
-            return self.__readFireSeverity_RANGE_MTBS(id_bands)
-        elif isinstance(id_bands, int):
-            id_ds, id_rs = self._map_layout_firemaps[id_bands]
-            return self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
-        else:
-            raise NotImplementedError
+    # def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:   # TODO move to loader.py
+    #
+    #     lst_severity = []
+    #
+    #     for id_band in id_bands:
+    #
+    #         id_ds, id_rs = self._map_layout_firemaps[id_band]
+    #         rs_severity = self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
+    #
+    #         lst_severity.append(rs_severity)
+    #
+    #     np_severity = _np.array(lst_severity)
+    #     del lst_severity; gc.collect()  # invoke garbage collector
+    #
+    #     np_severity_agg = _np.max(np_severity, axis=0)  # TODO mean
+    #     np_non_mapped = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=0)
+    #     np_severity_agg[np_non_mapped] = MTBSSeverity.NON_MAPPED_AREA.value
+    #
+    #     # invoke garbage collector
+    #     del np_severity, np_non_mapped
+    #     gc.collect()
+    #
+    #     return np_severity_agg
+    #
+    # # TODO move to loader.py
+    # def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:  # TODO move to loader.py
+    #
+    #     if isinstance(id_bands, range):
+    #         return self.__readFireSeverity_RANGE_MTBS(id_bands)
+    #     elif isinstance(id_bands, int):
+    #         id_ds, id_rs = self._map_layout_firemaps[id_bands]
+    #         return self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
+    #     else:
+    #         raise NotImplementedError
 
     # TODO move to loader.py
     def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:
 
         # lazy imports
-        colors = lazy_import('mlfire.utils.colors')
+        colors = lazy_import('mlfire.utils.colors')  # TODO move to beginning of script
 
         # get fire severity
-        rs_severity = self._readFireSeverity_MTBS(id_bands=id_bands)
+        rs_severity = self._processSeverity_MTBS(rs_ids=id_bands)
         mask_fires = None
 
         label = _np.empty(shape=rs_severity.shape + (3,), dtype=_np.uint8)
@@ -595,7 +596,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
         if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
 
-            c1 = rs_severity >= self.mtbs_severity_from.value; c2 = rs_severity <= MTBSSeverity.HIGH.value
+            c1 = rs_severity >= self.mtbs_min_severity.value; c2 = rs_severity <= MTBSSeverity.HIGH.value  # TODO rewrite
             mask_fires = _np.logical_and(c1, c2)
 
         if self.labels_view_opt == FireLabelsViewOpt.LABEL:
@@ -611,7 +612,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
             severity_max = MTBSSeverity.HIGH.value
 
             cmap_helper = cmap.CMapHelper(lst_colors=lst_colors, vmin=severity_min, vmax=severity_max)
-            for v in range(self.mtbs_severity_from.value, severity_max + 1):
+            for v in range(self.mtbs_min_severity.value, severity_max + 1):
                 c = [int(v * 255) for v in cmap_helper.getRGB(v)]
                 label[rs_severity == v, :] = c
 
@@ -638,11 +639,11 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
 
         # get date or start/end dates
         if isinstance(id_bands, range):
-            first_date = self.timestamps_wildfires.iloc[id_bands[0]]['Date']
-            last_date = self.timestamps_wildfires.iloc[id_bands[-1]]['Date']
+            first_date = self.timestamps_firemaps.iloc[id_bands[0]]['Timestamps']
+            last_date = self.timestamps_firemaps.iloc[id_bands[-1]]['Timestamps']
             str_date = '{}-{}'.format(first_date.year, last_date.year)
         elif isinstance(id_bands, int):
-            label_date = self.timestamps_wildfires.iloc[id_bands]['Date']
+            label_date = self.timestamps_firemaps.iloc[id_bands]['Timestamps']
             str_date = str(label_date.year)
         else:
             raise NotImplementedError
@@ -667,24 +668,20 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
                 raise IOError('Cannot process meta data related to labels!')
 
         if isinstance(id_bands, int):
-
             if id_bands < 0:
                 raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
             elif self.nbands_label - 1 < id_bands:
                 raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
-
         elif isinstance(id_bands, range):
-
             for id_band in (id_bands[0], id_bands[-1]):
-
                 if id_band < 0:
                     raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
                 elif self.nbands_label - 1 < id_band:
                     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
 
-        if self.label_collection == FireLabelCollection.CCI:
+        if self.opt_select_firemap == FireMapSelectOpt.CCI:
             self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
-        elif self.label_collection == FireLabelCollection.MTBS:
+        elif self.opt_select_firemap == FireMapSelectOpt.MTBS:
             self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
         else:
             raise NotImplementedError
@@ -699,11 +696,11 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         datetime = lazy_import('datetime')
 
         # get label date time
-        date_satimg = self.timestamps_reflectance.iloc[id_img]['Date']
+        date_satimg = self.timestamps_reflectance.iloc[id_img]['Timestamps']
         date_label = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
 
         # get index of corresponding labels
-        label_index = int(self.timestamps_wildfires.index[self._df_timestamps_firemaps['Date'] == date_label][0])
+        label_index = int(self.timestamps_firemaps.index[self._df_timestamps_firemaps['Timestamps'] == date_label][0])
         label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
         return label, mask_fires
@@ -713,20 +710,20 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         # lazy import
         datetime = lazy_import('datetime')
 
-        date_satimg = self.timestamps_reflectance.iloc[id_img]['Date']
+        date_satimg = self.timestamps_reflectance.iloc[id_img]['Timestamps']
         date_label = datetime.date(year=date_satimg.year, month=1, day=1)
 
         # get index of corresponding labels
-        label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == date_label][0])
+        label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Timestamps'] == date_label][0])
         label, mask_fires = self.__getFireLabels_MTBS(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
         return label, mask_fires
 
     def __getLabelsForSatImg(self, id_img: int) -> (_np.ndarray, _np.ndarray):
 
-        if self.label_collection == FireLabelCollection.CCI:
+        if self.opt_select_firemap == FireMapSelectOpt.CCI:
             return self.__getLabelsForSatImg_CCI(id_img)
-        elif self.label_collection == FireLabelCollection.MTBS:
+        elif self.opt_select_firemap == FireMapSelectOpt.MTBS:
             return self.__getLabelsForSatImg_MTBS(id_img)
         else:
             raise NotImplementedError
@@ -735,7 +732,7 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
                                            brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.),
                                            show: bool = True, ax=None) -> None:
         # lazy import
-        opencv = lazy_import('cv2')
+        opencv = lazy_import('cv2')  # TODO to beginning of script
 
         # get image numpy array
         satimg = self.__getSatelliteImageArray(id_img)
@@ -749,9 +746,9 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         labels, mask = self.__getLabelsForSatImg(id_img)
         satimg[mask, :] = labels[mask, :]
 
-        ref_date = self.timestamps_reflectance.iloc[id_img]['Date']
+        ref_date = self.timestamps_reflectance.iloc[id_img]['Timestamps']
         img_type = self.satimg_view_opt.value
-        str_title = 'MODIS ({}, {}, labels={})'.format(img_type, ref_date, self.label_collection.name)
+        str_title = 'MODIS ({}, {}, labels={})'.format(img_type, ref_date, self.opt_select_firemap.name)
 
         # show multi spectral image as RGB with additional information about localization of wildfires
         imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
@@ -770,14 +767,15 @@ class SatDataView(SatDataLoader):  # TODO rename -> SatDataView
         if not self._satdata_processed:
             # process descriptions of bands related to satellite images and obtain dates from them
             try:
-                self._processMetaData_SATELLITE_IMG()
+                self._processMetadata_SATDATA()
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to satellite images!')
 
-        if self.modis_collection == ModisCollection.REFLECTANCE:
-            self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
-        else:
-            raise NotImplementedError
+        # TODO fix
+        # if self.modis_collection == ModisCollection.REFLECTANCE:
+        self.__showSatImageWithFireLabels_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)
+        # else:
+        #    raise NotImplementedError
 
 
 # use case examples
@@ -788,8 +786,8 @@ if __name__ == '__main__':
     VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
     VAR_PREFIX_LABEL = 'ak_january_december_{}_100km'
 
-    VAR_LABEL_COLLECTION = FireLabelCollection.MTBS
-    # VAR_LABEL_COLLECTION = FireLabelCollection.CCI
+    VAR_LABEL_COLLECTION = FireMapSelectOpt.CCI  # TODO rename variable
+    # VAR_LABEL_COLLECTION = FireMapSelectOpt.CCI
     VAR_STR_LABEL_COLLECTION = VAR_LABEL_COLLECTION.name.lower()
 
     VAR_LST_SATIMGS = []
@@ -817,33 +815,35 @@ if __name__ == '__main__':
     VAR_NDVI_THRESHOLD = 0.5
     VAR_CCI_CONFIDENCE_LEVEL = 70
 
-    # VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if VAR_LABEL_COLLECTION == FireLabelCollection.CCI else FireLabelsViewOpt.SEVERITY
-    VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
+    VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else FireLabelsViewOpt.SEVERITY
+    # VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
 
     # setup of data set loader
     dataset_view = SatDataView(
+        lst_firemaps=VAR_LST_LABELS,
         lst_satdata_reflectance=VAR_LST_SATIMGS,
-        lst_loc_fires=VAR_LST_LABELS,
         satimg_view_opt=VAR_SATIMG_VIEW_OPT,
         opt_select_firemap=VAR_LABEL_COLLECTION,
         labels_view_opt=VAR_LABELS_VIEW_OPT,
         mtbs_min_severity=MTBSSeverity.LOW,
         cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
-        ndvi_view_threshold=VAR_NDVI_THRESHOLD if VAR_SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None
+        ndvi_view_threshold=VAR_NDVI_THRESHOLD if VAR_SATIMG_VIEW_OPT == SatImgViewOpt.NDVI else None,
+        estimate_time=False
     )
 
-    print('#ts = {}'.format(len(dataset_view)))
+    print('#ts = {}'.format(dataset_view.len_ts))
+    print('#firemaps = {}'.format(dataset_view.len_firemaps))
     print(dataset_view.timestamps_reflectance)
-    print(dataset_view.timestamps_wildfires)
+    print(dataset_view.timestamps_firemaps)
 
-    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelCollection.CCI else 1)
+    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else 1)
     dataset_view.showSatImage(70)
     dataset_view.showSatImageWithFireLabels(70)
 
     # labels aggregation
-    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireLabelCollection.CCI else 0)
-    dataset_view.showFireLabels(19 if VAR_LABEL_COLLECTION == FireLabelCollection.CCI else 1)
-    dataset_view.showFireLabels(range(18, 20) if VAR_LABEL_COLLECTION == FireLabelCollection.CCI else range(0, 2))
+    dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else 0)
+    dataset_view.showFireLabels(19 if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else 1)
+    dataset_view.showFireLabels(range(18, 20) if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else range(0, 2))
 
     # view evi and evi2
     dataset_view.satimg_view_opt = SatImgViewOpt.EVI2

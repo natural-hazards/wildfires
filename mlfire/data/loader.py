@@ -28,7 +28,7 @@ class SatDataSelectOpt(Enum):
 
     NONE = 0
     REFLECTANCE = 1
-    TEMPERATURE = 2  # TODO rename -> TEMPERATURE
+    TEMPERATURE = 2
     ALL = 3
 
     def __and__(self, other):
@@ -630,7 +630,6 @@ class SatDataLoader(object):
             # clean up
             del lst_dates; gc.collect()
 
-        del self._df_timestamps_temperature; gc.collect()  # TODO remove?
         self._df_timestamps_temperature = df_dates
 
     def __processTimestamps_SATDATA(self, opt_select: SatDataSelectOpt = SatDataSelectOpt.ALL) -> None:
@@ -798,7 +797,7 @@ class SatDataLoader(object):
                 raise TypeError(err_msg)
 
         # TODO comment
-        self._satdata_processed = True  # TODO rename
+        self._satdata_processed = True
 
     """
     Processing fire maps - timestamps (MTBS and FireCCI)  
@@ -810,8 +809,8 @@ class SatDataLoader(object):
             err_msg = f'__processTimestamps_FIREMAPS() argument must be FireMapSelectOpt, not \'{type(opt_select)}\''
             raise TypeError(err_msg)
 
-        if self._map_layout_firemaps is not None:
-            return self._map_layout_firemaps
+        if self._df_timestamps_firemaps is not None:
+            return
 
         _opt_firemap = self.opt_select_firemap if opt_select is None else opt_select
         firemap_name = _opt_firemap.name.lower()
@@ -950,7 +949,8 @@ class SatDataLoader(object):
                     err_msg = f'cannot process a layout of layers - fire maps ({firemap_name})'
                     raise TypeError(err_msg)
 
-        self._firemaps_processed = True
+        if opt_select & MetaDataSelectOpt.ALL == opt_select.ALL:
+            self._firemaps_processed = True
 
     """
     Loading sources - reflectance and temperature
@@ -1034,7 +1034,7 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def loadSatData(self, extra_features: int = 0) -> None:  # TODO private
+    def loadSatData(self, extra_features: int = 0) -> None:  # TODO protected?
 
         # TODO check allocated
         if not self._satdata_processed: self._processMetadata_SATDATA()
@@ -1092,14 +1092,14 @@ class SatDataLoader(object):
 
         self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
 
-        self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)  # TODO is this right?
-        self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)  # TODO is this right?
+        # self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)  # TODO fix this
+        # self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)  # TODO fix thix
 
     """
     Loading fire maps - MTBS and FireCCI 
     """
 
-    def __processConfidenceLevel_CCI(self, rs_ids) -> _np.ndarray:
+    def _processConfidenceLevel_CCI(self, rs_ids) -> _np.ndarray:
 
         if isinstance(rs_ids, int): rs_ids = [rs_ids]
 
@@ -1139,9 +1139,12 @@ class SatDataLoader(object):
 
         return np_confidence
 
-    def __processSeverity_MTBS(self, rs_ids) -> _np.ndarray:
+    def _processSeverity_MTBS(self, rs_ids) -> _np.ndarray:
 
         if isinstance(rs_ids, int): rs_ids = [rs_ids]
+        # TODO check input
+
+        if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
         rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
         nmaps = len(rs_ids)
@@ -1199,7 +1202,7 @@ class SatDataLoader(object):
             raise NotImplementedError
 
         if self.opt_select_firemap == FireMapSelectOpt.MTBS:
-            np_severity = self.__processSeverity_MTBS(rs_ids=rs_ids)
+            np_severity = self._processSeverity_MTBS(rs_ids=rs_ids)
 
             # convert severity to labels
             c1 = np_severity >= self.mtbs_min_severity.value; c2 = np_severity <= MTBSSeverity.HIGH.value
@@ -1208,7 +1211,7 @@ class SatDataLoader(object):
             # clean up
             del np_severity; gc.collect()
         elif self.opt_select_firemap == FireMapSelectOpt.CCI:
-            np_confidence = self.__processConfidenceLevel_CCI(rs_ids=rs_ids)
+            np_confidence = self._processConfidenceLevel_CCI(rs_ids=rs_ids)
 
             # convert confidence level to labels
             c1 = np_confidence >= self.cci_confidence_level
@@ -1237,7 +1240,7 @@ class SatDataLoader(object):
             raise NotImplementedError
 
     @property
-    def len_ts(self) -> int:
+    def len_ts(self) -> int:  # TODO rename
 
         len_ts_reflectance = len_ts_temperature = length_ts = 0
 
@@ -1255,6 +1258,8 @@ class SatDataLoader(object):
 
     @property
     def len_firemaps(self) -> int:
+
+        # TODO improve implementation
 
         if not self._map_layout_firemaps:
             try:
@@ -1296,8 +1301,11 @@ if __name__ == '__main__':
         estimate_time=True
     )
 
+    print(dataset_loader.timestamps_firemaps)
+
     VAR_START_DATE = dataset_loader.timestamps_reflectance.iloc[0]['Timestamps']
     VAR_END_DATE = dataset_loader.timestamps_reflectance.iloc[-1]['Timestamps']
+
     dataset_loader.select_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
     dataset_loader.loadSatData()
