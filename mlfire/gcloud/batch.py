@@ -6,7 +6,7 @@ import geojson
 
 from enum import Enum
 
-from mlfire.earthengine.collections import ModisCollection, FireLabelsCollection
+from mlfire.earthengine.collections import ModisCollection, FireLabelCollection
 from mlfire.utils.utils_string import getRandomString
 
 
@@ -40,7 +40,7 @@ class EarthEngineBatch(object):
                  startdate: earthengine.Date = None,
                  enddate: earthengine.Date = None,
                  modis_index: ModisCollection = ModisCollection.REFLECTANCE,
-                 labels_collection: FireLabelsCollection = FireLabelsCollection.CCI,
+                 labels_collection: FireLabelCollection = FireLabelCollection.CCI,
                  export: ExportData = ExportData.ALL,
                  resolution_per_pixel: int = 500,
                  crs: CRS = CRS.WSG84,
@@ -155,12 +155,12 @@ class EarthEngineBatch(object):
         self._modis_index = index
 
     @property
-    def labels_collection(self) -> FireLabelsCollection:
+    def labels_collection(self) -> FireLabelCollection:
 
         return self._labels_collection
 
     @labels_collection.setter
-    def labels_collection(self, collection: FireLabelsCollection) -> None:
+    def labels_collection(self, collection: FireLabelCollection) -> None:
 
         self._labels_collection = collection
 
@@ -279,7 +279,7 @@ class EarthEngineBatch(object):
 
         self._collection_img_labels = earthengine.ImageCollection(self.labels_collection.value)
 
-        if self.labels_collection == FireLabelsCollection.CCI:
+        if self.labels_collection == FireLabelCollection.CCI:
             self._collection_img_labels = self._collection_img_labels.select('ConfidenceLevel', 'ObservedFlag')
         else:
             self._collection_img_labels = self._collection_img_labels.select('Severity')
@@ -325,7 +325,7 @@ class EarthEngineBatch(object):
 
         labels_filtered = self._collection_img_labels.filterDate(self.startdate, self.enddate)
         labels_bands = labels_filtered.toBands()
-        # if self.labels_collection == FireLabelsCollection.CCI:
+        # if self.labels_collection == FireLabelCollection.CCI:
         # avoid inconsistent types
         labels_bands = labels_bands.toInt16()
 
@@ -387,7 +387,7 @@ if __name__ == '__main__':
     # initialize earth engine
     EarthEngineBatch.initialize()
 
-    VAR_FN_JSON = 'data/jsons/ak_area_500km.geojson'
+    VAR_FN_JSON = 'data/jsons/ak_area_100km.geojson'
 
     for y in range(2004, 2006):
 
@@ -404,18 +404,18 @@ if __name__ == '__main__':
         earthengine_batch.crs = CRS.ALASKA_ALBERS
         earthengine_batch.resolution_per_pixel = 500  # pixel corresponds to resolution 500x500 meters
 
-        earthengine_batch.task_description = 'MODIS-REFLECTANCE-AK-{}-JANUARY-DECEMBER-EPSG3338'.format(y)
-        earthengine_batch.output_prefix = 'ak_reflec_january_december_{}_500km_epsg3338'.format(y)
+        earthengine_batch.task_description = 'MODIS-SURFTEMPERATURE-AK-{}-JANUARY-DECEMBER-EPSG3338'.format(y)
+        earthengine_batch.output_prefix = 'ak_lst_january_december_{}_100km_epsg3338'.format(y)
 
-        earthengine_batch.labels_collection = FireLabelsCollection.CCI
-        earthengine_batch.modis_index = ModisCollection.REFLECTANCE
+        earthengine_batch.labels_collection = FireLabelCollection.CCI
+        earthengine_batch.modis_index = ModisCollection.LST
 
         earthengine_batch.gdrive_folder = 'POC_AK_{}'.format(y)
-        # earthengine_batch.submit()
+        earthengine_batch.submit()
 
         earthengine_batch.export_flag = ExportData.LABEL
-        earthengine_batch.labels_collection = FireLabelsCollection.MTBS
-        earthengine_batch.submit()
+        earthengine_batch.labels_collection = FireLabelCollection.MTBS
+        # earthengine_batch.submit()
 
         # print task list (running or ready)
         earthengine_batch.task_list()

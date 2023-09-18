@@ -25,13 +25,20 @@ class VegetationIndex(Enum):
     EVI2 = 4
     NDVI = 8
 
-    def __add__(self, other) -> int:
-        # check type
-        raise NotImplementedError
+    def __and__(self, other):
+        if isinstance(other, VegetationIndex):
+            return VegetationIndex(self.value & other.value)
+        elif isinstance(other, int):
+            return VegetationIndex(self.value & other)
+        else:
+            raise NotImplementedError
 
-    def __sub__(self, other):
-        # check type
-        raise NotImplementedError
+    def __eq__(self, other):
+        # TODO check type
+        if not isinstance(other, VegetationIndex):
+            raise TypeError
+
+        return self.value == other.value
 
 
 class SatDataFuze(SatDataLoader):
@@ -75,10 +82,42 @@ class SatDataFuze(SatDataLoader):
     Vegetation
     """
 
-    def __computeVegetationIndex_EVI(self, satdata_reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
-        # TODO rename arguments
+    @staticmethod
+    def __computeVegetationIndex_EVI(reflec: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
 
-        raise NotImplementedError
+        NFEATURES_REFLEC = 7  # TODO move to earthengine/collection.py
+
+        rs_blue = reflec[:, :, (_ModisReflectanceSpectralBands.BLUE - 1)::NFEATURES_REFLEC]  # TODO rename
+        rs_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::NFEATURES_REFLEC]  # TODO rename
+        rs_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::NFEATURES_REFLEC]  # TODO rename
+
+        _np.seterr(divide='ignore', invalid='ignore')
+
+        # constants
+        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
+
+        evi = G * _np.divide(rs_nir - rs_red, rs_nir + C1 * rs_red - C2 * rs_blue + L)
+
+        evi_infs = _np.isinf(evi)
+        evi_nans = _np.isnan(evi)
+
+        ninfs = _np.count_nonzero(evi_infs)
+        nnans = _np.count_nonzero(evi_nans)
+
+        if ninfs > 0:
+            msg = f'#inf values = {ninfs} in EVI. The will be removed from data set!'
+            print(msg)
+
+            labels[_np.any(evi_infs, axis=2)] = _np.nan
+            evi = _np.where(evi_infs, _np.nan, evi)
+
+        if nnans > 0:
+            msg = f'#NaN values = {nnans} in EVI. These values will be removed from data set!'
+            print(msg)
+
+            labels[_np.any(evi_nans, axis=2)] = _np.nan
+
+        return evi
 
         # NFEATURES_RELFEC = 7
         #
@@ -121,17 +160,107 @@ class SatDataFuze(SatDataLoader):
         #
         # return ts_imgs, labels
 
-    def __computeVegetationIndexes(self):
+    @staticmethod
+    def __computeVegetationIndex_EVI2(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
+
+        NFEATURES_REFLEC = 7  # TODO move to earthengine/collection.py
+
+        ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::NFEATURES_REFLEC]  # TODO rename
+        ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::NFEATURES_REFLEC]  # TODO rename
+
+        _np.seterr(divide='ignore', invalid='ignore')
+
+        # compute EVI using 2 bands (nir and red)
+        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
+
+        evi2_infs = _np.isinf(evi2)
+        evi2_nans = _np.isnan(evi2)
+
+        ninfs = _np.count_nonzero(evi2_infs)
+        nnans = _np.count_nonzero(evi2_nans)
+
+        if ninfs > 0:
+            msg = f'#inf values = {ninfs} in EVI2. The will be removed from data set!'
+            print(msg)
+
+            labels[_np.any(evi2_infs, axis=2)] = _np.nan
+            evi2 = _np.where(evi2_infs, _np.nan, evi2)
+
+        if nnans > 0:
+            msg = f'#NaN values = {nnans} in EVI2. The will be removed from data set!'
+            print(msg)
+
+            labels[_np.any(evi2_nans, axis=2)] = _np.nan
+
+        return evi2
+
+    @staticmethod
+    def __computeVegetationIndex_NDVI(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
+
+        NFEATURES_REFLEC = 7  # TODO move to earthengine/collection.py
+
+        ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::NFEATURES_REFLEC]
+        ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::NFEATURES_REFLEC]
+
+        _np.seterr(divide='ignore', invalid='ignore')
+
+        # compute NDVI
+        ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
+
+        ndvi_infs = _np.isinf(ndvi)
+        ndvi_nans = _np.isnan(ndvi)
+
+        ninfs = _np.count_nonzero(ndvi_infs)
+        nnans = _np.count_nonzero(ndvi_nans)
+
+        if ninfs > 0:
+            print(f'#inf values = {ninfs} in NDVI. The will be removed from data set!')
+
+            labels[_np.any(ndvi_infs, axis=2)] = _np.nan
+            ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
+
+        if nnans > 0:
+            print(f'#NaN values = {nnans} in NDVI. The will be removed from data set!')
+
+            labels[_np.any(ndvi_nans, axis=2)] = _np.nan
+
+        return ndvi
+
+    def __addVegetationProperties(self):
+
+        """
+        https://en.wikipedia.org/wiki/Enhanced_vegetation_index
+        https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
+        """
+
+        # TODO set output
+
+        if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI:
+            self.__computeVegetationIndex_EVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+
+        if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2:
+            self.__computeVegetationIndex_EVI2(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+
+        if VegetationIndex.NDVI & self._vi_ops == VegetationIndex.NDVI:
+            self.__computeVegetationIndex_NDVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+
+    """
+    Additional spectral properties
+    """
+
+    def __addAdditionalSpetralBands(self):
 
         pass
 
-    def fuzeData(self) -> None:  # rename
+    def fuzeData(self) -> None:
 
-        self.loadSatData()  # TODO extra features for vegetation indexes and infrared sat data representation
+        extra_bands = len(self._lst_vegetation_index)
+
+        self.loadSatData(extra_bands=extra_bands)
         self.loadFiremaps()
 
-        self.__computeVegetationIndexes()
-        # TODO compute infrared sat data representation
+        self.__addVegetationProperties()
+        self.__addAdditionalSpetralBands()
 
 
 if __name__ == '__main__':
@@ -147,6 +276,8 @@ if __name__ == '__main__':
     VAR_LST_SATIMGS_REFLECTANCE = []
     VAR_LST_SATIMGS_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
+
+    ADD_VI = [VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2]
 
     for year in range(2004, 2006):
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
@@ -169,7 +300,8 @@ if __name__ == '__main__':
     dataset_fuzion = SatDataFuze(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
-        lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE
+        lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,
+        lst_vegetation_ops=ADD_VI
     )
 
     VAR_START_DATE = dataset_fuzion.timestamps_reflectance.iloc[0]['Timestamps']

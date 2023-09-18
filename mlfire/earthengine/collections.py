@@ -3,7 +3,7 @@ import ee as earthengine
 from enum import Enum
 
 
-class ModisReflectanceSpectralBands(Enum):
+class ModisReflectanceSpectralBands(Enum):  # TODO rename
 
     RED = 1  # visible (wave length 620–670nm)
     NIR = 2  # near infra-red (wave length 841–876nm)
@@ -12,6 +12,28 @@ class ModisReflectanceSpectralBands(Enum):
     SWIR1 = 5  # short-wave infra-red (wave length 1230–1250nm)
     SWIR2 = 6  # short-wave infra-red (wave length 1628-1652nm)
     SWIR3 = 7  # short-wave infra-red (wave length 2105-2155nm)
+
+    def __add__(self, other) -> int:
+        if not isinstance(other, int):
+            err_msg = ''
+            raise TypeError(err_msg)
+
+        return self.value + other
+
+    def __sub__(self, other) -> int:
+        if not isinstance(other, int):
+            err_msg = ''
+            raise TypeError(err_msg)
+
+        return self.value - other
+
+    def __eq__(self, other):
+        if isinstance(other, int):
+            return self.value == other
+        elif isinstance(other, ModisReflectanceSpectralBands):
+            return self == other
+        else:
+            raise NotImplementedError
 
 
 class ModisCollection(Enum):

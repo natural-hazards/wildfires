@@ -976,6 +976,7 @@ class SatDataLoader(object):
             cond = (df_timestamps['Timestamps'] >= begin_timestamp) & (df_timestamps['Timestamps'] <= end_timestamp)
             ntimestamps = len(df_timestamps[cond])
         else:
+            # TODO type int
             raise NotImplementedError
 
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
@@ -1034,7 +1035,7 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def loadSatData(self, extra_features: int = 0) -> None:  # TODO protected?
+    def loadSatData(self, extra_bands: int = 0) -> None:  # TODO protected?
 
         # TODO check allocated
         if not self._satdata_processed: self._processMetadata_SATDATA()
@@ -1048,7 +1049,7 @@ class SatDataLoader(object):
             err_msg = ''  # TODO error message
             raise TypeError(err_msg)
 
-        self.__loadSatData_ALLOC(extra_features=extra_features)
+        self.__loadSatData_ALLOC(extra_features=extra_bands)
 
         # TODO check loaded
         # TODO check if reflectance and temperature timestamps are same
@@ -1090,10 +1091,10 @@ class SatDataLoader(object):
             #     self._df_timestamps_reflectance.index[end_cond][0]
             # )
 
+        # TODO comment
         self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
-
-        # self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)  # TODO fix this
-        # self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)  # TODO fix thix
+        if cnd_reflectance: self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)
+        if cnd_temperature: self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)
 
     """
     Loading fire maps - MTBS and FireCCI 

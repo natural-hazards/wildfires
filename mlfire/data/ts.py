@@ -39,7 +39,7 @@ class DatasetTransformOP(Enum):
     PCA = 2
     PCA_PER_BAND = 4
     SAVITZKY_GOLAY = 8
-    NOT_PROCESS_UNCHARTED_PIXELS = 16
+    NOT_PROCESS_UNCHARTED_PIXELS = 16  # TODO rename
 
 
 class VegetationIndex(Enum):
@@ -844,49 +844,49 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
     TODO move to fuze 
     """
 
-    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
-
-        NFEATURES_TS = self._nfeatures_ts
-
-        ee_collection = lazy_import('mlfire.earthengine.collections')
-        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
-
-        ref_blue = ts_imgs[:, :, (ModisReflectanceSpectralBands.BLUE.value - 1)::NFEATURES_TS]
-        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
-
-        _np.seterr(divide='ignore', invalid='ignore')
-
-        # constants
-        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
-
-        evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
-
-        evi_infs = _np.isinf(evi)
-        evi_nans = _np.isnan(evi)
-
-        ninfs = _np.count_nonzero(evi_infs)
-        nnans = _np.count_nonzero(evi_nans)
-
-        if ninfs > 0:
-            print(f'#inf values = {ninfs} in EVI. The will be removed from data set!')
-
-            labels[_np.any(evi_infs, axis=2)] = _np.nan
-            evi = _np.where(evi_infs, _np.nan, evi)
-
-        if nnans > 0:
-            print(f'#NaN values = {nnans} in EVI. The will be removed from data set!')
-
-            labels[_np.any(evi_nans, axis=2)] = _np.nan
-
-        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
-
-        # clean up and invoke garbage collector
-        del evi; gc.collect()
-
-        self._nfeatures_ts += 1
-
-        return ts_imgs, labels
+    # def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
+    #
+    #     NFEATURES_TS = self._nfeatures_ts
+    #
+    #     ee_collection = lazy_import('mlfire.earthengine.collections')
+    #     ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+    #
+    #     ref_blue = ts_imgs[:, :, (ModisReflectanceSpectralBands.BLUE.value - 1)::NFEATURES_TS]
+    #     ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
+    #     ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
+    #
+    #     _np.seterr(divide='ignore', invalid='ignore')
+    #
+    #     # constants
+    #     L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
+    #
+    #     evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+    #
+    #     evi_infs = _np.isinf(evi)
+    #     evi_nans = _np.isnan(evi)
+    #
+    #     ninfs = _np.count_nonzero(evi_infs)
+    #     nnans = _np.count_nonzero(evi_nans)
+    #
+    #     if ninfs > 0:
+    #         print(f'#inf values = {ninfs} in EVI. The will be removed from data set!')
+    #
+    #         labels[_np.any(evi_infs, axis=2)] = _np.nan
+    #         evi = _np.where(evi_infs, _np.nan, evi)
+    #
+    #     if nnans > 0:
+    #         print(f'#NaN values = {nnans} in EVI. The will be removed from data set!')
+    #
+    #         labels[_np.any(evi_nans, axis=2)] = _np.nan
+    #
+    #     ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
+    #
+    #     # clean up and invoke garbage collector
+    #     del evi; gc.collect()
+    #
+    #     self._nfeatures_ts += 1
+    #
+    #     return ts_imgs, labels
 
     def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> [_np.ndarray, _np.ndarray]:
 
