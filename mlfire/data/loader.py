@@ -118,11 +118,10 @@ class SatDataLoader(object):
         self._layout_layers_reflectance = None
         self._layout_layers_temperature = None
 
-        self._map_layout_firemaps = None  # TODO rename
+        self._map_layout_firemaps = None  # TODO rename -> _layout_layers_firemaps
 
         self.__len_ts_reflectance = 0
         self.__len_ts_temperature = 0
-
         self.__len_firemaps = 0
 
         # training, test, and validation data sets
@@ -176,6 +175,10 @@ class SatDataLoader(object):
         # TODO comment
         self.__select_timestamps = None
         self.select_timestamps = select_timestamps
+
+        # TODO comment
+        self.__ntimestamps = -1
+        self.__timestamps_processed = False
 
         self.__estimate_time = None
         self.estimate_time = estimate_time
@@ -442,6 +445,36 @@ class SatDataLoader(object):
 
         self.__estimate_time = flg
 
+    """
+    Private properties
+    """
+
+    @property
+    def _ntimestamps(self) -> int:
+
+        if self.__timestamps_processed: return self.__ntimestamps
+
+        if self._df_timestamps_reflectance is not None:
+            df_timestamps = self._df_timestamps_reflectance
+        elif self._df_timestamps_temperature is not None:
+            df_timestamps = self._df_timestamps_temperature
+        else:
+            err_msg = ''  # TODO error message
+            raise TypeError(err_msg)
+
+        if isinstance(self.select_timestamps[0], _datetime.date):
+            begin_timestamp = self.select_timestamps[0]
+            end_timestamp = self.select_timestamps[1]
+
+            cond = (df_timestamps['Timestamps'] >= begin_timestamp) & (df_timestamps['Timestamps'] <= end_timestamp)
+            self.__ntimestamps = len(df_timestamps[cond])
+        else:
+            # TODO type int
+            raise NotImplementedError
+
+        self.__timestamps_processed = True
+        return self.__ntimestamps
+
     def _reset(self):
 
         del self._ds_training; self._ds_training = None # TODO move
@@ -465,7 +498,10 @@ class SatDataLoader(object):
         self.__len_ts_temperature = 0
         self.__len_firemaps = 0
 
-        self._nfeatures_ts = 0  # TODO rename nbands_img?
+        self._nfeatures_ts = 0  # TODO rename nbands_img or remove?
+
+        # TODO comment
+        self.__ntimestamps = 0; self.__timestamps_processed = False
 
         # set flags to false
         self._satdata_processed = False
@@ -969,39 +1005,30 @@ class SatDataLoader(object):
             err_msg = ''  # TODO error message
             raise TypeError(err_msg)
 
-        if isinstance(self.select_timestamps[0], _datetime.date):
-            begin_timestamp = self.select_timestamps[0]
-            end_timestamp = self.select_timestamps[1]
-
-            cond = (df_timestamps['Timestamps'] >= begin_timestamp) & (df_timestamps['Timestamps'] <= end_timestamp)
-            ntimestamps = len(df_timestamps[cond])
-        else:
-            # TODO type int
-            raise NotImplementedError
-
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
                            self._ds_satdata_reflectance is not None)
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
                            self._ds_satdata_temperature is not None)
 
         nfeatures = extra_features
-        if cnd_reflectance: nfeatures += 7
+        if cnd_reflectance: nfeatures += 7  # 7 -> as property
         if cnd_temperature: nfeatures += 1
 
         # TODO alloc large memory with memory map
+        # TODO alloc for cases when reflectance is not set
         rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
-        self._np_satdata = _np.empty(shape=(nfeatures * ntimestamps, rows, cols), dtype=_np.float32)
+        self._np_satdata = _np.empty(shape=(nfeatures * self._ntimestamps, rows, cols), dtype=_np.float32)
 
         if cnd_reflectance:
             idx = [True] * 7 + [False] * (nfeatures - 7)
-            idx = idx * ntimestamps
+            idx = idx * self._ntimestamps
             self._np_satdata_reflectance = self._np_satdata[idx, :, :]
 
         if cnd_temperature:
             idx = []
             if cnd_reflectance: idx += [False] * 7
             idx = idx + [True] + [False] * extra_features
-            idx = idx * ntimestamps
+            idx = idx * self._ntimestamps
 
             self._np_satdata_temperature = self._np_satdata[idx, :, :]
 

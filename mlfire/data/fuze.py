@@ -47,7 +47,7 @@ class SatDataFuze(SatDataLoader):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
-                 lst_vegetation_ops: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),  # TODO rename
+                 lst_vegetation_ops: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),  # TODO rename -> lst_vegetation_add
                  ):
 
         SatDataLoader.__init__(
@@ -62,12 +62,12 @@ class SatDataFuze(SatDataLoader):
         self.vegetation_index = lst_vegetation_ops
 
     @property
-    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
+    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:  # TODO rename property
 
         return self._lst_vegetation_index
 
     @vegetation_index.setter
-    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
+    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:  # TODO rename property
 
         if self.vegetation_index == lst_vi:
             return
@@ -192,6 +192,8 @@ class SatDataFuze(SatDataLoader):
         https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
         """
 
+        # TODO load reflectance when reflectance is not part of the dataset
+
         idx_start = 0
         if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE: idx_start += 7
         if self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE: idx_start += 1
@@ -234,8 +236,11 @@ class SatDataFuze(SatDataLoader):
     def len_ts(self) -> int:
 
         len_ts = super().len_ts
-        if self._vi_ops > 0: len_ts += len(self._lst_vegetation_index)
-        # TODO extra spectral properties
+
+        if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI: len_ts += self._ntimestamps
+        if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2: len_ts += self._ntimestamps
+        if VegetationIndex.NDVI & self._vi_ops == VegetationIndex.NDVI: len_ts += self._ntimestamps
+
         return len_ts
 
 
