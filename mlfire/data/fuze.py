@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Union
 
 #
-from mlfire.data.loader import SatDataLoader
+from mlfire.data.loader import SatDataLoader, SatDataSelectOpt
 
 #
 from mlfire.utils.functool import lazy_import
@@ -119,47 +119,6 @@ class SatDataFuze(SatDataLoader):
 
         return evi
 
-        # NFEATURES_RELFEC = 7
-        #
-        # ref_blue = satdata_reflec[:, :, (_ModisReflectanceSpectralBands.BLUE.value - 1)::NFEATURES_RELFEC]
-        # ref_nir = satdata_reflec[:, :, (_ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_RELFEC]
-        # ref_red = satdata_reflec[:, :, (_ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_RELFEC]
-        #
-        # _np.seterr(divide='ignore', invalid='ignore')
-        #
-        # # constants
-        # L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
-        #
-        # evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
-        #
-        # evi_infs = _np.isinf(evi)
-        # evi_nans = _np.isnan(evi)
-        #
-        # ninfs = _np.count_nonzero(evi_infs)
-        # nnans = _np.count_nonzero(evi_nans)
-        #
-        # if ninfs > 0:
-        #     msg = f'#inf values = {ninfs} in EVI. The will be removed from data set!'
-        #     print(msg)
-        #
-        #     labels[_np.any(evi_infs, axis=2)] = _np.nan
-        #     evi = _np.where(evi_infs, _np.nan, evi)
-        #
-        # if nnans > 0:
-        #     msg = f'#NaN values = {nnans} in EVI. The will be removed from data set!'
-        #     print(msg)
-        #
-        #     labels[_np.any(evi_nans, axis=2)] = _np.nan
-        #
-        # ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
-        #
-        # # clean up and invoke garbage collector
-        # del evi; gc.collect()
-        #
-        # self._nfeatures_ts += 1
-        #
-        # return ts_imgs, labels
-
     @staticmethod
     def __computeVegetationIndex_EVI2(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
 
@@ -233,24 +192,30 @@ class SatDataFuze(SatDataLoader):
         https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
         """
 
-        # TODO set output
+        idx_start = 0
+        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE: idx_start += 7
+        if self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE: idx_start += 1
+
+        # TODO move to private property
+        step_ts = idx_start
+        if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI: step_ts += 1
+        if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2: step_ts += 1
+        if VegetationIndex.NDVI & self._vi_ops == VegetationIndex.NDVI: step_ts += 1
 
         if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI:
-            self.__computeVegetationIndex_EVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            out_evi = self._np_satdata[:, :, idx_start::step_ts]
+            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            gc.collect()
 
         if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2:
-            self.__computeVegetationIndex_EVI2(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            out_evi2 = self._np_satdata[:, :, idx_start::step_ts]
+            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            gc.collect()
 
         if VegetationIndex.NDVI & self._vi_ops == VegetationIndex.NDVI:
-            self.__computeVegetationIndex_NDVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
-
-    """
-    Additional spectral properties
-    """
-
-    def __addAdditionalSpetralBands(self):
-
-        pass
+            out_ndvi = self._np_satdata[:, :, idx_start::step_ts]
+            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            gc.collect()
 
     def fuzeData(self) -> None:
 
@@ -260,7 +225,18 @@ class SatDataFuze(SatDataLoader):
         self.loadFiremaps()
 
         self.__addVegetationProperties()
-        self.__addAdditionalSpetralBands()
+
+    """
+    
+    """
+
+    @property
+    def len_ts(self) -> int:
+
+        len_ts = super().len_ts
+        if self._vi_ops > 0: len_ts += len(self._lst_vegetation_index)
+        # TODO extra spectral properties
+        return len_ts
 
 
 if __name__ == '__main__':

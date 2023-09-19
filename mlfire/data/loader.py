@@ -129,7 +129,7 @@ class SatDataLoader(object):
 
         # TODO move to ts.py?
 
-        self._nfeatures_ts = 0  # TODO rename
+        self._nfeatures_ts = 0  # TODO rename or remove?
 
         self._ds_training = None
         self._ds_test = None
@@ -1258,7 +1258,7 @@ class SatDataLoader(object):
         return length_ts
 
     @property
-    def len_firemaps(self) -> int:
+    def len_firemaps(self) -> int:  # TODO rename?
 
         # TODO improve implementation
 
