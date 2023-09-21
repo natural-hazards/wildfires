@@ -77,6 +77,9 @@ class MTBSRegion(Enum):
     PUERTO_RICO = 'PR'
 
 
+NFEATURES_REFLECTANCE: int = 7
+
+
 class EarthEngineFireDatasets(object):
 
     def __init__(self, ds_name):

@@ -5,6 +5,7 @@ from enum import Enum
 from typing import Union
 
 #
+from mlfire.data.loader import _NFEATURES_REFLECTANCE
 from mlfire.data.loader import SatDataLoader, SatDataSelectOpt
 
 #
@@ -47,29 +48,31 @@ class SatDataFuze(SatDataLoader):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
-                 lst_vegetation_ops: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),  # TODO rename -> lst_vegetation_add
+                 lst_vegetation_add: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),
+                 opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
                  ):
 
         SatDataLoader.__init__(
             self,
             lst_firemaps=lst_firemaps,
             lst_satdata_reflectance=lst_satdata_reflectance,
-            lst_satdata_temperature=lst_satdata_temperature
+            lst_satdata_temperature=lst_satdata_temperature,
+            opt_select_satdata=opt_select_satdata
         )
 
         self._lst_vegetation_index = None
         self._vi_ops = VegetationIndex.NONE.value
-        self.vegetation_index = lst_vegetation_ops
+        self.lst_vegetation_add = lst_vegetation_add
 
     @property
-    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:  # TODO rename property
+    def lst_vegetation_add(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
 
         return self._lst_vegetation_index
 
-    @vegetation_index.setter
-    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:  # TODO rename property
+    @lst_vegetation_add.setter
+    def lst_vegetation_add(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
 
-        if self.vegetation_index == lst_vi:
+        if self.lst_vegetation_add == lst_vi:
             return
 
         self._reset()
@@ -85,11 +88,9 @@ class SatDataFuze(SatDataLoader):
     @staticmethod
     def __computeVegetationIndex_EVI(reflec: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
 
-        NFEATURES_REFLEC = 7  # TODO move to earthengine/collection.py
-
-        rs_blue = reflec[:, :, (_ModisReflectanceSpectralBands.BLUE - 1)::NFEATURES_REFLEC]  # TODO rename
-        rs_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::NFEATURES_REFLEC]  # TODO rename
-        rs_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::NFEATURES_REFLEC]  # TODO rename
+        rs_blue = reflec[:, :, (_ModisReflectanceSpectralBands.BLUE - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
+        rs_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
+        rs_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
 
         _np.seterr(divide='ignore', invalid='ignore')
 
@@ -122,10 +123,8 @@ class SatDataFuze(SatDataLoader):
     @staticmethod
     def __computeVegetationIndex_EVI2(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
 
-        NFEATURES_REFLEC = 7  # TODO move to earthengine/collection.py
-
-        ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::NFEATURES_REFLEC]  # TODO rename
-        ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::NFEATURES_REFLEC]  # TODO rename
+        ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
+        ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
 
         _np.seterr(divide='ignore', invalid='ignore')
 
@@ -156,10 +155,8 @@ class SatDataFuze(SatDataLoader):
     @staticmethod
     def __computeVegetationIndex_NDVI(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
 
-        NFEATURES_REFLEC = 7  # TODO move to earthengine/collection.py
-
-        ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::NFEATURES_REFLEC]
-        ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::NFEATURES_REFLEC]
+        ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::_NFEATURES_REFLECTANCE]
+        ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::_NFEATURES_REFLECTANCE]
 
         _np.seterr(divide='ignore', invalid='ignore')
 
@@ -192,13 +189,22 @@ class SatDataFuze(SatDataLoader):
         https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
         """
 
-        # TODO load reflectance when reflectance is not part of the dataset
+        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE != SatDataSelectOpt.REFLECTANCE:
+            if self.lst_satdata_reflectance is not None:
+                raise NotImplementedError
+                # rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
+                # np_satdata_reflectance = _np.ndarray((rows, cols, _NFEATURES_REFLECTANCE * self._ntimestamps))
+            else:
+                raise TypeError   # is this right error?
+        else:
+            np_satdata_reflectance = self._np_satdata_reflectance
 
         idx_start = 0
-        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE: idx_start += 7
-        if self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE: idx_start += 1
+        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
+            idx_start += _NFEATURES_REFLECTANCE
+        if self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
+            idx_start += 1
 
-        # TODO move to private property
         step_ts = idx_start
         if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI: step_ts += 1
         if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2: step_ts += 1
@@ -206,22 +212,29 @@ class SatDataFuze(SatDataLoader):
 
         if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI:
             out_evi = self._np_satdata[:, :, idx_start::step_ts]
-            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=np_satdata_reflectance, labels=self._np_firemaps)
+            idx_start += 1
             gc.collect()
 
         if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2:
             out_evi2 = self._np_satdata[:, :, idx_start::step_ts]
-            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=np_satdata_reflectance, labels=self._np_firemaps)
+            idx_start += 1
             gc.collect()
 
         if VegetationIndex.NDVI & self._vi_ops == VegetationIndex.NDVI:
             out_ndvi = self._np_satdata[:, :, idx_start::step_ts]
-            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=self._np_satdata_reflectance, labels=self._np_firemaps)
+            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=np_satdata_reflectance, labels=self._np_firemaps)
+            idx_start += 1
             gc.collect()
+
+        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE != SatDataSelectOpt.REFLECTANCE:
+            del np_satdata_reflectance; gc.collect()
 
     def fuzeData(self) -> None:
 
-        extra_bands = len(self._lst_vegetation_index)
+        extra_bands = 0
+        if self._vi_ops > 0: extra_bands += len(self._lst_vegetation_index)
 
         self.loadSatData(extra_bands=extra_bands)
         self.loadFiremaps()
@@ -258,7 +271,7 @@ if __name__ == '__main__':
     VAR_LST_SATIMGS_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
 
-    ADD_VI = [VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2]
+    ADD_VEGETATION = [VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2]
 
     for year in range(2004, 2006):
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
@@ -282,7 +295,8 @@ if __name__ == '__main__':
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,
-        lst_vegetation_ops=ADD_VI
+        lst_vegetation_add=ADD_VEGETATION,
+        opt_select_satdata=SatDataSelectOpt.REFLECTANCE
     )
 
     VAR_START_DATE = dataset_fuzion.timestamps_reflectance.iloc[0]['Timestamps']

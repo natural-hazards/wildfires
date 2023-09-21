@@ -8,6 +8,7 @@ from typing import Union
 
 # collections
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
+from mlfire.earthengine.collections import NFEATURES_REFLECTANCE as _NFEATURES_REFLECTANCE
 
 # import utils
 from mlfire.utils.functool import lazy_import
@@ -84,7 +85,7 @@ class SatDataLoader(object):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
-                 # TODO add here vegetation indices and infrared bands
+                 # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
                  opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
@@ -273,7 +274,7 @@ class SatDataLoader(object):
     def timestamps_reflectance(self) -> _PandasDataFrame:
 
         if self._df_timestamps_reflectance is None:
-            self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+            self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
 
             if self._df_timestamps_reflectance is None:
                 err_msg = 'data frame containing timestamps (reflectance) was not created'
@@ -285,7 +286,7 @@ class SatDataLoader(object):
     def timestamps_temperature(self) -> _PandasDataFrame:
 
         if self._df_timestamps_temperature is None:
-            self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
+            self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
 
             if self._df_timestamps_temperature is None:
                 err_msg = 'data frame containing timestamps (temperature) was not created'
@@ -668,7 +669,7 @@ class SatDataLoader(object):
 
         self._df_timestamps_temperature = df_dates
 
-    def __processTimestamps_SATDATA(self, opt_select: SatDataSelectOpt = SatDataSelectOpt.ALL) -> None:
+    def _processTimestamps_SATDATA(self, opt_select: SatDataSelectOpt = SatDataSelectOpt.ALL) -> None:
 
         if not (isinstance(opt_select, SatDataSelectOpt)):
             err_msg = f'__processTimestamps_FIREMAPS() argument must be FireMapSelectOpt, not \'{type(opt_select)}\''
@@ -716,7 +717,7 @@ class SatDataLoader(object):
     Processing metadata and layout of layers - reflectance and temperature
     """
 
-    def __processLayersLayout_SATDATA_REFLECTANCE(self) -> None:
+    def _processLayersLayout_SATDATA_REFLECTANCE(self) -> None:
 
         if self._layout_layers_reflectance is not None:
             return
@@ -755,7 +756,7 @@ class SatDataLoader(object):
         self._layout_layers_reflectance = map_layout_satdata
         self.__len_ts_reflectance = pos
 
-    def __processLayersLayout_SATDATA_TEMPERATURE(self) -> None:
+    def _processLayersLayout_SATDATA_TEMPERATURE(self) -> None:
 
         if self._layout_layers_temperature is not None:
             return
@@ -803,13 +804,13 @@ class SatDataLoader(object):
 
             if self._df_timestamps_reflectance is None:
                 try:
-                    self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+                    self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
                 except IOError or ValueError:
                     err_msg = 'cannot process timestamps - satellite data (reflectance)'
                     raise TypeError(err_msg)
 
             try:
-                self.__processLayersLayout_SATDATA_REFLECTANCE()
+                self._processLayersLayout_SATDATA_REFLECTANCE()
             except TypeError:
                 err_msg = 'cannot process a layout of layers - satellite data (reflectance)'
                 raise TypeError(err_msg)
@@ -821,13 +822,13 @@ class SatDataLoader(object):
 
             if self._df_timestamps_temperature is None:
                 try:
-                    self.__processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
+                    self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
                 except IOError or ValueError:
                     err_msg = 'cannot process timestamps - satellite data (temperature)'
                     raise TypeError(err_msg)
 
             try:
-                self.__processLayersLayout_SATDATA_TEMPERATURE()
+                self._processLayersLayout_SATDATA_TEMPERATURE()
             except TypeError:
                 err_msg = 'cannot process a layout of layers - satellite data (temperature)'
                 raise TypeError(err_msg)
@@ -999,8 +1000,10 @@ class SatDataLoader(object):
         # TODO remove and create self._df_timestamps after processing meta data
         if self._df_timestamps_reflectance is not None:
             df_timestamps = self._df_timestamps_reflectance
+            ds_satdata = self._ds_satdata_reflectance
         elif self._df_timestamps_temperature is not None:
             df_timestamps = self._df_timestamps_temperature
+            ds_satdata = self._ds_satdata_temperature
         else:
             err_msg = ''  # TODO error message
             raise TypeError(err_msg)
@@ -1011,22 +1014,22 @@ class SatDataLoader(object):
                            self._ds_satdata_temperature is not None)
 
         nfeatures = extra_features
-        if cnd_reflectance: nfeatures += 7  # 7 -> as property
+        if cnd_reflectance: nfeatures += _NFEATURES_REFLECTANCE
         if cnd_temperature: nfeatures += 1
 
         # TODO alloc large memory with memory map
         # TODO alloc for cases when reflectance is not set
-        rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
+        rows = ds_satdata[0].RasterYSize; cols = ds_satdata[0].RasterXSize
         self._np_satdata = _np.empty(shape=(nfeatures * self._ntimestamps, rows, cols), dtype=_np.float32)
 
         if cnd_reflectance:
-            idx = [True] * 7 + [False] * (nfeatures - 7)
+            idx = [True] * _NFEATURES_REFLECTANCE + [False] * (nfeatures - _NFEATURES_REFLECTANCE)
             idx = idx * self._ntimestamps
             self._np_satdata_reflectance = self._np_satdata[idx, :, :]
 
         if cnd_temperature:
             idx = []
-            if cnd_reflectance: idx += [False] * 7
+            if cnd_reflectance: idx += [False] * _NFEATURES_REFLECTANCE
             idx = idx + [True] + [False] * extra_features
             idx = idx * self._ntimestamps
 
@@ -1086,6 +1089,7 @@ class SatDataLoader(object):
         else:
             raise NotImplementedError
 
+        #
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
                            self._ds_satdata_reflectance is not None)
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
@@ -1188,7 +1192,7 @@ class SatDataLoader(object):
                 np_severity[:, :] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
 
         if nmaps > 1:
-            np_uncharted = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=-1)
+            np_uncharted = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=-1)  # MTBSSeverity.NON_MAPPED_AREA.value
             np_severity_agg = _np.max(np_severity, axis=-1)  # TODO mean
             np_severity = np_severity_agg; gc.collect()  # clean up
         else:
@@ -1259,10 +1263,10 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
-            self.__processLayersLayout_SATDATA_REFLECTANCE()
+            self._processLayersLayout_SATDATA_REFLECTANCE()
             return self.__len_ts_reflectance
         elif opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
-            self.__processLayersLayout_SATDATA_TEMPERATURE()
+            self._processLayersLayout_SATDATA_TEMPERATURE()
             return self.__len_ts_temperature
         else:
             raise NotImplementedError
