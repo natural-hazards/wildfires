@@ -102,16 +102,16 @@ class SatDataLoader(object):
                  # TODO comment
                  estimate_time: bool = True):
 
-        self._np_satdata = None
-        self._np_firemaps = None
+        self._np_satdata = None  # TODO as property
+        self._np_firemaps = None  # TODO as property
 
-        self._ds_satdata_reflectance = None
-        self._df_timestamps_reflectance = None
-        self._np_satdata_reflectance = None
+        self._ds_satdata_reflectance = None  # TODO as property
+        self._df_timestamps_reflectance = None  # TODO as property
+        self._np_satdata_reflectance = None  # TODO as property
 
-        self._ds_satdata_temperature = None
-        self._df_timestamps_temperature = None
-        self._np_satdata_temperature = None
+        self._ds_satdata_temperature = None   # TODO as property
+        self._df_timestamps_temperature = None  # TODO as property
+        self._np_satdata_temperature = None  # TODO as property
 
         self._ds_firemaps = None
         self._df_timestamps_firemaps = None
@@ -590,6 +590,17 @@ class SatDataLoader(object):
             err_msg = 'satellite data (temperature) was not loaded'
             raise IOError(err_msg)
 
+    # TODO protected method wrapping REFLECTANCE and TEMPERATURE
+    def _loadGeoTIFF_SATDATA(self, opt_select: SatDataSelectOpt):
+
+        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
+            self.__loadGeoTIFF_REFLECTANCE()
+        elif opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
+            self.__loadGeoTIFF_TEMPERATURE()
+        else:
+            # TODO warning?
+            pass
+
     def __loadGeoTIFF_FIREMAPS(self) -> None:
 
         if not self.lst_firemaps or self.lst_firemaps is None:
@@ -1023,7 +1034,7 @@ class SatDataLoader(object):
     Loading sources - reflectance and temperature
     """
 
-    def __loadSatData_ALLOC(self, extra_features: int = 0) -> None:
+    def __loadSatData_ALLOC(self, extra_features: int = 0) -> None:   # TODO rename method
 
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
@@ -1093,9 +1104,42 @@ class SatDataLoader(object):
                 np_satdata = _np.moveaxis(np_satdata, 0, -1)
                 np_satdata = np_satdata.astype(_np.float32)
 
-        return np_satdata
+        return np_satdata  # TODO remove
+
+    def _loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray, opt_select: SatDataSelectOpt = SatDataSelectOpt.REFLECTANCE):  # TODO rename
+
+        if not self._satdata_processed: self._processMetadata_SATDATA()  # TODO process
+
+        # TODO remove and create property after processing meta data
+        if self._df_timestamps_reflectance is not None:
+            df_timestamps = self._df_timestamps_reflectance
+        elif self._df_timestamps_temperature is not None:
+            df_timestamps = self._df_timestamps_temperature
+        else:
+            err_msg = ''  # TODO error message
+            raise TypeError(err_msg)
+
+        if isinstance(self.select_timestamps[0], _datetime.date):
+            begin_timestamp = self.select_timestamps[0]
+            end_timestamp = self.select_timestamps[1]
+        else:
+            raise NotImplementedError
+
+        if (begin_timestamp == df_timestamps['Timestamps'].iloc[0] and
+                end_timestamp == df_timestamps['Timestamps'].iloc[-1]):
+
+            type_name = opt_select.name.lower()
+            self.__loadSatData_ALL_RASTERS(
+                ds_satdata=ds_satdata, np_satdata=np_satdata, type_name=type_name
+            )
+
+        else:
+
+            raise NotImplementedError
 
     def loadSatData(self, extra_bands: int = 0) -> None:  # TODO protected?
+
+        # TODO reimplement
 
         # TODO check allocated
         if not self._satdata_processed: self._processMetadata_SATDATA()

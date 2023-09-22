@@ -189,21 +189,28 @@ class SatDataFuze(SatDataLoader):  # TODO rename -> SatDataFuzeVegetation?
         https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
         """
 
-        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE != SatDataSelectOpt.REFLECTANCE:
+        cnd_reflectance_sel = self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE
+        cnd_temperature_sel = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
+
+        if not cnd_reflectance_sel:
             if self.lst_satdata_reflectance is not None:
                 rows = self.rs_rows; cols = self.rs_cols
-                np_satdata_reflectance = _np.ndarray((rows, cols, _NFEATURES_REFLECTANCE * self._ntimestamps))
-                # TODO load SatData reflectance to np_satdata_reflectance
+                np_satdata_reflectance = _np.empty((_NFEATURES_REFLECTANCE * self._ntimestamps, rows, cols))
+                self._loadGeoTIFF_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+                self._loadSatData_IMPL(
+                    ds_satdata=self._ds_satdata_reflectance,
+                    np_satdata=np_satdata_reflectance,
+                    opt_select=SatDataSelectOpt.REFLECTANCE
+                )
+                np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
             else:
                 raise TypeError   # is this right error?
         else:
             np_satdata_reflectance = self._np_satdata_reflectance
 
         idx_start = 0
-        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
-            idx_start += _NFEATURES_REFLECTANCE
-        if self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
-            idx_start += 1
+        if cnd_reflectance_sel: idx_start += _NFEATURES_REFLECTANCE
+        if cnd_temperature_sel: idx_start += 1
 
         step_ts = idx_start
         if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI: step_ts += 1
@@ -228,7 +235,7 @@ class SatDataFuze(SatDataLoader):  # TODO rename -> SatDataFuzeVegetation?
             idx_start += 1
             gc.collect()
 
-        if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE != SatDataSelectOpt.REFLECTANCE:
+        if not cnd_temperature_sel:
             del np_satdata_reflectance; gc.collect()
 
     def fuzeData(self) -> None:
@@ -271,8 +278,8 @@ if __name__ == '__main__':
     VAR_LST_SATIMGS_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
 
-    # ADD_VEGETATION = (VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2)
-    ADD_VEGETATION = (VegetationIndex.NONE,)
+    ADD_VEGETATION = [VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2]
+    # ADD_VEGETATION = (VegetationIndex.NONE,)
 
     for year in range(2004, 2006):
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
