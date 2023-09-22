@@ -42,7 +42,7 @@ class VegetationIndex(Enum):
         return self.value == other.value
 
 
-class SatDataFuze(SatDataLoader):
+class SatDataFuze(SatDataLoader):  # TODO rename -> SatDataFuzeVegetation?
 
     def __init__(self,
                  lst_firemaps: Union[tuple[str], list[str], None],
@@ -191,9 +191,9 @@ class SatDataFuze(SatDataLoader):
 
         if self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE != SatDataSelectOpt.REFLECTANCE:
             if self.lst_satdata_reflectance is not None:
-                raise NotImplementedError
-                # rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
-                # np_satdata_reflectance = _np.ndarray((rows, cols, _NFEATURES_REFLECTANCE * self._ntimestamps))
+                rows = self.rs_rows; cols = self.rs_cols
+                np_satdata_reflectance = _np.ndarray((rows, cols, _NFEATURES_REFLECTANCE * self._ntimestamps))
+                # TODO load SatData reflectance to np_satdata_reflectance
             else:
                 raise TypeError   # is this right error?
         else:
@@ -271,7 +271,8 @@ if __name__ == '__main__':
     VAR_LST_SATIMGS_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
 
-    ADD_VEGETATION = [VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2]
+    # ADD_VEGETATION = (VegetationIndex.NDVI, VegetationIndex.EVI, VegetationIndex.EVI2)
+    ADD_VEGETATION = (VegetationIndex.NONE,)
 
     for year in range(2004, 2006):
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
@@ -296,11 +297,11 @@ if __name__ == '__main__':
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,
         lst_vegetation_add=ADD_VEGETATION,
-        opt_select_satdata=SatDataSelectOpt.REFLECTANCE
+        opt_select_satdata=SatDataSelectOpt.TEMPERATURE
     )
 
-    VAR_START_DATE = dataset_fuzion.timestamps_reflectance.iloc[0]['Timestamps']
-    VAR_END_DATE = dataset_fuzion.timestamps_reflectance.iloc[-1]['Timestamps']
+    VAR_START_DATE = dataset_fuzion.timestamps_satdata.iloc[0]['Timestamps']
+    VAR_END_DATE = dataset_fuzion.timestamps_satdata.iloc[-1]['Timestamps']
     dataset_fuzion.select_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
     dataset_fuzion.fuzeData()

@@ -20,7 +20,7 @@ _mlfire_data_loader = lazy_import('mlfire.data.loader')
 _SatDataSelectOpt = _mlfire_data_loader.SatDataSelectOpt
 _FireMapSelectOpt = _mlfire_data_loader.FireMapSelectOpt
 
-_SatDataLoader = _mlfire_data_loader.DatasetLoader
+_SatDataLoader = _mlfire_data_loader.SatDataLoader
 _PandasDataFrame = _pd.DataFrame
 
 """
@@ -232,7 +232,7 @@ def TEST_SatDataLoaderTemperatureLengthTimeseries_2004(satdata_temperature_2004,
         estimate_time=False
     )
 
-    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.SURFACE_TEMPERATURE) == len_ts
+    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.TEMPERATURE) == len_ts
     assert satdata_loader.len_ts == len_ts
 
 
@@ -246,7 +246,7 @@ def TEST_SatDataLoaderTemperatureLengthTimeseries_2004_2005(satdata_temperature_
         estimate_time=False
     )
 
-    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.SURFACE_TEMPERATURE) == len_ts
+    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.TEMPERATURE) == len_ts
     assert satdata_loader.len_ts == len_ts
 
 

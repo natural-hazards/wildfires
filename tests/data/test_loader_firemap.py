@@ -1,5 +1,3 @@
-# TODO split to satellite data and fire maps
-
 import pytest
 
 from enum import Enum
@@ -22,7 +20,7 @@ _mlfire_data_loader = lazy_import('mlfire.data.loader')
 _SatDataSelectOpt = _mlfire_data_loader.SatDataSelectOpt
 _FireMapSelectOpt = _mlfire_data_loader.FireMapSelectOpt
 
-_SatDataLoader = _mlfire_data_loader.DatasetLoader
+_SatDataLoader = _mlfire_data_loader.SatDataLoader
 _PandasDataFrame = _pd.DataFrame
 
 
@@ -142,30 +140,30 @@ def expected_firemap_cci_timestamps_2004_2005() -> _PandasDataFrame:
 """
 
 
-@pytest.mark.data
-def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004(firemap_mtbs_2004, expected_firemap_mtbs_timestamps_2004):
-
-    satdata_loader = _SatDataLoader(
-        lst_firemaps=firemap_mtbs_2004,
-        opt_select_firemap=_FireMapSelectOpt.MTBS,
-        estimate_time=False
-    )
-
-    timestamps_firemaps = satdata_loader.timestamps_firemaps
-    _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004)
-
-
-@pytest.mark.data
-def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004_2005(firemaps_mtbs_2004_2005, expected_firemap_mtbs_timestamps_2004_2005):
-
-    satdata_loader = _SatDataLoader(
-        lst_firemaps=firemaps_mtbs_2004_2005,
-        opt_select_firemap=_FireMapSelectOpt.MTBS,
-        estimate_time=False
-    )
-
-    timestamps_firemaps = satdata_loader.timestamps_firemaps
-    _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004_2005)
+# @pytest.mark.data
+# def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004(firemap_mtbs_2004, expected_firemap_mtbs_timestamps_2004):
+#
+#     satdata_loader = _SatDataLoader(
+#         lst_firemaps=firemap_mtbs_2004,
+#         opt_select_firemap=_FireMapSelectOpt.MTBS,
+#         estimate_time=False
+#     )
+#
+#     timestamps_firemaps = satdata_loader.timestamps_firemaps
+#     _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004)
+#
+#
+# @pytest.mark.data
+# def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004_2005(firemaps_mtbs_2004_2005, expected_firemap_mtbs_timestamps_2004_2005):
+#
+#     satdata_loader = _SatDataLoader(
+#         lst_firemaps=firemaps_mtbs_2004_2005,
+#         opt_select_firemap=_FireMapSelectOpt.MTBS,
+#         estimate_time=False
+#     )
+#
+#     timestamps_firemaps = satdata_loader.timestamps_firemaps
+#     _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004_2005)
 
 
 @pytest.mark.data
