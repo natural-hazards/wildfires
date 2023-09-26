@@ -105,6 +105,8 @@ class SatDataLoader(object):
         self._np_satdata = None  # TODO as property
         self._np_firemaps = None  # TODO as property
 
+        self.__df_timestamps = None
+
         self._ds_satdata_reflectance = None  # TODO as property
         self._df_timestamps_reflectance = None  # TODO as property
         self._np_satdata_reflectance = None  # TODO as property
@@ -481,29 +483,41 @@ class SatDataLoader(object):
     """
 
     @property
+    def _df_timestamps(self):
+
+        if not self.__timestamps_processed: self._processTimestamps_SATDATA()
+
+        if self._df_timestamps_temperature is not None:
+            self.__df_timestamps = self._df_timestamps_reflectance
+        elif self._df_timestamps_reflectance is not None:
+            self.__df_timestamps = self._df_timestamps_temperature
+
+        return self.__df_timestamps
+
+    @_df_timestamps.deleter
+    def _df_timestamps(self):
+        del self.__df_timestamps; self.__df_timestamps = None
+
+    @property
     def _ntimestamps(self) -> int:  # TODO rename
 
-        if self.__timestamps_processed: return self.__ntimestamps
+        if self.__ntimestamps != -1: return self.__ntimestamps
 
-        if self._df_timestamps_reflectance is not None:
-            df_timestamps = self._df_timestamps_reflectance
-        elif self._df_timestamps_temperature is not None:
-            df_timestamps = self._df_timestamps_temperature
-        else:
-            err_msg = ''  # TODO error message
-            raise TypeError(err_msg)
+        df_timestamps = self._df_timestamps
 
         if isinstance(self.select_timestamps[0], _datetime.date):
             begin_timestamp = self.select_timestamps[0]
             end_timestamp = self.select_timestamps[1]
 
-            cond = (df_timestamps['Timestamps'] >= begin_timestamp) & (df_timestamps['Timestamps'] <= end_timestamp)
+            cond = self._df_timestamps['Timestamps'] >= begin_timestamp
+            cond &= self._df_timestamps['Timestamps'] <= end_timestamp
+
             self.__ntimestamps = len(df_timestamps[cond])
         else:
             # TODO type int
             raise NotImplementedError
 
-        self.__timestamps_processed = True
+        self.__timestamps_processed = True  # TODO remove?
         return self.__ntimestamps
 
     def _reset(self):
@@ -532,18 +546,18 @@ class SatDataLoader(object):
         self._nfeatures_ts = 0  # TODO rename nbands_img or remove?
 
         # TODO comment
-        self.__ntimestamps = 0; self.__timestamps_processed = False
+        self.__ntimestamps = -1; self.__timestamps_processed = False
 
         # set flags to false
-        self._satdata_processed = False
-        self._firemaps_processed = False
+        self._satdata_processed = False  # TODO private?
+        self._firemaps_processed = False  # TODO private?
 
     """
     Load sources - reflectance, land surface temperature, or labels
     """
 
     @staticmethod
-    def __loadGeoTIFF_SOURCES(lst_sources: Union[list[str], tuple[str]]) -> list:  # TODO rename -> __loadGeoTIFF_DATASETS?
+    def __loadGeoTIFF_DATASETS(lst_sources: Union[list[str], tuple[str]]) -> list:
 
         # lazy import
         gdal = lazy_import('osgeo.gdal')
@@ -562,7 +576,7 @@ class SatDataLoader(object):
 
         return lst_ds
 
-    def __loadGeoTIFF_REFLECTANCE(self) -> None:  # TODO rename -> __loadGeoTIFF_DATASETS_REFLECTANCE?
+    def __loadGeoTIFF_DATASETS_REFLECTANCE(self) -> None:
 
         if self.lst_satdata_reflectance is None:
             err_msg = 'satellite data (reflectance) is not set'
@@ -571,12 +585,12 @@ class SatDataLoader(object):
         del self._ds_satdata_reflectance; gc.collect()
         self._ds_satdata_reflectance = None
 
-        self._ds_satdata_reflectance = self.__loadGeoTIFF_SOURCES(self.lst_satdata_reflectance)
+        self._ds_satdata_reflectance = self.__loadGeoTIFF_DATASETS(self.lst_satdata_reflectance)
         if not self._ds_satdata_reflectance:
             err_msg = 'satellite data (reflectance) was not loaded'
             raise IOError(err_msg)
 
-    def __loadGeoTIFF_TEMPERATURE(self) -> None:  # TODO rename -> __loadGeoTIFF_DATASETS_TEMPERATURE?
+    def __loadGeoTIFF_DATASETS_TEMPERATURE(self) -> None:
 
         if self.lst_satdata_temperature is None:
             err_msg = 'satellite data (temperature) is not set'
@@ -585,18 +599,17 @@ class SatDataLoader(object):
         del self._ds_satdata_temperature; gc.collect()
         self._ds_satdata_temperature = None
 
-        self._ds_satdata_temperature = self.__loadGeoTIFF_SOURCES(self.lst_satdata_temperature)
+        self._ds_satdata_temperature = self.__loadGeoTIFF_DATASETS(self.lst_satdata_temperature)
         if not self._ds_satdata_temperature:
             err_msg = 'satellite data (temperature) was not loaded'
             raise IOError(err_msg)
 
-    # TODO protected method wrapping REFLECTANCE and TEMPERATURE
-    def _loadGeoTIFF_SATDATA(self, opt_select: SatDataSelectOpt):
+    def _loadGeoTIFF_DATASETS_SATDATA(self, opt_select: SatDataSelectOpt):
 
         if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
-            self.__loadGeoTIFF_REFLECTANCE()
+            self.__loadGeoTIFF_DATASETS_REFLECTANCE()
         elif opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
-            self.__loadGeoTIFF_TEMPERATURE()
+            self.__loadGeoTIFF_DATASETS_TEMPERATURE()
         else:
             # TODO warning?
             pass
@@ -610,7 +623,7 @@ class SatDataLoader(object):
         del self._ds_firemaps; gc.collect()
         self._ds_firemaps = None
 
-        self._ds_firemaps = self.__loadGeoTIFF_SOURCES(self.lst_firemaps)
+        self._ds_firemaps = self.__loadGeoTIFF_DATASETS(self.lst_firemaps)
         if not self._ds_firemaps:
             err_msg = 'Satellite data (labels - wildfires localization) is not set!'  # TODO rename
             raise IOError(err_msg)
@@ -626,7 +639,7 @@ class SatDataLoader(object):
 
         if self._ds_satdata_reflectance is None:
             try:
-                self.__loadGeoTIFF_REFLECTANCE()
+                self.__loadGeoTIFF_DATASETS_REFLECTANCE()
             except IOError:
                 err_msg = 'cannot load any source - satellite data (reflectance): {}'
                 err_msg = err_msg.format(self.lst_satdata_reflectance)
@@ -672,7 +685,7 @@ class SatDataLoader(object):
 
         if self._ds_satdata_temperature is None:
             try:
-                self.__loadGeoTIFF_TEMPERATURE()
+                self.__loadGeoTIFF_DATASETS_TEMPERATURE()
             except IOError:
                 err_msg = 'cannot load any source - satellite data (temperature): {}'
                 err_msg = err_msg.format(self.lst_satdata_temperature)
@@ -723,7 +736,7 @@ class SatDataLoader(object):
 
             if self._ds_satdata_reflectance is None:
                 try:
-                    self.__loadGeoTIFF_REFLECTANCE()
+                    self.__loadGeoTIFF_DATASETS_REFLECTANCE()
                 except IOError:
                     err_msg = 'cannot load any source - satellite data (reflectance): {}'
                     err_msg = err_msg.format(self.lst_satdata_reflectance)
@@ -742,7 +755,7 @@ class SatDataLoader(object):
 
             if self._ds_satdata_temperature is None:
                 try:
-                    self.__loadGeoTIFF_TEMPERATURE()
+                    self.__loadGeoTIFF_DATASETS_TEMPERATURE()
                 except IOError:
                     err_msg = 'cannot load any source - satellite data (temperature): {}'
                     err_msg = err_msg.format(self.lst_satdata_temperature)
@@ -753,6 +766,8 @@ class SatDataLoader(object):
             except MemoryError or ValueError:
                 err_msg = 'cannot process timestamps - satellite data (temperature)'
                 raise ValueError(err_msg)
+
+        # TODO process timestamps flag
 
     """
     Processing metadata and layout of layers - reflectance and temperature
@@ -765,7 +780,7 @@ class SatDataLoader(object):
 
         if self._ds_satdata_reflectance is None:
             try:
-                self.__loadGeoTIFF_REFLECTANCE()
+                self.__loadGeoTIFF_DATASETS_REFLECTANCE()
             except IOError:
                 err_msg = 'cannot load any source - satellite data (reflectance): {}'
                 err_msg = err_msg.format(self.lst_satdata_reflectance)
@@ -804,7 +819,7 @@ class SatDataLoader(object):
 
         if self._ds_satdata_temperature is None:
             try:
-                self.__loadGeoTIFF_TEMPERATURE()
+                self.__loadGeoTIFF_DATASETS_TEMPERATURE()
             except IOError:
                 err_msg = 'cannot load any source - satellite data (temperature): {}'
                 err_msg = err_msg.format(self.lst_satdata_temperature)
@@ -1038,17 +1053,19 @@ class SatDataLoader(object):
 
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
-        # TODO remove and create self._df_timestamps after processing meta data
-        if self._df_timestamps_reflectance is not None:
-            df_timestamps = self._df_timestamps_reflectance  # TODO remove
-            ds_satdata = self._ds_satdata_reflectance
-        elif self._df_timestamps_temperature is not None:
-            df_timestamps = self._df_timestamps_temperature  # TODO remove
-            ds_satdata = self._ds_satdata_temperature
-        else:
-            err_msg = ''  # TODO error message
-            raise TypeError(err_msg)
+        # df_timestamps = self._df_timestamps
 
+        # # TODO remove and create self._df_timestamps after processing meta data
+        # if self._df_timestamps_reflectance is not None:
+        #     df_timestamps = self._df_timestamps_reflectance  # TODO remove
+        #     ds_satdata = self._ds_satdata_reflectance
+        # elif self._df_timestamps_temperature is not None:
+        #     df_timestamps = self._df_timestamps_temperature  # TODO remove
+        #     ds_satdata = self._ds_satdata_temperature
+        # else:
+        #     err_msg = ''  # TODO error message
+        #     raise TypeError(err_msg)
+        #
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
                            self._ds_satdata_reflectance is not None)
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
@@ -1058,9 +1075,7 @@ class SatDataLoader(object):
         if cnd_reflectance: nfeatures += _NFEATURES_REFLECTANCE
         if cnd_temperature: nfeatures += 1
 
-        # TODO alloc large memory with memory map
-        # TODO alloc for cases when reflectance is not set
-        rows = ds_satdata[0].RasterYSize; cols = ds_satdata[0].RasterXSize  # TODO use property
+        rows = self.rs_rows; cols = self.rs_cols
         self._np_satdata = _np.empty(shape=(nfeatures * self._ntimestamps, rows, cols), dtype=_np.float32)
 
         if cnd_reflectance:
@@ -1144,15 +1159,7 @@ class SatDataLoader(object):
         # TODO check allocated
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
-        # TODO remove and create self._df_timestamps after processing meta data
-        if self._df_timestamps_reflectance is not None:
-            df_timestamps = self._df_timestamps_reflectance
-        elif self._df_timestamps_temperature is not None:
-            df_timestamps = self._df_timestamps_temperature
-        else:
-            err_msg = ''  # TODO error message
-            raise TypeError(err_msg)
-
+        # TODO check error
         self.__loadSatData_ALLOC(extra_features=extra_bands)
 
         # TODO check loaded
@@ -1168,6 +1175,8 @@ class SatDataLoader(object):
                            self._ds_satdata_reflectance is not None)
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
                            self._ds_satdata_temperature is not None)
+
+        df_timestamps = self.__df_timestamps
 
         if (begin_timestamp == df_timestamps['Timestamps'].iloc[0] and
                 end_timestamp == df_timestamps['Timestamps'].iloc[-1]):
@@ -1389,14 +1398,14 @@ class SatDataLoader(object):
         cnd_temperature = self.lst_satdata_temperature is not None
 
         if cnd_reflectance:
-            if not self._ds_satdata_reflectance: self.__loadGeoTIFF_REFLECTANCE()
+            if not self._ds_satdata_reflectance: self.__loadGeoTIFF_DATASETS_REFLECTANCE()
             self.__rs_rows = self._ds_satdata_reflectance[0].RasterYSize
 
             if cnd_reflectance_sel:
                 del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
                 gc.collect()
         elif cnd_temperature:
-            if not self._ds_satdata_temperature: self.__loadGeoTIFF_TEMPERATURE()
+            if not self._ds_satdata_temperature: self.__loadGeoTIFF_DATASETS_TEMPERATURE()
             self.__rs_rows = self._ds_satdata_temperature[0].RasterYSize
 
             if cnd_temperature_sel:
@@ -1421,14 +1430,14 @@ class SatDataLoader(object):
         cnd_temperature = self.lst_satdata_temperature is not None
 
         if cnd_reflectance:
-            if not self._ds_satdata_reflectance: self.__loadGeoTIFF_REFLECTANCE()
+            if not self._ds_satdata_reflectance: self.__loadGeoTIFF_DATASETS_REFLECTANCE()
             self.__rs_cols = self._ds_satdata_reflectance[0].RasterXSize
 
             if not cnd_reflectance_sel:
                 del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
                 gc.collect()
         elif cnd_temperature:
-            if not self._ds_satdata_temperature: self.__loadGeoTIFF_TEMPERATURE()
+            if not self._ds_satdata_temperature: self.__loadGeoTIFF_DATASETS_TEMPERATURE()
             self.__rs_cols = self._ds_satdata_temperature[0].RasterXSize
 
             if not cnd_temperature_sel:

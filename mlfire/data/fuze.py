@@ -42,7 +42,7 @@ class VegetationIndex(Enum):
         return self.value == other.value
 
 
-class SatDataFuze(SatDataLoader):  # TODO rename -> SatDataFuzeVegetation?
+class SatDataFuzeVegetation(SatDataLoader):
 
     def __init__(self,
                  lst_firemaps: Union[tuple[str], list[str], None],
@@ -196,13 +196,19 @@ class SatDataFuze(SatDataLoader):  # TODO rename -> SatDataFuzeVegetation?
             if self.lst_satdata_reflectance is not None:
                 rows = self.rs_rows; cols = self.rs_cols
                 np_satdata_reflectance = _np.empty((_NFEATURES_REFLECTANCE * self._ntimestamps, rows, cols))
-                self._loadGeoTIFF_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+
+                self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
                 self._loadSatData_IMPL(
                     ds_satdata=self._ds_satdata_reflectance,
                     np_satdata=np_satdata_reflectance,
                     opt_select=SatDataSelectOpt.REFLECTANCE
                 )
+
                 np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
+
+                # clean up
+                del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
+                gc.collect()
             else:
                 raise TypeError   # is this right error?
         else:
@@ -299,12 +305,12 @@ if __name__ == '__main__':
         VAR_LST_FIREMAPS.append(fn_labels_mtbs)
 
     # setup of data set loader
-    dataset_fuzion = SatDataFuze(
+    dataset_fuzion = SatDataFuzeVegetation(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,
         lst_vegetation_add=ADD_VEGETATION,
-        opt_select_satdata=SatDataSelectOpt.TEMPERATURE
+        opt_select_satdata=SatDataSelectOpt.NONE
     )
 
     VAR_START_DATE = dataset_fuzion.timestamps_satdata.iloc[0]['Timestamps']
