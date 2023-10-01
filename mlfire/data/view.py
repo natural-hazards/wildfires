@@ -403,7 +403,7 @@ class SatDataView(SatDataLoader):
     #
     #     for id_band in id_bands:
     #
-    #         id_ds, id_rs = self._map_layout_firemaps[id_band]
+    #         id_ds, id_rs = self._layout_layers_firemaps[id_band]
     #
     #         # get bands
     #         rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
@@ -443,7 +443,7 @@ class SatDataView(SatDataLoader):
     #
     #     elif isinstance(id_bands, int):
     #
-    #         id_ds, id_rs = self._map_layout_firemaps[id_bands]
+    #         id_ds, id_rs = self._layout_layers_firemaps[id_bands]
     #
     #         # get bands
     #         rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
@@ -551,7 +551,7 @@ class SatDataView(SatDataLoader):
     #
     #     for id_band in id_bands:
     #
-    #         id_ds, id_rs = self._map_layout_firemaps[id_band]
+    #         id_ds, id_rs = self._layout_layers_firemaps[id_band]
     #         rs_severity = self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
     #
     #         lst_severity.append(rs_severity)
@@ -575,7 +575,7 @@ class SatDataView(SatDataLoader):
     #     if isinstance(id_bands, range):
     #         return self.__readFireSeverity_RANGE_MTBS(id_bands)
     #     elif isinstance(id_bands, int):
-    #         id_ds, id_rs = self._map_layout_firemaps[id_bands]
+    #         id_ds, id_rs = self._layout_layers_firemaps[id_bands]
     #         return self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
     #     else:
     #         raise NotImplementedError
@@ -831,7 +831,7 @@ if __name__ == '__main__':
         estimate_time=False
     )
 
-    print('#ts = {}'.format(dataset_view.len_ts))
+    print('#ts = {}'.format(dataset_view.len_satdata_ts))
     print('#firemaps = {}'.format(dataset_view.len_firemaps))
     print(dataset_view.timestamps_reflectance)
     print(dataset_view.timestamps_firemaps)

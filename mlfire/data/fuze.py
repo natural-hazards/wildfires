@@ -42,7 +42,7 @@ class VegetationIndex(Enum):
         return self.value == other.value
 
 
-class SatDataFuzeVegetation(SatDataLoader):
+class SatDataFuze(SatDataLoader):
 
     def __init__(self,
                  lst_firemaps: Union[tuple[str], list[str], None],
@@ -246,10 +246,15 @@ class SatDataFuzeVegetation(SatDataLoader):
 
     def fuzeData(self) -> None:
 
+        set_indexes = {VegetationIndex.EVI, VegetationIndex.EVI2, VegetationIndex.NDVI}
         extra_bands = 0
-        if self._vi_ops > 0: extra_bands += len(self._lst_vegetation_index)
 
+        if self._vi_ops > 0: extra_bands = len(set_indexes & set(self._lst_vegetation_index))
+
+        self._processMetadata_SATDATA()
         self.loadSatData(extra_bands=extra_bands)
+
+        self._processMetaData_FIREMAPS()
         self.loadFiremaps()
 
         self.__addVegetationProperties()
@@ -259,9 +264,9 @@ class SatDataFuzeVegetation(SatDataLoader):
     """
 
     @property
-    def len_ts(self) -> int:
+    def len_satdata_ts(self) -> int:
 
-        len_ts = super().len_ts
+        len_ts = super().len_satdata_ts
 
         if VegetationIndex.EVI & self._vi_ops == VegetationIndex.EVI: len_ts += self._ntimestamps
         if VegetationIndex.EVI2 & self._vi_ops == VegetationIndex.EVI2: len_ts += self._ntimestamps
@@ -305,7 +310,7 @@ if __name__ == '__main__':
         VAR_LST_FIREMAPS.append(fn_labels_mtbs)
 
     # setup of data set loader
-    dataset_fuzion = SatDataFuzeVegetation(
+    dataset_fuzion = SatDataFuze(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,

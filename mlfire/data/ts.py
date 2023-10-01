@@ -50,7 +50,7 @@ class VegetationIndex(Enum):
     NDVI = 8
 
 
-class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
+class DataAdapterTS(SatDataFuze, SatDataView):  # and inheritance from SatDataFuze
 
     def __init__(self,
                  # sources - labels and satellite data (reflectance and temperature)
@@ -58,8 +58,8 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  # TODO comment
-                 ds_start_date: lazy_import('datetime').date = None,
-                 ds_end_date: lazy_import('datetime').date = None,
+                 ds_start_date: lazy_import('datetime').date = None,  # TODO change
+                 ds_end_date: lazy_import('datetime').date = None,  # TODO change
                  # transformer options
                  ds_split_opt: DatasetSplitOpt = DatasetSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = .33,
@@ -85,19 +85,19 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
 
-        super().__init__(
-            lst_loc_fires=lst_loc_fires,
-            lst_satdata_reflectance=lst_satdata_reflectance,
-            lst_satdata_temperature=lst_satdata_temperature,
-            opt_select_satdata=opt_select_satdata,
-            opt_select_firemap=opt_select_firemap,
-            cci_confidence_level=cci_confidence_level,
-            mtbs_min_severity=mtbs_min_severity,
-            mtbs_region=mtbs_region,
-            ndvi_view_threshold=ndvi_view_threshold,
-            satimg_view_opt=satimg_view_opt,
-            labels_view_opt=labels_view_opt
-        )
+        # super().__init__(
+        #     lst_loc_fires=lst_loc_fires,
+        #     lst_satdata_reflectance=lst_satdata_reflectance,
+        #     lst_satdata_temperature=lst_satdata_temperature,
+        #     opt_select_satdata=opt_select_satdata,
+        #     opt_select_firemap=opt_select_firemap,
+        #     cci_confidence_level=cci_confidence_level,
+        #     mtbs_min_severity=mtbs_min_severity,
+        #     mtbs_region=mtbs_region,
+        #     ndvi_view_threshold=ndvi_view_threshold,
+        #     satimg_view_opt=satimg_view_opt,
+        #     labels_view_opt=labels_view_opt
+        # )
 
         self._ds_start_date = None
         self.ds_start_date = ds_start_date
@@ -239,26 +239,26 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
 
         self._ds_end_date = val_date
 
-    """
-    Vegetation index options
-    """
-
-    @property
-    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
-
-        return self._lst_vegetation_index
-
-    @vegetation_index.setter
-    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
-
-        if self.vegetation_index == lst_vi:
-            return
-
-        self._reset()
-
-        self._vi_ops = 0
-        self._lst_vegetation_index = lst_vi
-        for op in lst_vi: self._vi_ops |= op.value
+    # """
+    # Vegetation index options
+    # """
+    #
+    # @property
+    # def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
+    #
+    #     return self._lst_vegetation_index
+    #
+    # @vegetation_index.setter
+    # def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
+    #
+    #     if self.vegetation_index == lst_vi:
+    #         return
+    #
+    #     self._reset()
+    #
+    #     self._vi_ops = 0
+    #     self._lst_vegetation_index = lst_vi
+    #     for op in lst_vi: self._vi_ops |= op.value
 
     """
     Transform options
@@ -358,179 +358,179 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
     # load labels
     # TODO move to loader?
 
-    def __loadLabels_MTBS(self) -> _np.ndarray:  # TODO remove
-
-        datetime = lazy_import('datetime')
-
-        # TODO check start and end date
-
-        start_label_date = datetime.date(year=self.ds_start_date.year, month=1, day=1)
-        start_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == start_label_date][0])
-
-        if self.ds_start_date != self.ds_end_date:
-
-            end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
-            end_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == end_label_date][0])
-            id_bands = range(start_label_index, end_label_index + 1)
-
-        else:
-
-            id_bands = start_label_index
-
-        # get fire severity
-        rs_severity = self._readFireSeverity_MTBS(id_bands=id_bands)
-
-        # convert severity to labels
-        c1 = rs_severity >= self.mtbs_severity_from.value; c2 = rs_severity <= MTBSSeverity.HIGH.value
-        label = _np.logical_and(c1, c2).astype(_np.float32)
-        # set not observed pixels
-        label[rs_severity == MTBSSeverity.NON_MAPPED_AREA.value] = _np.nan
-
-        return label
-
-    def __loadLabels_CCI(self) -> _np.ndarray:  # TODO remove
-
-        datetime = lazy_import('datetime')
-
-        # TODO check start and end date
-
-        start_label_date = datetime.date(year=self.ds_start_date.year, month=self.ds_start_date.month, day=1)
-        start_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == start_label_date][0])
-
-        if self.ds_start_date != self.ds_end_date:
-
-            end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
-            end_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == end_label_date][0])
-            id_bands = range(start_label_index, end_label_index + 1)
-
-        else:
-
-            id_bands = start_label_index
-
-        # get fire confidence level
-        rs_cl, rs_flags = self._readFireConfidenceLevel_CCI(id_bands=id_bands)
-
-        # convert severity to labels
-        labels = (rs_cl >= self.cci_confidence_level).astype(_np.float32)
-        # set not observed pixels
-        PIXEL_NOT_OBSERVED = -1
-        labels[rs_flags == PIXEL_NOT_OBSERVED] = _np.nan
-
-        del rs_cl, rs_flags
-        gc.collect()
-
-        return labels
-
-    def __loadLabels(self) -> _np.ndarray:  # TODO remove
-
-        if self.label_collection == FireLabelCollection.MTBS:
-            return self.__loadLabels_MTBS()
-        elif self.label_collection == FireLabelCollection.CCI:
-            return self.__loadLabels_CCI()
-        else:
-            raise NotImplementedError
-
-    # load reflectance
-    # TODO move to loader
-
-    def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:  # TODO remove
-
-        len_ds = len(self._ds_satdata_reflectance)
-
-        if len_ds > 1:
-
-            rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
-            nrasters = self._ds_satdata_reflectance[0].RasterCount
-
-            for id_img in range(1, len_ds):
-
-                tmp_img = self._ds_satdata_reflectance[id_img]
-
-                if rows != tmp_img.RasterYSize or cols != tmp_img.RasterXSize:
-                    raise RuntimeError('Inconsistent shape among sources!')
-
-                nrasters += tmp_img.RasterCount
-
-            # allocate an empty array
-            satimg_ts = _np.empty(shape=(rows, cols, nrasters), dtype=_np.float32)
-            rstart = rend = 0
-
-            for id_img in range(len_ds):
-
-                gc.collect()  # invoke garbage collector
-
-                rend += self._ds_satdata_reflectance[id_img].RasterCount
-
-                tmp_img = self._ds_satdata_reflectance[id_img].ReadAsArray()
-                satimg_ts[:, :, rstart:rend] = _np.moveaxis(tmp_img, 0, -1)
-
-                rstart = rend
-
-        else:
-
-            satimg_ts = self._ds_satdata_reflectance[0].ReadAsArray()
-            satimg_ts = _np.moveaxis(satimg_ts, 0, -1)
-            satimg_ts = satimg_ts.astype(_np.float32)
-
-        return satimg_ts
-
-    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_id_img: int, end_id_img: int) -> _np.ndarray:  # TODO remove
-
-        NBANDS_MODIS = 7
-        rgn = range(start_id_img, end_id_img + 1)
-
-        rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
-        nbands = NBANDS_MODIS * len(rgn)
-
-        satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
-        band_pos = 0
-
-        for id_img in rgn:
-
-            id_img, start_id_band = self._layout_layers_reflectance[id_img]
-            satimg = self._ds_satdata_reflectance[id_img]
-
-            for id_band in range(0, NBANDS_MODIS):
-
-                satimg_ts[:, :, band_pos] = satimg.GetRasterBand(start_id_band + id_band).ReadAsArray()
-                band_pos += 1
-
-        # invoke garbage collector
-        gc.collect()
-
-        return satimg_ts
-
-    def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:  # TODO remove
-
-        start_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_start_date][0]
-        end_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_end_date][0]
-
-        if end_img_id - start_img_id + 1 == len(self._df_timestamps_reflectance['Date']):
-            satimg_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
-        else:
-            satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
-
-        # scale pixel values using MODIS scale factor (0.0001)
-        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-        satimg_ts /= 1e4
-
-        # TODO #bands related to MODIS as constant
-        self._nfeatures_ts = 7
-
-        return satimg_ts
-
-    def __loadSatImg_TS(self) -> _np.ndarray:  # TODO remove
-
-        start_date = self.ds_start_date
-        if start_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('Start date does not correspond any band!')
-
-        end_date = self.ds_end_date
-        if end_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('End date does not correspond any band!')
-
-        if self.modis_collection == ModisCollection.REFLECTANCE:
-            return self.__loadSatImg_REFLECTANCE()
-        else:
-            raise NotImplementedError
+    # def __loadLabels_MTBS(self) -> _np.ndarray:  # TODO remove
+    #
+    #     datetime = lazy_import('datetime')
+    #
+    #     # TODO check start and end date
+    #
+    #     start_label_date = datetime.date(year=self.ds_start_date.year, month=1, day=1)
+    #     start_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == start_label_date][0])
+    #
+    #     if self.ds_start_date != self.ds_end_date:
+    #
+    #         end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
+    #         end_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == end_label_date][0])
+    #         id_bands = range(start_label_index, end_label_index + 1)
+    #
+    #     else:
+    #
+    #         id_bands = start_label_index
+    #
+    #     # get fire severity
+    #     rs_severity = self._readFireSeverity_MTBS(id_bands=id_bands)
+    #
+    #     # convert severity to labels
+    #     c1 = rs_severity >= self.mtbs_severity_from.value; c2 = rs_severity <= MTBSSeverity.HIGH.value
+    #     label = _np.logical_and(c1, c2).astype(_np.float32)
+    #     # set not observed pixels
+    #     label[rs_severity == MTBSSeverity.NON_MAPPED_AREA.value] = _np.nan
+    #
+    #     return label
+    #
+    # def __loadLabels_CCI(self) -> _np.ndarray:  # TODO remove
+    #
+    #     datetime = lazy_import('datetime')
+    #
+    #     # TODO check start and end date
+    #
+    #     start_label_date = datetime.date(year=self.ds_start_date.year, month=self.ds_start_date.month, day=1)
+    #     start_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == start_label_date][0])
+    #
+    #     if self.ds_start_date != self.ds_end_date:
+    #
+    #         end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
+    #         end_label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Date'] == end_label_date][0])
+    #         id_bands = range(start_label_index, end_label_index + 1)
+    #
+    #     else:
+    #
+    #         id_bands = start_label_index
+    #
+    #     # get fire confidence level
+    #     rs_cl, rs_flags = self._readFireConfidenceLevel_CCI(id_bands=id_bands)
+    #
+    #     # convert severity to labels
+    #     labels = (rs_cl >= self.cci_confidence_level).astype(_np.float32)
+    #     # set not observed pixels
+    #     PIXEL_NOT_OBSERVED = -1
+    #     labels[rs_flags == PIXEL_NOT_OBSERVED] = _np.nan
+    #
+    #     del rs_cl, rs_flags
+    #     gc.collect()
+    #
+    #     return labels
+    #
+    # def __loadLabels(self) -> _np.ndarray:  # TODO remove
+    #
+    #     if self.label_collection == FireLabelCollection.MTBS:
+    #         return self.__loadLabels_MTBS()
+    #     elif self.label_collection == FireLabelCollection.CCI:
+    #         return self.__loadLabels_CCI()
+    #     else:
+    #         raise NotImplementedError
+    #
+    # # load reflectance
+    # # TODO move to loader
+    #
+    # def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:  # TODO remove
+    #
+    #     len_ds = len(self._ds_satdata_reflectance)
+    #
+    #     if len_ds > 1:
+    #
+    #         rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
+    #         nrasters = self._ds_satdata_reflectance[0].RasterCount
+    #
+    #         for id_img in range(1, len_ds):
+    #
+    #             tmp_img = self._ds_satdata_reflectance[id_img]
+    #
+    #             if rows != tmp_img.RasterYSize or cols != tmp_img.RasterXSize:
+    #                 raise RuntimeError('Inconsistent shape among sources!')
+    #
+    #             nrasters += tmp_img.RasterCount
+    #
+    #         # allocate an empty array
+    #         satimg_ts = _np.empty(shape=(rows, cols, nrasters), dtype=_np.float32)
+    #         rstart = rend = 0
+    #
+    #         for id_img in range(len_ds):
+    #
+    #             gc.collect()  # invoke garbage collector
+    #
+    #             rend += self._ds_satdata_reflectance[id_img].RasterCount
+    #
+    #             tmp_img = self._ds_satdata_reflectance[id_img].ReadAsArray()
+    #             satimg_ts[:, :, rstart:rend] = _np.moveaxis(tmp_img, 0, -1)
+    #
+    #             rstart = rend
+    #
+    #     else:
+    #
+    #         satimg_ts = self._ds_satdata_reflectance[0].ReadAsArray()
+    #         satimg_ts = _np.moveaxis(satimg_ts, 0, -1)
+    #         satimg_ts = satimg_ts.astype(_np.float32)
+    #
+    #     return satimg_ts
+    #
+    # def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_id_img: int, end_id_img: int) -> _np.ndarray:  # TODO remove
+    #
+    #     NBANDS_MODIS = 7
+    #     rgn = range(start_id_img, end_id_img + 1)
+    #
+    #     rows = self._ds_satdata_reflectance[0].RasterYSize; cols = self._ds_satdata_reflectance[0].RasterXSize
+    #     nbands = NBANDS_MODIS * len(rgn)
+    #
+    #     satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
+    #     band_pos = 0
+    #
+    #     for id_img in rgn:
+    #
+    #         id_img, start_id_band = self._layout_layers_reflectance[id_img]
+    #         satimg = self._ds_satdata_reflectance[id_img]
+    #
+    #         for id_band in range(0, NBANDS_MODIS):
+    #
+    #             satimg_ts[:, :, band_pos] = satimg.GetRasterBand(start_id_band + id_band).ReadAsArray()
+    #             band_pos += 1
+    #
+    #     # invoke garbage collector
+    #     gc.collect()
+    #
+    #     return satimg_ts
+    #
+    # def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:  # TODO remove
+    #
+    #     start_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_start_date][0]
+    #     end_img_id = self._df_timestamps_reflectance.index[self._df_timestamps_reflectance['Date'] == self.ds_end_date][0]
+    #
+    #     if end_img_id - start_img_id + 1 == len(self._df_timestamps_reflectance['Date']):
+    #         satimg_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
+    #     else:
+    #         satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
+    #
+    #     # scale pixel values using MODIS scale factor (0.0001)
+    #     # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
+    #     satimg_ts /= 1e4
+    #
+    #     # TODO #bands related to MODIS as constant
+    #     self._nfeatures_ts = 7
+    #
+    #     return satimg_ts
+    #
+    # def __loadSatImg_TS(self) -> _np.ndarray:  # TODO remove
+    #
+    #     start_date = self.ds_start_date
+    #     if start_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('Start date does not correspond any band!')
+    #
+    #     end_date = self.ds_end_date
+    #     if end_date not in self._df_timestamps_reflectance['Date'].values: raise AttributeError('End date does not correspond any band!')
+    #
+    #     if self.modis_collection == ModisCollection.REFLECTANCE:
+    #         return self.__loadSatImg_REFLECTANCE()
+    #     else:
+    #         raise NotImplementedError
 
     """
     Preprocessing 
@@ -888,107 +888,107 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
     #
     #     return ts_imgs, labels
 
-    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> [_np.ndarray, _np.ndarray]:
+    # def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> [_np.ndarray, _np.ndarray]:
+    #
+    #     NFEATURES_TS = self._nfeatures_ts
+    #
+    #     ee_collection = lazy_import('mlfire.earthengine.collections')
+    #     ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+    #
+    #     ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
+    #     ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
+    #
+    #     _np.seterr(divide='ignore', invalid='ignore')
+    #
+    #     # compute EVI using 2 bands (nir and red)
+    #     evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
+    #
+    #     evi2_infs = _np.isinf(evi2)
+    #     evi2_nans = _np.isnan(evi2)
+    #
+    #     ninfs = _np.count_nonzero(evi2_infs)
+    #     nnans = _np.count_nonzero(evi2_nans)
+    #
+    #     if ninfs > 0:
+    #         print(f'#inf values = {ninfs} in EVI2. The will be removed from data set!')
+    #
+    #         labels[_np.any(evi2_infs, axis=2)] = _np.nan
+    #         evi2 = _np.where(evi2_infs, _np.nan, evi2)
+    #
+    #     if nnans > 0:
+    #         print(f'#NaN values = {nnans} in EVI2. The will be removed from data set!')
+    #
+    #         labels[_np.any(evi2_nans, axis=2)] = _np.nan
+    #
+    #     # add features
+    #     ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
+    #
+    #     # clean up and invoke garbage collector
+    #     del evi2; gc.collect()
+    #
+    #     self._nfeatures_ts += 1
+    #
+    #     return ts_imgs, labels
 
-        NFEATURES_TS = self._nfeatures_ts
+    # def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
+    #
+    #     NFEATURES_TS = self._nfeatures_ts
+    #
+    #     ee_collection = lazy_import('mlfire.earthengine.collections')
+    #     ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+    #
+    #     ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
+    #     ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
+    #
+    #     _np.seterr(divide='ignore', invalid='ignore')
+    #
+    #     # compute NDVI
+    #     ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
+    #
+    #     ndvi_infs = _np.isinf(ndvi)
+    #     ndvi_nans = _np.isnan(ndvi)
+    #
+    #     ninfs = _np.count_nonzero(ndvi_infs)
+    #     nnans = _np.count_nonzero(ndvi_nans)
+    #
+    #     if ninfs > 0:
+    #         print(f'#inf values = {ninfs} in NDVI. The will be removed from data set!')
+    #
+    #         labels[_np.any(ndvi_infs, axis=2)] = _np.nan
+    #         ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
+    #
+    #     if nnans > 0:
+    #         print(f'#NaN values = {nnans} in NDVI. The will be removed from data set!')
+    #
+    #         labels[_np.any(ndvi_nans, axis=2)] = _np.nan
+    #
+    #     # add to features
+    #     ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), ndvi, axis=2)
+    #
+    #     # clean up and invoke garbage collector
+    #     del ndvi; gc.collect()
+    #
+    #     self._nfeatures_ts += 1
+    #
+    #     return ts_imgs, labels
 
-        ee_collection = lazy_import('mlfire.earthengine.collections')
-        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
-
-        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
-
-        _np.seterr(divide='ignore', invalid='ignore')
-
-        # compute EVI using 2 bands (nir and red)
-        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
-
-        evi2_infs = _np.isinf(evi2)
-        evi2_nans = _np.isnan(evi2)
-
-        ninfs = _np.count_nonzero(evi2_infs)
-        nnans = _np.count_nonzero(evi2_nans)
-
-        if ninfs > 0:
-            print(f'#inf values = {ninfs} in EVI2. The will be removed from data set!')
-
-            labels[_np.any(evi2_infs, axis=2)] = _np.nan
-            evi2 = _np.where(evi2_infs, _np.nan, evi2)
-
-        if nnans > 0:
-            print(f'#NaN values = {nnans} in EVI2. The will be removed from data set!')
-
-            labels[_np.any(evi2_nans, axis=2)] = _np.nan
-
-        # add features
-        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
-
-        # clean up and invoke garbage collector
-        del evi2; gc.collect()
-
-        self._nfeatures_ts += 1
-
-        return ts_imgs, labels
-
-    def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
-
-        NFEATURES_TS = self._nfeatures_ts
-
-        ee_collection = lazy_import('mlfire.earthengine.collections')
-        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
-
-        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
-
-        _np.seterr(divide='ignore', invalid='ignore')
-
-        # compute NDVI
-        ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
-
-        ndvi_infs = _np.isinf(ndvi)
-        ndvi_nans = _np.isnan(ndvi)
-
-        ninfs = _np.count_nonzero(ndvi_infs)
-        nnans = _np.count_nonzero(ndvi_nans)
-
-        if ninfs > 0:
-            print(f'#inf values = {ninfs} in NDVI. The will be removed from data set!')
-
-            labels[_np.any(ndvi_infs, axis=2)] = _np.nan
-            ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
-
-        if nnans > 0:
-            print(f'#NaN values = {nnans} in NDVI. The will be removed from data set!')
-
-            labels[_np.any(ndvi_nans, axis=2)] = _np.nan
-
-        # add to features
-        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), ndvi, axis=2)
-
-        # clean up and invoke garbage collector
-        del ndvi; gc.collect()
-
-        self._nfeatures_ts += 1
-
-        return ts_imgs, labels
-
-    def __addVegetationIndex(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
-
-        # https://en.wikipedia.org/wiki/Enhanced_vegetation_index
-        # https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
-
-        out_ts_imgs = ts_imgs; out_labels = labels
-
-        if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=out_ts_imgs, labels=out_labels)
-
-        if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
-
-        if self._vi_ops & VegetationIndex.EVI2.value == VegetationIndex.EVI2.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
-
-        return out_ts_imgs, out_labels
+    # def __addVegetationIndex(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
+    #
+    #     # https://en.wikipedia.org/wiki/Enhanced_vegetation_index
+    #     # https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
+    #
+    #     out_ts_imgs = ts_imgs; out_labels = labels
+    #
+    #     if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value:
+    #         out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=out_ts_imgs, labels=out_labels)
+    #
+    #     if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
+    #         out_ts_imgs, out_labels = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
+    #
+    #     if self._vi_ops & VegetationIndex.EVI2.value == VegetationIndex.EVI2.value:
+    #         out_ts_imgs, out_labels = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
+    #
+    #     return out_ts_imgs, out_labels
 
     """
     Data set split into training, test, and validation
@@ -1127,43 +1127,44 @@ class DataAdapterTS(SatDataView):  # and inheritance from SatDataFuze
 
     def createDataset(self) -> None:
 
-        if self._ds_training:
-            return
-
-        if not self._firemaps_processed:
-            # processing descriptions of bands related to fire labels and obtain dates from them
-            try:
-                self._processMetaData_FIREMAPS()
-            except IOError or ValueError:
-                raise RuntimeError('Cannot process meta data related to labels!')
-
-        if not self._satdata_processed:
-            # process descriptions of bands related to satellite images and obtain dates from them
-            try:
-                self._processMetaData_SATELLITE_IMG()
-            except IOError or ValueError:
-                raise RuntimeError('Cannot process meta data related to satellite images!')
-
-        try:
-            labels = self.__loadLabels()
-        except IOError or ValueError or NotImplementedError:
-            raise RuntimeError('Cannot load labels!')
-
-        try:
-            ts_imgs = self.__loadSatImg_TS()
-        except IOError or ValueError or NotImplementedError:
-            raise RuntimeError('Cannot load series of satellite images!')
-
-        if labels.shape != ts_imgs.shape[0:2]:
-            raise RuntimeError('Inconsistent shape between satellite images and labels!')
-
-        # vegetation index
-        if self._vi_ops >= VegetationIndex.NONE.value:
-            ts_imgs, labels = self.__addVegetationIndex(ts_imgs=ts_imgs, labels=labels)
+        # if self._ds_training:
+        #     return
+        #
+        # if not self._firemaps_processed:
+        #     # processing descriptions of bands related to fire labels and obtain dates from them
+        #     try:
+        #         self._processMetaData_FIREMAPS()
+        #     except IOError or ValueError:
+        #         raise RuntimeError('Cannot process meta data related to labels!')
+        #
+        # if not self._satdata_processed:
+        #     # process descriptions of bands related to satellite images and obtain dates from them
+        #     try:
+        #         self._processMetaData_SATELLITE_IMG()
+        #     except IOError or ValueError:
+        #         raise RuntimeError('Cannot process meta data related to satellite images!')
+        #
+        # try:
+        #     labels = self.__loadLabels()
+        # except IOError or ValueError or NotImplementedError:
+        #     raise RuntimeError('Cannot load labels!')
+        #
+        # try:
+        #     ts_imgs = self.__loadSatImg_TS()
+        # except IOError or ValueError or NotImplementedError:
+        #     raise RuntimeError('Cannot load series of satellite images!')
+        #
+        # if labels.shape != ts_imgs.shape[0:2]:
+        #     raise RuntimeError('Inconsistent shape between satellite images and labels!')
+        #
+        # # vegetation index
+        # if self._vi_ops >= VegetationIndex.NONE.value:
+        #     ts_imgs, labels = self.__addVegetationIndex(ts_imgs=ts_imgs, labels=labels)
 
         # TODO fill nan values
-        lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
+        lst_ds = self.__splitDataset(ts_imgs=self._np_satdata, labels=self._np_firemaps)
 
+        # TODO comment
         lst_ds = self.__preprocessingSatelliteImages(ds_imgs=lst_ds)
 
         if self.test_ratio > 0 and self.val_ratio > 0:
