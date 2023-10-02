@@ -4,11 +4,14 @@ import gc
 from enum import Enum
 from typing import Union
 
-#
-from mlfire.data.loader import _NFEATURES_REFLECTANCE
-from mlfire.data.loader import SatDataLoader, SatDataSelectOpt
+# TODO comment
+from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
-#
+from mlfire.data.loader import _NFEATURES_REFLECTANCE
+from mlfire.data.loader import SatDataLoader
+from mlfire.data.loader import FireMapSelectOpt, SatDataSelectOpt
+
+# TODO comment
 from mlfire.utils.functool import lazy_import
 
 # lazy imports
@@ -19,7 +22,7 @@ _ee_collection = lazy_import('mlfire.earthengine.collections')
 _ModisReflectanceSpectralBands = _ee_collection.ModisReflectanceSpectralBands
 
 
-class VegetationIndex(Enum):
+class VegetationIndex(Enum):  # TODO rename VegetationIndexSelectOpt
 
     NONE = 0
     EVI = 2
@@ -41,6 +44,10 @@ class VegetationIndex(Enum):
 
         return self.value == other.value
 
+    def __hash__(self):
+
+        return self.value
+
 
 class SatDataFuze(SatDataLoader):
 
@@ -48,20 +55,38 @@ class SatDataFuze(SatDataLoader):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
+                 # TODO comment
+                 opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
+                 # TODO comment
+                 opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
+                 # TODO comment
+                 select_timestamps: Union[list, tuple, None] = None,
+                 # TODO comment
+                 cci_confidence_level: int = 70,
+                 # TODO comment
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 # TODO comment
+                 mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
+                 # TODO comment
                  lst_vegetation_add: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),
-                 opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
-                 ):
+                 # TODO comment
+                 estimate_time: bool = True):
 
         SatDataLoader.__init__(
             self,
             lst_firemaps=lst_firemaps,
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
-            opt_select_satdata=opt_select_satdata
+            opt_select_firemap=opt_select_firemap,
+            opt_select_satdata=opt_select_satdata,
+            select_timestamps=select_timestamps,
+            cci_confidence_level=cci_confidence_level,
+            mtbs_region=mtbs_region,
+            mtbs_min_severity=mtbs_min_severity,
+            estimate_time=estimate_time
         )
 
-        self._lst_vegetation_index = None
-        self._vi_ops = VegetationIndex.NONE.value
+        self._lst_vegetation_index = None; self._vi_ops = VegetationIndex.NONE.value
         self.lst_vegetation_add = lst_vegetation_add
 
     @property
@@ -182,7 +207,7 @@ class SatDataFuze(SatDataLoader):
 
         return ndvi
 
-    def __addVegetationProperties(self):
+    def __addVegetationProperties(self):  # TODO rename
 
         """
         https://en.wikipedia.org/wiki/Enhanced_vegetation_index
@@ -244,7 +269,7 @@ class SatDataFuze(SatDataLoader):
         if not cnd_temperature_sel:
             del np_satdata_reflectance; gc.collect()
 
-    def fuzeData(self) -> None:
+    def fuzeData(self) -> None:  # TODO rename method
 
         set_indexes = {VegetationIndex.EVI, VegetationIndex.EVI2, VegetationIndex.NDVI}
         extra_bands = 0

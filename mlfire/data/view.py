@@ -13,7 +13,7 @@ from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
 from mlfire.utils.functool import lazy_import
 
 from mlfire.utils.cmap import CMapHelper
-from mlfire.utils.utils_string import band2date_firecci
+from mlfire.utils.utils_string import band2date_firecci  # TODO remove
 from mlfire.utils.plots import imshow
 
 # lazy imports
@@ -33,7 +33,7 @@ class SatImgViewOpt(Enum):
     # TODO temperature
 
 
-class FireLabelsViewOpt(Enum):
+class FireLabelsViewOpt(Enum):  # TODO rename FireMapsViewOpt
 
     LABEL = 1
     CONFIDENCE_LEVEL = 2
@@ -43,7 +43,7 @@ class FireLabelsViewOpt(Enum):
 class SatDataView(SatDataLoader):
 
     def __init__(self,
-                 lst_firemaps: Union[tuple[str], list[str]],
+                 lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
                  opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,

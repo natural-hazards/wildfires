@@ -97,9 +97,6 @@ class SatDataLoader(object):
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
                  mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
-                 # test_ratio: float = .33,  # TODO move to DataAdapterTS (ts.py)
-                 # val_ratio: float = .0,  # TODO move to DataAdapterTS (ts.py)
-                 # TODO comment
                  estimate_time: bool = True):
 
         self._np_satdata = None
@@ -132,16 +129,6 @@ class SatDataLoader(object):
         # TODO move to ts.py?
 
         self._nfeatures_ts = 0  # TODO rename or remove?
-
-        # self._ds_training = None
-        # self._ds_test = None
-        # self._ds_val = None
-        #
-        # self.__test_ratio = None
-        # self.test_ratio = test_ratio
-        #
-        # self.__val_ratio = None
-        # self.val_ratio = val_ratio
 
         # properties sources - reflectance, land surface temperature, and labels
 
@@ -1318,7 +1305,8 @@ class SatDataLoader(object):
         cnd_temperature_sel = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
 
         cnd_reflectance = self.lst_satdata_reflectance is not None
-        cnd_reflectance &= cnd_reflectance & (not cnd_reflectance_sel and not cnd_temperature_sel)
+        cnd_reflectance = (cnd_reflectance & (not cnd_reflectance_sel and not cnd_temperature_sel))
+        cnd_reflectance |= cnd_reflectance_sel
         cnd_temperature = self.lst_satdata_temperature is not None
 
         if cnd_reflectance:
@@ -1420,6 +1408,10 @@ class SatDataLoader(object):
 
         return length_ts
 
+    # TODO properties
+    # TODO shape_satdata
+    # TODO freatures (list of features)
+
 
 if __name__ == '__main__':
 
@@ -1453,8 +1445,8 @@ if __name__ == '__main__':
 
     print(dataset_loader.timestamps_firemaps)
 
-    VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']  # TODO change to -> dataset_loader.timestamps_satdata
-    VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']  # TODO change to -> dataset_loader.timestamps_satdata
+    VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']
+    VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
