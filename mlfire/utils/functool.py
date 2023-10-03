@@ -3,6 +3,29 @@ This file is borrowed from the ML4PY project (github.com/ml4py/ml4py)!
 """
 
 
+def constproperty(fn):
+    """
+
+    :param fn: A function or a callable object in general.
+    :return: A value that the :py:class:`fn` returns.
+
+    Refering a function or a callable object those return non-none values as constant variables can simply to use
+    a module API. This decorator implements a wrapper that packs these callable objects and provides a values, which
+    the objects return.
+
+    >>> @constproperty
+    ... def CONSTANT_ONE() -> int:
+    ...     return 1
+    >>> ml.print(CONSTANT_ONE)
+
+    """
+
+    if not callable(fn):
+        raise AssertionError('Object must be callable.')
+
+    return fn()
+
+
 class lazy_import(object):
     """
     :param pkg_name: A module or package name.

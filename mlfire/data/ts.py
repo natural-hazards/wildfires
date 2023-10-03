@@ -7,7 +7,7 @@ from typing import Union
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
 from mlfire.data.loader import FireMapSelectOpt, SatDataSelectOpt
-from mlfire.data.fuze import SatDataFuze, VegetationIndex
+from mlfire.data.fuze import SatDataFuze, VegetationIndexSelectOpt
 from mlfire.data.view import SatDataView, SatImgViewOpt, FireLabelsViewOpt
 
 # utils imports
@@ -46,7 +46,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
                  mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
-                 lst_vegetation_add: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),
+                 lst_vegetation_add: Union[tuple[VegetationIndexSelectOpt], list[VegetationIndexSelectOpt]] = (VegetationIndexSelectOpt.NONE,),
                  # TODO comment
                  opt_split_satdata: SatDataSplitOpt = SatDataSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = .33,
@@ -56,9 +56,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  firemaps_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL,
                  # TODO comment
-                 estimate_time: bool = True):
-
-        # TODO random state argument
+                 estimate_time: bool = True,
+                 random_state: int = 42):
 
         self._ds_training = None
         self._ds_test = None
@@ -97,6 +96,9 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         self.__val_ratio = None
         self.val_ratio = val_ratio
+
+        self.__random_state = None
+        self.random_state = random_state
 
     @property
     def opt_split_satdata(self) -> SatDataSplitOpt:
@@ -140,6 +142,20 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self._reset()
         self.__val_ratio = val
 
+    @property
+    def random_state(self) -> int:
+
+        return self.__random_state
+
+    @random_state.setter
+    def random_state(self, state: int) -> None:
+
+        if self.__random_state == state:
+            return
+
+        self._reset()
+        self.__random_state = state
+
     def _reset(self) -> None:
 
         SatDataFuze._reset(self)
@@ -176,7 +192,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 satdata,
                 firemaps,
                 test_size=self.test_ratio,
-                random_state=42
+                random_state=self.random_state
             )
         else:
             satdata_train = satdata; firemaps_train = firemaps
@@ -340,15 +356,18 @@ if __name__ == '__main__':
         lst_satdata_reflectance=VAR_LST_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_TEMPERATURE,
         opt_split_satdata=SatDataSplitOpt.IMG_HORIZONTAL_SPLIT,
-        opt_select_satdata=SatDataSelectOpt.REFLECTANCE,
+        lst_vegetation_add=[VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI],
+        opt_select_satdata=SatDataSelectOpt.TEMPERATURE,
         estimate_time=True
     )
 
-    print(dataset_loader.timestamps_firemaps)
+    # print(dataset_loader.timestamps_firemaps)
+    # print(dataset_loader.timestamps_satdata)
 
     VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']
     VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
-
     dataset_loader.createDatasets()
+
+    print(dataset_loader.getTrainingDataset()[0].shape)

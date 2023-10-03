@@ -290,7 +290,7 @@ class SatDataLoader(object):
     @property
     def timestamps_satdata(self) -> _PandasDataFrame:
 
-        # TODO process timestamps
+        # TODO df_timestamps_satdata as attribute
 
         df_timestamps = None
 
@@ -305,7 +305,10 @@ class SatDataLoader(object):
             df_timestamps_reflectance = df_timestamps_temperature = None
 
             cnd_reflectance = self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE
+            cnd_reflectance &= self.lst_satdata_reflectance is not None
+
             cnd_temperature = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
+            cnd_temperature &= self.lst_satdata_temperature is not None
 
             if cnd_reflectance: df_timestamps = df_timestamps_reflectance = self.timestamps_reflectance
             if cnd_temperature: df_timestamps = df_timestamps_temperature = self.timestamps_temperature
@@ -416,46 +419,6 @@ class SatDataLoader(object):
         self._reset()  # clean up
         self.__opt_select_firemap = opt_select
 
-    # @property
-    # def nbands_label(self) -> int:  # TODO rename?
-    #
-    #     if not self._firemaps_processed:
-    #         self._processMetaData_FIREMAPS()
-    #
-    #     return self.__len_firemaps
-
-    # """
-    # Training, test and validation data sets TODO move to DataAdapterTS (ts.py)
-    # """
-    #
-    # @property
-    # def test_ratio(self) -> float:
-    #
-    #     return self.__test_ratio
-    #
-    # @test_ratio.setter
-    # def test_ratio(self, ratio: float) -> None:
-    #
-    #     if self.test_ratio == ratio:
-    #         return
-    #
-    #     self._reset()  # clean up
-    #     self.__test_ratio = ratio
-    #
-    # @property
-    # def val_ratio(self) -> float:
-    #
-    #     return self.__val_ratio
-    #
-    # @val_ratio.setter
-    # def val_ratio(self, ratio: float) -> None:
-    #
-    #     if self.val_ratio == ratio:
-    #         return
-    #
-    #     self._reset()
-    #     self.__val_ratio = ratio
-
     # Time measure
 
     @property
@@ -472,35 +435,36 @@ class SatDataLoader(object):
     Private properties
     """
 
-    @property
-    def _df_timestamps(self):
-
-        if not self.__timestamps_processed: self._processTimestamps_SATDATA()
-
-        if self._df_timestamps_temperature is not None:
-            self.__df_timestamps = self._df_timestamps_reflectance
-        elif self._df_timestamps_reflectance is not None:
-            self.__df_timestamps = self._df_timestamps_temperature
-
-        return self.__df_timestamps
-
-    @_df_timestamps.deleter
-    def _df_timestamps(self):
-        del self.__df_timestamps; self.__df_timestamps = None
+    # @property
+    # def _df_timestamps(self):  # TODO remove
+    #
+    #     if not self.__timestamps_processed: self._processTimestamps_SATDATA()
+    #
+    #     if self._df_timestamps_temperature is not None:
+    #         self.__df_timestamps = self._df_timestamps_reflectance
+    #     elif self._df_timestamps_reflectance is not None:
+    #         self.__df_timestamps = self._df_timestamps_temperature
+    #
+    #     return self.__df_timestamps
+    #
+    # @_df_timestamps.deleter
+    # def _df_timestamps(self):  # TODO remove
+    #     del self.__df_timestamps; self.__df_timestamps = None
 
     @property
     def _ntimestamps(self) -> int:  # TODO rename
 
         if self.__ntimestamps != -1: return self.__ntimestamps
 
-        df_timestamps = self._df_timestamps
+        self._processMetadata_SATDATA()  # TODO select timestamps
+        df_timestamps = self.timestamps_satdata
 
         if isinstance(self.selected_timestamps[0], _datetime.date):
             begin_timestamp = self.selected_timestamps[0]
             end_timestamp = self.selected_timestamps[1]
 
-            cond = self._df_timestamps['Timestamps'] >= begin_timestamp
-            cond &= self._df_timestamps['Timestamps'] <= end_timestamp
+            cond = df_timestamps['Timestamps'] >= begin_timestamp
+            cond &= df_timestamps['Timestamps'] <= end_timestamp
 
             self.__ntimestamps = len(df_timestamps[cond])
         else:
@@ -511,10 +475,6 @@ class SatDataLoader(object):
         return self.__ntimestamps
 
     def _reset(self):
-
-        # del self._ds_training; self._ds_training = None # TODO move
-        # del self._ds_test; self._ds_test = None  # TODO move
-        # del self._ds_val; self._ds_val = None  # TODO move
 
         del self._df_timestamps_reflectance; self._df_timestamps_reflectance = None
         del self._layout_layers_reflectance; self._layout_layers_reflectance = None
@@ -1103,8 +1063,8 @@ class SatDataLoader(object):
         else:
             raise NotImplementedError
 
-        if (begin_timestamp == self._df_timestamps['Timestamps'].iloc[0] and
-                end_timestamp == self._df_timestamps['Timestamps'].iloc[-1]):
+        if (begin_timestamp == self.timestamps_satdata['Timestamps'].iloc[0] and
+                end_timestamp == self.timestamps_satdata['Timestamps'].iloc[-1]):
             self.__loadSatData_ALL_RASTERS(
                 ds_satdata=ds_satdata, np_satdata=np_satdata, type_name=opt_select.name.lower()
             )
@@ -1135,10 +1095,8 @@ class SatDataLoader(object):
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
                            self._ds_satdata_temperature is not None)
 
-        df_timestamps = self.__df_timestamps
-
-        if (begin_timestamp == df_timestamps['Timestamps'].iloc[0] and
-                end_timestamp == df_timestamps['Timestamps'].iloc[-1]):
+        if (begin_timestamp == self.timestamps_satdata['Timestamps'].iloc[0] and
+                end_timestamp == self.timestamps_satdata['Timestamps'].iloc[-1]):
 
             if cnd_reflectance:
                 type_name = SatDataSelectOpt.REFLECTANCE.name.lower()
@@ -1218,7 +1176,7 @@ class SatDataLoader(object):
 
         if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
-        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
+        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize  # TODO rows, cols as property
         nmaps = len(rs_ids)
 
         np_severity = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nmaps > 1 \

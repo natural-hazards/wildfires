@@ -1,9 +1,14 @@
-import ee as earthengine
 
 from enum import Enum
 
+# TODO comment
+from mlfire.utils.functool import constproperty, lazy_import
 
-class ModisReflectanceSpectralBands(Enum):  # TODO rename
+# lazy import
+_earthengine = lazy_import('ee')
+
+
+class ModisReflectanceSpectralBands(Enum):
 
     RED = 1  # visible (wave length 620–670nm)
     NIR = 2  # near infra-red (wave length 841–876nm)
@@ -77,7 +82,9 @@ class MTBSRegion(Enum):
     PUERTO_RICO = 'PR'
 
 
-NFEATURES_REFLECTANCE: int = 7
+@constproperty
+def NFEATURES_REFLECTANCE() -> int:
+    return 7
 
 
 class EarthEngineFireDatasets(object):
@@ -99,8 +106,8 @@ class EarthEngineFireDatasets(object):
 
                 return fn_filter
 
-            ds_fire_cci = earthengine.ImageCollection('ESA/CCI/FireCCI/5_1')
-            date_filter = earthengine.Filter.date(start_date, end_date)
+            ds_fire_cci = _earthengine.ImageCollection('ESA/CCI/FireCCI/5_1')
+            date_filter = _earthengine.Filter.date(start_date, end_date)
 
             ds_fire_cci = ds_fire_cci.filter(date_filter)
             if confidence_level > 0:
@@ -124,8 +131,8 @@ class EarthEngineFireDatasets(object):
 
                 return fn_filter
 
-            ds_fire_mtbs = earthengine.ImageCollection('USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1')
-            date_filer = earthengine.Filter.date(start_date, end_date)
+            ds_fire_mtbs = _earthengine.ImageCollection('USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1')
+            date_filer = _earthengine.Filter.date(start_date, end_date)
 
             ds_fire_mtbs = ds_fire_mtbs.filter(date_filer)
             if severity_from > 0:
