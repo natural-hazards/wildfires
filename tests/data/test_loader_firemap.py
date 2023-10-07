@@ -140,35 +140,8 @@ def expected_firemap_cci_timestamps_2004_2005() -> _PandasDataFrame:
 """
 
 
-# @pytest.mark.data
-# def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004(firemap_mtbs_2004, expected_firemap_mtbs_timestamps_2004):
-#
-#     satdata_loader = _SatDataLoader(
-#         lst_firemaps=firemap_mtbs_2004,
-#         opt_select_firemap=_FireMapSelectOpt.MTBS,
-#         estimate_time=False
-#     )
-#
-#     timestamps_firemaps = satdata_loader.timestamps_firemaps
-#     _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004)
-#
-#
-# @pytest.mark.data
-# def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004_2005(firemaps_mtbs_2004_2005, expected_firemap_mtbs_timestamps_2004_2005):
-#
-#     satdata_loader = _SatDataLoader(
-#         lst_firemaps=firemaps_mtbs_2004_2005,
-#         opt_select_firemap=_FireMapSelectOpt.MTBS,
-#         estimate_time=False
-#     )
-#
-#     timestamps_firemaps = satdata_loader.timestamps_firemaps
-#     _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004_2005)
-
-
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [1])
-def TEST_SatDataLoaderLenFiremaps_MTBS_2004(firemap_mtbs_2004, len_ts):
+def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004(firemap_mtbs_2004, expected_firemap_mtbs_timestamps_2004):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=firemap_mtbs_2004,
@@ -176,12 +149,12 @@ def TEST_SatDataLoaderLenFiremaps_MTBS_2004(firemap_mtbs_2004, len_ts):
         estimate_time=False
     )
 
-    assert satdata_loader.len_firemaps == len_ts
+    timestamps_firemaps = satdata_loader.timestamps_firemaps
+    _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004)
 
 
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [2])
-def TEST_SatDataLoaderLenFiremaps_MTBS_2004_2005(firemaps_mtbs_2004_2005, len_ts):
+def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_MTBS_2004_2005(firemaps_mtbs_2004_2005, expected_firemap_mtbs_timestamps_2004_2005):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=firemaps_mtbs_2004_2005,
@@ -189,12 +162,39 @@ def TEST_SatDataLoaderLenFiremaps_MTBS_2004_2005(firemaps_mtbs_2004_2005, len_ts
         estimate_time=False
     )
 
-    assert satdata_loader.len_firemaps == len_ts
+    timestamps_firemaps = satdata_loader.timestamps_firemaps
+    _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_mtbs_timestamps_2004_2005)
+
+
+@pytest.mark.data
+@pytest.mark.parametrize('shape_firemap', ((231, 233, 1),))
+def TEST_SatDataLoader_SHAPE_FIREMAP_MTBS_2004(firemap_mtbs_2004, shape_firemap):
+
+    satdata_loader = _SatDataLoader(
+        lst_firemaps=firemap_mtbs_2004,
+        opt_select_firemap=_FireMapSelectOpt.MTBS,
+        estimate_time=False
+    )
+
+    assert satdata_loader.shape_firemaps == shape_firemap
+
+
+@pytest.mark.data
+@pytest.mark.parametrize('shape_firemap', ((231, 233, 2),))
+def TEST_SatDataLoader_SHAPE_FIREMAP_MTBS_2004_2005(firemaps_mtbs_2004_2005, shape_firemap):
+
+    satdata_loader = _SatDataLoader(
+        lst_firemaps=firemaps_mtbs_2004_2005,
+        opt_select_firemap=_FireMapSelectOpt.MTBS,
+        estimate_time=False
+    )
+
+    assert satdata_loader.shape_firemaps == shape_firemap
 
 
 @pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
-def TEST_SatDataLoaderSourcesNotSet_FIREMAP_MTBS(exception):
+def TEST_SatDataLoader_NO_SOURCES_FIREMAP_MTBS(exception):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -231,9 +231,10 @@ def TEST_SatDataLoader_TIMESTAMPS_FIREMAP_CCI_2004_2005(firemaps_cci_2004_2005, 
     timestamps_firemaps = satdata_loader.timestamps_firemaps
     _pd.testing.assert_frame_equal(timestamps_firemaps, expected_firemap_cci_timestamps_2004_2005)
 
+
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [12])
-def TEST_SatDataLoaderLenFiremaps_CCI_2004(firemaps_cci_2004, len_ts):
+@pytest.mark.parametrize('shape_firemap', ((231, 233, 12),))
+def TEST_SatDataLoaders_SHAPE_FIREMAP_CCI_2004(firemaps_cci_2004, shape_firemap):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=firemaps_cci_2004,
@@ -241,12 +242,12 @@ def TEST_SatDataLoaderLenFiremaps_CCI_2004(firemaps_cci_2004, len_ts):
         estimate_time=False
     )
 
-    assert satdata_loader.len_firemaps == len_ts
+    assert satdata_loader.shape_firemaps == shape_firemap
 
 
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [24])
-def TEST_SatDataLoaderLenFiremaps_CCI_2004_2005(firemaps_cci_2004_2005, len_ts):
+@pytest.mark.parametrize('shape_firemap', ((231, 233, 24),))
+def TEST_SatDataLoader_SHAPE_FIREMAP_CCI_2004_2005(firemaps_cci_2004_2005, shape_firemap):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=firemaps_cci_2004_2005,
@@ -254,7 +255,7 @@ def TEST_SatDataLoaderLenFiremaps_CCI_2004_2005(firemaps_cci_2004_2005, len_ts):
         estimate_time=False
     )
 
-    assert satdata_loader.len_firemaps == len_ts
+    assert satdata_loader.shape_firemaps == shape_firemap
 
 
 @pytest.mark.data

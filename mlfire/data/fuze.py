@@ -434,10 +434,6 @@ if __name__ == '__main__':
 
     print(dataset_fuzion.shape_satdata)
     print(dataset_fuzion.shape_firemaps)
-
-    print(dataset_fuzion.len_ts_satdata)
-    print(dataset_fuzion.len_ts_firemaps)
-
     print(dataset_fuzion.features)
 
     dataset_fuzion.fuzeData()

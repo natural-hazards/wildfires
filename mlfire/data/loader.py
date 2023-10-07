@@ -1286,9 +1286,10 @@ class SatDataLoader(object):
         cnd_reflectance_sel = self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE
         cnd_temperature_sel = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
 
-        cnd_reflectance = self.lst_satdata_reflectance is not None
-        cnd_reflectance = (cnd_reflectance & (not cnd_reflectance_sel and not cnd_temperature_sel))
-        cnd_reflectance |= cnd_reflectance_sel
+        cnd_reflectance_lst_set = self.lst_satdata_reflectance is not None
+        cnd_reflectance = (cnd_reflectance_lst_set & cnd_reflectance_sel)
+        cnd_reflectance |= ~cnd_reflectance_sel & ~cnd_temperature_sel & cnd_reflectance_lst_set
+
         cnd_temperature = self.lst_satdata_temperature is not None
 
         if cnd_reflectance:
@@ -1319,9 +1320,10 @@ class SatDataLoader(object):
         cnd_reflectance_sel = self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE
         cnd_temperature_sel = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
 
-        cnd_reflectance = self.lst_satdata_reflectance is not None
-        cnd_reflectance = (cnd_reflectance & (not cnd_reflectance_sel and not cnd_temperature_sel))
-        cnd_reflectance |= cnd_reflectance_sel
+        cnd_reflectance_lst_set = self.lst_satdata_reflectance is not None
+        cnd_reflectance = (cnd_reflectance_lst_set & cnd_reflectance_sel)
+        cnd_reflectance |= ~cnd_reflectance_sel & ~cnd_temperature_sel & cnd_reflectance_lst_set
+
         cnd_temperature = self.lst_satdata_temperature is not None
 
         if cnd_reflectance:
@@ -1346,44 +1348,6 @@ class SatDataLoader(object):
 
         return self.__rs_cols_satdata
 
-    def getSatDataTimeseriesLength(self, opt_select: SatDataSelectOpt) -> int:
-        # TODO remove this method bcause it duplicates functionality
-        # len(self.timestamps_reflectance)
-        # len(self.timestamps_temperature)
-
-        # TODO use self.timestamps_satdata
-
-        if not isinstance(opt_select, SatDataSelectOpt):
-            err_msg = f'getSatDataTimeseriesLength() argument must be SatDataSelectOpt, not \'{type(opt_select)}\''
-            raise TypeError(err_msg)
-
-        if opt_select & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE:
-            self.__processLayersLayout_SATDATA_REFLECTANCE()  # TODO use
-            return self.__len_ts_reflectance
-        elif opt_select & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE:
-            self.__processLayersLayout_SATDATA_TEMPERATURE()
-            return self.__len_ts_temperature
-        else:
-            raise NotImplementedError
-
-    @property
-    def len_ts_satdata(self) -> int:
-        # TODO remove this method because it duplicates functionality len(self.timestamp_satdata)
-
-        len_ts_reflectance = len_ts_temperature = length_ts = 0
-
-        if self.lst_satdata_reflectance is not None:
-            length_ts = len_ts_reflectance = self.getSatDataTimeseriesLength(opt_select=SatDataSelectOpt.REFLECTANCE)
-        if self.lst_satdata_temperature is not None:
-            length_ts = len_ts_temperature = self.getSatDataTimeseriesLength(opt_select=SatDataSelectOpt.TEMPERATURE)
-
-        if self.lst_satdata_temperature is not None and self.lst_satdata_reflectance is not None:
-            if len_ts_reflectance != len_ts_temperature:
-                err_msg = ''
-                raise ValueError(err_msg)  # TODO is this error type right?
-
-        return length_ts
-
     @property
     def features(self) -> tuple:
 
@@ -1395,8 +1359,10 @@ class SatDataLoader(object):
         cnd_temperature_sel = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
         cnd_temperature_sel &= self.lst_satdata_temperature is not None
 
+        lst_features = []
+
         if cnd_reflectance_sel:
-            self.__lst_features = [
+            lst_features.extend([
                 str(SatDataFeatures.RED),   # visible (wave length 620–670nm)
                 str(SatDataFeatures.NIR),   # near infra-red (wave length 841–876nm)
                 str(SatDataFeatures.BLUE),   # visible (wave length 459–479nm)
@@ -1404,15 +1370,15 @@ class SatDataLoader(object):
                 str(SatDataFeatures.SWIR1),   # short-wave infra-red (wave length 1230–1250nm)
                 str(SatDataFeatures.SWIR2),   # short-wave infra-red (wave length 1628-1652nm)
                 str(SatDataFeatures.SWIR3),   # short-wave infra-red (wave length 2105-2155nm)
-            ]
+            ])
 
         if cnd_temperature_sel:
-            self.__lst_features.append(
+            lst_features.append(
                 str(SatDataFeatures.TEMPERATURE)  # TODO comment
             )
 
         # convert to tuple
-        self.__lst_features = tuple(self.__lst_features) if self.__lst_features is not None else None
+        self.__lst_features = tuple(lst_features) if lst_features is not None else None
         return self.__lst_features
 
     @property
@@ -1454,26 +1420,12 @@ class SatDataLoader(object):
         return self.__rs_cols_firemaps
 
     @property
-    def len_ts_firemaps(self) -> int:  # TODO private property
-
-        # TODO remove this method because it duplicates functionality len(self.timestamps_firemaps)
-
-        if not self._layout_layers_firemaps:
-            try:
-                self._processMetaData_FIREMAPS(opt_select=MetaDataSelectOpt.LAYOUT)
-            except TypeError:
-                err_msg = ''
-                raise TypeError(err_msg)
-
-        return self.__len_ts_firemaps
-
-    @property
-    def shape_firemaps(self) -> tuple:
+    def shape_firemaps(self) -> tuple:  # TODO use firemap instead of firemaps
 
         if self.__shape_firemaps is not None: return self.__shape_firemaps
 
         rows = self._rs_rows_firemaps; cols = self._rs_cols_firemaps
-        len_ts = self.len_ts_firemaps
+        len_ts = len(self.timestamps_firemaps)
 
         self.__shape_firemaps = (rows, cols, len_ts)
         return self.__shape_firemaps
@@ -1484,22 +1436,26 @@ if __name__ == '__main__':
     VAR_DATA_DIR = 'data/tifs'
 
     VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
-    # TODO add temperature
-    VAR_PREFIX_IMG_LABELS = 'ak_january_december_{}_100km'
+    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_100km'
+    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_100km'
 
-    VAR_LST_SATIMGS = []
+    VAR_LST_REFLECTANCE = []
+    VAR_LST_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
 
     for year in range(2004, 2006):
 
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
-        VAR_PREFIX_IMG_LABELS_YEAR = VAR_PREFIX_IMG_LABELS.format(year)
+        VAR_PREFIX_IMG_TEMPERATURE_YEAR = VAR_PREFIX_IMG_TEMPERATURE.format(year)
+        VAR_PREFIX_IMG_LABELS_YEAR = VAR_PREFIX_IMG_FIREMAPS.format(year)
 
         fn_satimg_reflec = '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_REFLECTANCE_YEAR)
         fn_satimg_reflec = os.path.join(VAR_DATA_DIR, fn_satimg_reflec)
-        VAR_LST_SATIMGS.append(fn_satimg_reflec)
+        VAR_LST_REFLECTANCE.append(fn_satimg_reflec)
 
-        # TODO add temperature
+        fn_satimg_temperature = '{}_epsg3338_area_0.tif'.format(VAR_PREFIX_IMG_TEMPERATURE_YEAR)
+        fn_satimg_temperature = os.path.join(VAR_DATA_DIR, fn_satimg_temperature)
+        VAR_LST_TEMPERATURE.append(fn_satimg_temperature)
 
         fn_labels_mtbs = '{}_epsg3338_area_0_mtbs_labels.tif'.format(VAR_PREFIX_IMG_LABELS_YEAR)
         fn_labels_mtbs = os.path.join(VAR_DATA_DIR, fn_labels_mtbs)
@@ -1508,7 +1464,8 @@ if __name__ == '__main__':
     # setup of data set loader
     dataset_loader = SatDataLoader(
         lst_firemaps=VAR_LST_FIREMAPS,
-        lst_satdata_reflectance=VAR_LST_SATIMGS,
+        # lst_satdata_reflectance=VAR_LST_REFLECTANCE,
+        lst_satdata_temperature=VAR_LST_TEMPERATURE,
         opt_select_satdata=SatDataSelectOpt.ALL,
         estimate_time=True
     )
@@ -1523,7 +1480,7 @@ if __name__ == '__main__':
     print(dataset_loader.shape_satdata)
     print(dataset_loader.shape_firemaps)
 
-    print(f'len ts: {len(dataset_loader.timestamps_reflectance)}')
+    print(f'len ts: {len(dataset_loader.timestamps_satdata)}')
     print(f'len ts: {len(dataset_loader.timestamps_firemaps)}')
 
     dataset_loader.loadSatData()

@@ -23,8 +23,9 @@ _FireMapSelectOpt = _mlfire_data_loader.FireMapSelectOpt
 _SatDataLoader = _mlfire_data_loader.SatDataLoader
 _PandasDataFrame = _pd.DataFrame
 
+
 """
-Satellite data 
+Satellite data
 """
 
 
@@ -36,7 +37,6 @@ class TestSatDataType(Enum):
     TEMPERATURE = 'lst'
 
     def __str__(self):
-
         return self.value
 
 
@@ -155,8 +155,8 @@ def TEST_SatDataLoader_TIMESTAMPS_SATDATA_REFLECTANCE_2004_2005(satdata_reflecta
 
 
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [46])
-def TEST_SatDataLoaderLenTimeseries_REFLECTANCE_2004(satdata_reflectance_2004, len_ts):
+@pytest.mark.parametrize('shape_satdata', ((231, 233, 46, 7),))
+def TEST_SatDataLoader_SHAPE_SATDATA_REFLECTANCE_2004(satdata_reflectance_2004, shape_satdata):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -164,13 +164,12 @@ def TEST_SatDataLoaderLenTimeseries_REFLECTANCE_2004(satdata_reflectance_2004, l
         estimate_time=False
     )
 
-    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.REFLECTANCE) == len_ts
-    assert satdata_loader.len_ts == len_ts
+    assert satdata_loader.shape_satdata == shape_satdata
 
 
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [92])
-def TEST_SatDataLoaderLenTimeseries_REFLECTANCE_2004_2005(satdata_reflectance_2004_2005, len_ts):
+@pytest.mark.parametrize('shape_satdata', ((231, 233, 92, 7),))
+def TEST_SatDataLoader_SHAPE_SATDATA_REFLECTANCE_2004_2005(satdata_reflectance_2004_2005, shape_satdata):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -178,13 +177,12 @@ def TEST_SatDataLoaderLenTimeseries_REFLECTANCE_2004_2005(satdata_reflectance_20
         estimate_time=False
     )
 
-    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.REFLECTANCE) == len_ts
-    assert satdata_loader.len_ts == len_ts
+    assert satdata_loader.shape_satdata == shape_satdata
 
 
 @pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
-def TEST_SatDataLoaderSourcesNotSet_REFLECTANCE(satdata_temperature_2004, exception):
+def TEST_SatDataLoader_NO_SOURCES_REFLECTANCE(satdata_temperature_2004, exception):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -223,8 +221,8 @@ def TEST_SatDataLoader_TIMESTAMPS_SATDATA_TEMPERATURE_2004_2005(satdata_temperat
 
 
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [46])
-def TEST_SatDataLoaderTemperatureLengthTimeseries_2004(satdata_temperature_2004, len_ts):
+@pytest.mark.parametrize('shape_satdata', ((231, 233, 46, 1),))
+def TEST_SatDataLoader_SHAPE_SATDATA_TEMPERATURE_2004(satdata_temperature_2004, shape_satdata):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -232,13 +230,12 @@ def TEST_SatDataLoaderTemperatureLengthTimeseries_2004(satdata_temperature_2004,
         estimate_time=False
     )
 
-    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.TEMPERATURE) == len_ts
-    assert satdata_loader.len_ts == len_ts
+    assert satdata_loader.shape_satdata == shape_satdata
 
 
 @pytest.mark.data
-@pytest.mark.parametrize('len_ts', [92])
-def TEST_SatDataLoaderTemperatureLengthTimeseries_2004_2005(satdata_temperature_2004_2005, len_ts):
+@pytest.mark.parametrize('shape_satdata', ((231, 233, 92, 1),))
+def TEST_SatDataLoader_SHAPE_SATDATA_TEMPERATURE_2004_2005(satdata_temperature_2004_2005, shape_satdata):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -246,13 +243,12 @@ def TEST_SatDataLoaderTemperatureLengthTimeseries_2004_2005(satdata_temperature_
         estimate_time=False
     )
 
-    assert satdata_loader.getTimeseriesLength(opt_select=_SatDataSelectOpt.TEMPERATURE) == len_ts
-    assert satdata_loader.len_ts == len_ts
+    assert satdata_loader.shape_satdata == shape_satdata
 
 
 @pytest.mark.data
 @pytest.mark.parametrize('exception', [pytest.raises(TypeError)])
-def TEST_SatDataLoaderSourcesNotSet_TEMPERATURE(satdata_reflectance_2004, exception):
+def TEST_SatDataLoader_NO_SOURCES_TEMPERATURE(satdata_reflectance_2004, exception):
 
     satdata_loader = _SatDataLoader(
         lst_firemaps=None,
@@ -262,3 +258,5 @@ def TEST_SatDataLoaderSourcesNotSet_TEMPERATURE(satdata_reflectance_2004, except
 
     with exception:
         _ = satdata_loader.timestamps_temperature
+
+# TODO fuzion temperature and reflectance data sets

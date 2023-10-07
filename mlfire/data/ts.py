@@ -502,15 +502,14 @@ if __name__ == '__main__':
         estimate_time=True
     )
 
-    # print(dataset_loader.timestamps_firemaps)
-    # print(dataset_loader.timestamps_satdata)
+    print(dataset_loader.timestamps_firemaps)
+    print(dataset_loader.timestamps_satdata)
 
     VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']
     VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
-    print(dataset_loader.len_ts_satdata)
     print(dataset_loader.shape_satdata)
-    # dataset_loader.createDatasets()
-    #
-    # print(dataset_loader.getTrainingDataset()[0].shape)
+
+    dataset_loader.createDatasets()
+    print(dataset_loader.getTrainingDataset()[0].shape)
