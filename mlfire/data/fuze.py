@@ -281,7 +281,11 @@ class SatDataFuze(SatDataLoader):
         if not cnd_reflectance_sel:
             if self.lst_satdata_reflectance is not None:
                 rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
-                np_satdata_reflectance = _np.empty((_NFEATURES_REFLECTANCE * self._ntimestamps, rows, cols))
+                len_features = len(self.selected_timestamps_satdata)
+                len_features *= _NFEATURES_REFLECTANCE
+
+                shape_reflectance = (len_features, rows, cols)
+                np_satdata_reflectance = _np.empty(shape=shape_reflectance)
 
                 self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
                 self._loadSatData_IMPL(
@@ -353,10 +357,14 @@ class SatDataFuze(SatDataLoader):
     def len_ts_satdata(self) -> int:
 
         len_ts = super().len_ts_satdata
+        len_timestamps = len(self.selected_timestamps_satdata)
 
-        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI: len_ts += self._ntimestamps
-        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2: len_ts += self._ntimestamps
-        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI: len_ts += self._ntimestamps
+        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
+            len_ts += len_timestamps
+        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
+            len_ts += len_timestamps
+        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
+            len_ts += len_timestamps
 
         return len_ts
 

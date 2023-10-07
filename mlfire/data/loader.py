@@ -18,6 +18,9 @@ from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 
 # lazy imports
 _datetime = lazy_import('datetime')
+
+_gdal = lazy_import('osgeo.gdal')
+
 _np = lazy_import('numpy')
 _pd = lazy_import('pandas')
 
@@ -179,7 +182,7 @@ class SatDataLoader(object):
         self.__opt_select_satdata = None
         self.opt_select_satdata = opt_select_satdata
 
-        self._satdata_processed = False
+        self._satdata_processed = False  # TODO set as private
 
         # properties source - fire maps (wildfire locations)
 
@@ -198,16 +201,16 @@ class SatDataLoader(object):
         self.__cci_confidence_level = -1
         if opt_select_firemap == FireMapSelectOpt.CCI: self.cci_confidence_level = cci_confidence_level
 
-        self._firemaps_processed = False
+        self._firemaps_processed = False  # TODO set as private
 
         # timestamps
 
         self.__df_timestamps = None
 
-        self.__selected_timestamps = None
-        self.selected_timestamps = select_timestamps
+        self.__selected_timestamps = None  # TODO rename -> __lst_selected_timestamps
+        self.selected_timestamps = select_timestamps  # -> __lst_selected_timestamps
 
-        self.__ntimestamps = -1
+        self.__ntimestamps = -1  # TODO remove
         self.__timestamps_processed = False
 
         # measure time
@@ -304,6 +307,8 @@ class SatDataLoader(object):
     @property
     def timestamps_reflectance(self) -> _PandasDataFrame:
 
+        # TODO check if temperature is selected
+
         if self._df_timestamps_reflectance is None:
             self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
 
@@ -315,6 +320,8 @@ class SatDataLoader(object):
 
     @property
     def timestamps_temperature(self) -> _PandasDataFrame:
+
+        # TODO check if temperature is selected
 
         if self._df_timestamps_temperature is None:
             self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.TEMPERATURE)
@@ -338,7 +345,7 @@ class SatDataLoader(object):
             elif self.lst_satdata_temperature is not None:
                 df_timestamps = self.timestamps_temperature
             else:
-                raise TypeError  # TODO check error
+                raise TypeError  # TODO check if this error right
         else:
             df_timestamps_reflectance = df_timestamps_temperature = None
 
@@ -355,9 +362,26 @@ class SatDataLoader(object):
                 if not df_timestamps_temperature.equals(df_timestamps_reflectance):
                     raise TypeError  # TODO check error
 
-        return df_timestamps
+        return df_timestamps  # TODO as private attribute
 
-    # TODO selected_timestamps_satdata
+    @property
+    def selected_timestamps_satdata(self) -> _PandasDataFrame:
+
+        df_timestamps = None  # TODO as private attribute
+
+        if isinstance(self.selected_timestamps[0], _datetime.date):
+            begin_timestamp = self.selected_timestamps[0]
+            end_timestamp = self.selected_timestamps[1]
+
+            if (begin_timestamp == self.timestamps_satdata['Timestamps'].iloc[0] and
+                    end_timestamp == self.timestamps_satdata['Timestamps'].iloc[-1]):
+                df_timestamps = self.timestamps_satdata
+            else:
+                raise NotImplementedError
+        else:
+            raise NotImplementedError
+
+        return df_timestamps
 
     @property
     def timestamps_firemaps(self) -> _PandasDataFrame:
@@ -471,49 +495,6 @@ class SatDataLoader(object):
 
         self.__estimate_time = flg
 
-    """
-    Private properties
-    """
-
-    # @property
-    # def _df_timestamps(self):  # TODO remove
-    #
-    #     if not self.__timestamps_processed: self._processTimestamps_SATDATA()
-    #
-    #     if self._df_timestamps_temperature is not None:
-    #         self.__df_timestamps = self._df_timestamps_reflectance
-    #     elif self._df_timestamps_reflectance is not None:
-    #         self.__df_timestamps = self._df_timestamps_temperature
-    #
-    #     return self.__df_timestamps
-    #
-    # @_df_timestamps.deleter
-    # def _df_timestamps(self):  # TODO remove
-    #     del self.__df_timestamps; self.__df_timestamps = None
-
-    @property
-    def _ntimestamps(self) -> int:  # TODO change to len(self.selected_timestamps)
-
-        if self.__ntimestamps != -1: return self.__ntimestamps
-
-        self._processMetadata_SATDATA()  # TODO select timestamps
-        df_timestamps = self.timestamps_satdata
-
-        if isinstance(self.selected_timestamps[0], _datetime.date):
-            begin_timestamp = self.selected_timestamps[0]
-            end_timestamp = self.selected_timestamps[1]
-
-            cond = df_timestamps['Timestamps'] >= begin_timestamp
-            cond &= df_timestamps['Timestamps'] <= end_timestamp
-
-            self.__ntimestamps = len(df_timestamps[cond])
-        else:
-            # TODO type int
-            raise NotImplementedError
-
-        self.__timestamps_processed = True  # TODO remove?
-        return self.__ntimestamps
-
     def _reset(self):
 
         del self._df_timestamps_reflectance; self._df_timestamps_reflectance = None
@@ -536,7 +517,8 @@ class SatDataLoader(object):
         self._nfeatures_ts = 0  # TODO rename nbands_img or remove?
 
         # TODO comment
-        self.__ntimestamps = -1; self.__timestamps_processed = False
+        self.__ntimestamps = -1;  # TODO remove
+        self.__timestamps_processed = False
 
         # set flags to false
         self._satdata_processed = False  # TODO private?
@@ -549,14 +531,10 @@ class SatDataLoader(object):
     @staticmethod
     def __loadGeoTIFF_DATASETS(lst_sources: Union[list[str], tuple[str]]) -> list:
 
-        # lazy import
-        gdal = lazy_import('osgeo.gdal')  # TODO move to beggining of script
-
         lst_ds = []
-
         for fn in lst_sources:
             try:
-                ds = gdal.Open(fn)
+                ds = _gdal.Open(fn)
             except IOError:
                 raise RuntimeWarning(f'cannot load source {fn}')
 
@@ -838,6 +816,8 @@ class SatDataLoader(object):
 
     def _processMetadata_SATDATA(self) -> None:
 
+        if self._satdata_processed: return
+
         # processing reflectance (MOD09A1)
 
         if self.lst_satdata_reflectance is not None and \
@@ -1048,18 +1028,20 @@ class SatDataLoader(object):
         if cnd_temperature: nfeatures += 1
 
         rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
-        self._np_satdata = _np.empty(shape=(nfeatures * self._ntimestamps, rows, cols), dtype=_np.float32)
+        len_timestamps = len(self.selected_timestamps_satdata)
+
+        self._np_satdata = _np.empty(shape=(nfeatures * len_timestamps, rows, cols), dtype=_np.float32)
 
         if cnd_reflectance:
-            idx = [True] * _NFEATURES_REFLECTANCE + [False] * (nfeatures - _NFEATURES_REFLECTANCE)
-            idx = idx * self._ntimestamps  # TODO use len(self.selected_satdata)
+            idx = [True] * _NFEATURES_REFLECTANCE + [False] * (nfeatures - _NFEATURES_REFLECTANCE)  # TODO check this issue
+            idx = idx * len_timestamps
             self._np_satdata_reflectance = self._np_satdata[idx, :, :]
 
         if cnd_temperature:
             idx = []
             if cnd_reflectance: idx += [False] * _NFEATURES_REFLECTANCE
             idx = idx + [True] + [False] * extra_features
-            idx = idx * self._ntimestamps  # TODO use len(self.selected_satdata)
+            idx = idx * len_timestamps
 
             self._np_satdata_temperature = self._np_satdata[idx, :, :]
 
