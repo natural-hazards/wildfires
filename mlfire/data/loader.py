@@ -129,7 +129,7 @@ class SatDataLoader(object):
                  # TODO comment
                  opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
                  # TODO comment
-                 select_timestamps: Union[list, tuple, None] = None,
+                 select_timestamps: Union[list, tuple, None] = None,  # TODO rename -> lst_selected_timestamps
                  # TODO comment
                  cci_confidence_level: int = 70,
                  # TODO comment
@@ -162,9 +162,9 @@ class SatDataLoader(object):
         self.__rs_rows_firemaps = -1
         self.__rs_cols_firemaps = -1
 
-        self.__len_ts_reflectance = 0
-        self.__len_ts_temperature = 0
-        self.__len_ts_firemaps = 0
+        self.__len_ts_reflectance = 0  # TODO remove?
+        self.__len_ts_temperature = 0  # TODO remove?
+        self.__len_ts_firemaps = 0  # TODO remove?
 
         self.__lst_features = None
 
@@ -205,7 +205,7 @@ class SatDataLoader(object):
 
         # timestamps
 
-        self.__df_timestamps = None
+        self.__df_timestamps = None  # TODO remove?
 
         self.__selected_timestamps = None  # TODO rename -> __lst_selected_timestamps
         self.selected_timestamps = select_timestamps  # -> __lst_selected_timestamps
@@ -307,7 +307,7 @@ class SatDataLoader(object):
     @property
     def timestamps_reflectance(self) -> _PandasDataFrame:
 
-        # TODO check if temperature is selected
+        # TODO check if reflectance is selected
 
         if self._df_timestamps_reflectance is None:
             self._processTimestamps_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
@@ -360,7 +360,7 @@ class SatDataLoader(object):
 
             if cnd_reflectance and cnd_temperature:
                 if not df_timestamps_temperature.equals(df_timestamps_reflectance):
-                    raise TypeError  # TODO check error
+                    raise TypeError  # TODO check error is right
 
         return df_timestamps  # TODO as private attribute
 
@@ -381,7 +381,7 @@ class SatDataLoader(object):
         else:
             raise NotImplementedError
 
-        return df_timestamps
+        return df_timestamps  # TODO as private attributes
 
     @property
     def timestamps_firemaps(self) -> _PandasDataFrame:
@@ -396,7 +396,7 @@ class SatDataLoader(object):
         return self._df_timestamps_firemaps
 
     """
-    FireCII firemaps properties
+    FireCII (ESA firemaps) firemaps properties
     """
 
     @property
@@ -1103,6 +1103,8 @@ class SatDataLoader(object):
         # TODO check error
         self.__allocSatDataBuffer(extra_features=extra_bands)
 
+        # TODO use _loadSatData_IMPL
+
         # TODO check loaded
         # TODO check if reflectance and temperature timestamps are same
         if isinstance(self.selected_timestamps[0], _datetime.date):
@@ -1345,6 +1347,9 @@ class SatDataLoader(object):
         return self.__rs_cols_satdata
 
     def getSatDataTimeseriesLength(self, opt_select: SatDataSelectOpt) -> int:
+        # TODO remove this method bcause it duplicates functionality
+        # len(self.timestamps_reflectance)
+        # len(self.timestamps_temperature)
 
         # TODO use self.timestamps_satdata
 
@@ -1362,7 +1367,8 @@ class SatDataLoader(object):
             raise NotImplementedError
 
     @property
-    def len_ts_satdata(self) -> int:  # TODO private property
+    def len_ts_satdata(self) -> int:
+        # TODO remove this method because it duplicates functionality len(self.timestamp_satdata)
 
         len_ts_reflectance = len_ts_temperature = length_ts = 0
 
@@ -1414,7 +1420,9 @@ class SatDataLoader(object):
 
         if self.__shape_satdata is not None: return self.__shape_satdata
 
-        rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
+        rows = self._rs_rows_satdata
+        cols = self._rs_cols_satdata
+
         len_ts = len(self.timestamps_satdata)
         len_features = len(self.features) if self.features is not None else 0
 
@@ -1448,7 +1456,7 @@ class SatDataLoader(object):
     @property
     def len_ts_firemaps(self) -> int:  # TODO private property
 
-        # TODO improve implementation
+        # TODO remove this method because it duplicates functionality len(self.timestamps_firemaps)
 
         if not self._layout_layers_firemaps:
             try:
@@ -1514,5 +1522,8 @@ if __name__ == '__main__':
 
     print(dataset_loader.shape_satdata)
     print(dataset_loader.shape_firemaps)
+
+    print(f'len ts: {len(dataset_loader.timestamps_reflectance)}')
+    print(f'len ts: {len(dataset_loader.timestamps_firemaps)}')
 
     dataset_loader.loadSatData()

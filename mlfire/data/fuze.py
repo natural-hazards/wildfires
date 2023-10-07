@@ -368,23 +368,6 @@ class SatDataFuze(SatDataLoader):
     """
 
     @property
-    def len_ts_satdata(self) -> int:
-
-        # private attribute
-
-        len_ts = super().len_ts_satdata
-        len_timestamps = len(self.selected_timestamps_satdata)
-
-        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
-            len_ts += len_timestamps
-        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
-            len_ts += len_timestamps
-        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
-            len_ts += len_timestamps
-
-        return len_ts
-
-    @property
     def features(self) -> tuple:
 
         if self.__lst_features is not None: return self.__lst_features
@@ -448,7 +431,13 @@ if __name__ == '__main__':
     VAR_END_DATE = dataset_fuzion.timestamps_satdata.iloc[-1]['Timestamps']
 
     dataset_fuzion.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
-    print(dataset_fuzion.shape_satdata)
-    # print(dataset_fuzion.features)
 
-    # dataset_fuzion.fuzeData()
+    print(dataset_fuzion.shape_satdata)
+    print(dataset_fuzion.shape_firemaps)
+
+    print(dataset_fuzion.len_ts_satdata)
+    print(dataset_fuzion.len_ts_firemaps)
+
+    print(dataset_fuzion.features)
+
+    dataset_fuzion.fuzeData()

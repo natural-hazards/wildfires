@@ -142,7 +142,6 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self._ds_test = None
         self._ds_val = None
 
-        # TODO properties for creating datasets
         self.__lst_preprocess_satdata = None; self.__satdata_opt = -1
         self.opt_preprocess_satdata = opt_preprocess_satdata
 
@@ -261,11 +260,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
     def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray) -> None:
 
-        NFEATURES_TS = self._nfeatures_ts  # TODO implement for additional indexes such as NDVI and LST
         len_features = len(self.features)
-
         for band_id in range(len_features):
-
             img_band = np_satdata[:, band_id::len_features]
 
             # check if standard deviation is greater than 0
@@ -285,7 +281,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
             if cnd_reshape: np_satdata = np_satdata.reshape(-1)
 
-            # standardization
+            # standardization time series using zscore
             if SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt == SatDataPreprocessOpt.STANDARTIZE_ZSCORE:
                 self.__preprocess_STANDARTIZE(np_satdata=np_satdata)
 
@@ -438,7 +434,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         if self.test_ratio > 0.: self._ds_test = (lst_satdata[1], lst_firemaps[1])
         if self.val_ratio > 0.: self._ds_val = (lst_satdata[2], lst_firemaps[2])
 
-        # set list of satellite data and fire maps
+        # TODO set list of satellite data and fire maps
 
     def getTrainingDataset(self) -> tuple[_np.ndarray, _np.ndarray]:
 
