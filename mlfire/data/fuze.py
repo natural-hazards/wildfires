@@ -63,6 +63,10 @@ class VegetationIndexSelectOpt(Enum):
 
         return self.value
 
+    def __str__(self) -> str:
+
+        return self.name.lower()
+
 
 # defines
 LIST_VEGETATION_SELECT_OPT = Union[
@@ -77,7 +81,7 @@ class SatDataFuze(SatDataLoader):
                  lst_satdata_reflectance: LIST_STRINGS = None,
                  lst_satdata_temperature: LIST_STRINGS = None,
                  # TODO comment
-                 opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,  # TODO change argument type
+                 opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -106,6 +110,9 @@ class SatDataFuze(SatDataLoader):
             mtbs_min_severity=mtbs_min_severity,
             estimate_time=estimate_time
         )
+
+        self.__shape_satdata = None
+        self.__lst_features = None
 
         self._lst_vegetation_index = None; self._vi_ops = -1  # TODO private
         self.lst_vegetation_add = lst_vegetation_add  # TODO rename
@@ -137,6 +144,13 @@ class SatDataFuze(SatDataLoader):
             self._vi_ops = 0
             self._lst_vegetation_index = vi
             for op in vi: self._vi_ops |= op.value
+
+    def _reset(self) -> None:
+
+        SatDataLoader._reset(self)
+
+        if hasattr(self, '__lst_features'): del self.__lst_features; self.__lst_features = None
+        if hasattr(self, '__shape_satdata'): del self.__shape_satdata; self.__shape_satdata = None
 
     """
     Vegetation
@@ -350,11 +364,13 @@ class SatDataFuze(SatDataLoader):
         self.__addVegetationFeatures()
 
     """
-    
+    Shape (satellite data)  
     """
 
     @property
     def len_ts_satdata(self) -> int:
+
+        # private attribute
 
         len_ts = super().len_ts_satdata
         len_timestamps = len(self.selected_timestamps_satdata)
@@ -367,6 +383,22 @@ class SatDataFuze(SatDataLoader):
             len_ts += len_timestamps
 
         return len_ts
+
+    @property
+    def features(self) -> tuple:
+
+        if self.__lst_features is not None: return self.__lst_features
+
+        lst_features = list(super().features)
+        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
+            lst_features.append(str(VegetationIndexSelectOpt.EVI))
+        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
+            lst_features.append(str(VegetationIndexSelectOpt.EVI2))
+        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
+            lst_features.append(str(VegetationIndexSelectOpt.NDVI))
+
+        self.__lst_features = tuple(lst_features)
+        return self.__lst_features
 
 
 if __name__ == '__main__':
@@ -414,6 +446,9 @@ if __name__ == '__main__':
 
     VAR_START_DATE = dataset_fuzion.timestamps_satdata.iloc[0]['Timestamps']
     VAR_END_DATE = dataset_fuzion.timestamps_satdata.iloc[-1]['Timestamps']
-    dataset_fuzion.select_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
-    dataset_fuzion.fuzeData()
+    dataset_fuzion.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
+    print(dataset_fuzion.shape_satdata)
+    # print(dataset_fuzion.features)
+
+    # dataset_fuzion.fuzeData()

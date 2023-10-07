@@ -112,13 +112,6 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  estimate_time: bool = True,
                  random_state: int = 42):
 
-        self.__lst_satdata = None
-        self.__lst_firemaps = None
-
-        self._ds_training = None
-        self._ds_test = None
-        self._ds_val = None
-
         SatDataView.__init__(
             self,
             lst_firemaps=None,
@@ -141,6 +134,13 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             lst_vegetation_add=lst_vegetation_add,
             estimate_time=estimate_time
         )
+
+        self.__lst_satdata = None
+        self.__lst_firemaps = None
+
+        self._ds_training = None
+        self._ds_test = None
+        self._ds_val = None
 
         # TODO properties for creating datasets
         self.__lst_preprocess_satdata = None; self.__satdata_opt = -1
@@ -246,12 +246,12 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         SatDataFuze._reset(self)
 
-        del self.__lst_satdata; self.__lst_satdata = None
-        del self.__lst_firemaps; self.__lst_firemaps = None
+        if hasattr(self, '__lst_satdata'): del self.__lst_satdata; self.__lst_satdata = None
+        if hasattr(self, '__lst_firemaps'): del self.__lst_firemaps; self.__lst_firemaps = None
 
-        del self._ds_training; self._ds_training = None
-        del self._ds_test; self._ds_test = None
-        del self._ds_val; self._ds_val = None
+        if hasattr(self, '_ds_training'): del self._ds_training; self._ds_training = None
+        if hasattr(self, '_ds_test'): del self._ds_test; self._ds_test = None
+        if hasattr(self, '_ds_val'): del self._ds_val; self._ds_val = None
 
         gc.collect()
 
@@ -262,16 +262,17 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray) -> None:
 
         NFEATURES_TS = self._nfeatures_ts  # TODO implement for additional indexes such as NDVI and LST
+        len_features = len(self.features)
 
-        for band_id in range(NFEATURES_TS):
+        for band_id in range(len_features):
 
-            img_band = np_satdata[:, band_id::NFEATURES_TS]
+            img_band = np_satdata[:, band_id::len_features]
 
             # check if standard deviation is greater than 0
             std_band = _np.std(img_band)
             if std_band == 0.: continue
 
-            np_satdata[:, band_id::NFEATURES_TS] = _scipy_stats.zscore(img_band, axis=1)
+            np_satdata[:, band_id::len_features] = _scipy_stats.zscore(img_band, axis=1)
 
     def __preproess_FILTER_SAVITZKY_GOLAY(self, np_satdata: _np.ndarray) -> None:
 
@@ -501,7 +502,7 @@ if __name__ == '__main__':
         lst_satdata_temperature=VAR_LST_TEMPERATURE,
         opt_split_satdata=SatDataSplitOpt.IMG_HORIZONTAL_SPLIT,
         lst_vegetation_add=[VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI],
-        opt_select_satdata=SatDataSelectOpt.TEMPERATURE,
+        opt_select_satdata=SatDataSelectOpt.ALL,
         estimate_time=True
     )
 
@@ -512,6 +513,8 @@ if __name__ == '__main__':
     VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
-    dataset_loader.createDatasets()
-
-    print(dataset_loader.getTrainingDataset()[0].shape)
+    print(dataset_loader.len_ts_satdata)
+    print(dataset_loader.shape_satdata)
+    # dataset_loader.createDatasets()
+    #
+    # print(dataset_loader.getTrainingDataset()[0].shape)

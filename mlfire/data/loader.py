@@ -514,8 +514,6 @@ class SatDataLoader(object):
         self.__len_ts_temperature = 0
         self.__len_ts_firemaps = 0
 
-        self._nfeatures_ts = 0  # TODO rename nbands_img or remove?
-
         # TODO comment
         self.__ntimestamps = -1;  # TODO remove
         self.__timestamps_processed = False
@@ -1016,6 +1014,8 @@ class SatDataLoader(object):
 
     def __allocSatDataBuffer(self, extra_features: int = 0) -> None:
 
+        # TODO simplify implementation using self.shape_selected_satdata
+
         if not self._satdata_processed: self._processMetadata_SATDATA()
 
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
@@ -1391,18 +1391,18 @@ class SatDataLoader(object):
 
         if cnd_reflectance_sel:
             self.__lst_features = [
-                SatDataFeatures.RED,   # visible (wave length 620–670nm)
-                SatDataFeatures.NIR,   # near infra-red (wave length 841–876nm)
-                SatDataFeatures.BLUE,   # visible (wave length 459–479nm)
-                SatDataFeatures.GREEN,   # visible (wave length 545–565nm)
-                SatDataFeatures.SWIR1,   # short-wave infra-red (wave length 1230–1250nm)
-                SatDataFeatures.SWIR2,   # short-wave infra-red (wave length 1628-1652nm)
-                SatDataFeatures.SWIR3,   # short-wave infra-red (wave length 2105-2155nm)
+                str(SatDataFeatures.RED),   # visible (wave length 620–670nm)
+                str(SatDataFeatures.NIR),   # near infra-red (wave length 841–876nm)
+                str(SatDataFeatures.BLUE),   # visible (wave length 459–479nm)
+                str(SatDataFeatures.GREEN),   # visible (wave length 545–565nm)
+                str(SatDataFeatures.SWIR1),   # short-wave infra-red (wave length 1230–1250nm)
+                str(SatDataFeatures.SWIR2),   # short-wave infra-red (wave length 1628-1652nm)
+                str(SatDataFeatures.SWIR3),   # short-wave infra-red (wave length 2105-2155nm)
             ]
 
         if cnd_temperature_sel:
             self.__lst_features.append(
-                SatDataFeatures.TEMPERATURE  # TODO comment
+                str(SatDataFeatures.TEMPERATURE)  # TODO comment
             )
 
         # convert to tuple
@@ -1415,7 +1415,7 @@ class SatDataLoader(object):
         if self.__shape_satdata is not None: return self.__shape_satdata
 
         rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
-        len_ts = self.len_ts_satdata
+        len_ts = len(self.timestamps_satdata)
         len_features = len(self.features) if self.features is not None else 0
 
         self.__shape_satdata = (rows, cols, len_ts, len_features)
@@ -1501,7 +1501,7 @@ if __name__ == '__main__':
     dataset_loader = SatDataLoader(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS,
-        opt_select_satdata=SatDataSelectOpt.REFLECTANCE,
+        opt_select_satdata=SatDataSelectOpt.ALL,
         estimate_time=True
     )
 
