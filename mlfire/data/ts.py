@@ -23,6 +23,7 @@ _np = lazy_import('numpy')
 _sk_model_selection = lazy_import('sklearn.model_selection')
 
 _scipy_stats = lazy_import('scipy.stats')
+_scipy_signal = lazy_import('scipy.signal')
 
 
 class SatDataSplitOpt(Enum):
@@ -104,6 +105,9 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  val_ratio: float = .0,
                  # TODO comment
                  opt_preprocess_satdata: LIST_PREPROCESS_SATDATA_OPT = (SatDataPreprocessOpt.STANDARTIZE_ZSCORE,),
+                 # TODO comment
+                 savgol_polyorder: int = 1,
+                 savgol_winlen: int = 5,
                  # view
                  ndvi_view_threshold: Union[float, None] = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
@@ -144,6 +148,12 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         self.__lst_preprocess_satdata = None; self.__satdata_opt = -1
         self.opt_preprocess_satdata = opt_preprocess_satdata
+
+        self.__savgol_polyorder = None
+        self.savgol_polyorder = savgol_polyorder
+
+        self.__savgol_winlen = None
+        self.savgol_winlen = savgol_winlen
 
         self.__opt_split_satdata = None
         self.opt_split_satdata = opt_split_satdata
@@ -241,6 +251,34 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self._reset()
         self.__random_state = state
 
+    @property
+    def savgol_polyorder(self) -> int:
+
+        return self.__savgol_polyorder
+
+    @savgol_polyorder.setter
+    def savgol_polyorder(self, order: int) -> None:
+
+        if self.__savgol_polyorder == order:
+            return
+
+        self._reset()
+        self.__savgol_polyorder = order
+
+    @property
+    def savgol_winlen(self) -> int:
+
+        return self.__savgol_winlen
+
+    @savgol_winlen.setter
+    def savgol_winlen(self, winlen: int) -> None:
+
+        if self.__savgol_winlen == winlen:
+            return
+
+        self._reset()
+        self.__savgol_winlen = winlen
+
     def _reset(self) -> None:
 
         SatDataFuze._reset(self)
@@ -261,18 +299,27 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray) -> None:
 
         len_features = len(self.features)
-        for band_id in range(len_features):
-            img_band = np_satdata[:, band_id::len_features]
+        for feature_id in range(len_features):
+            sub_img = np_satdata[:, feature_id::len_features]
 
             # check if standard deviation is greater than 0
-            std_band = _np.std(img_band)
+            std_band = _np.std(sub_img)
             if std_band == 0.: continue
 
-            np_satdata[:, band_id::len_features] = _scipy_stats.zscore(img_band, axis=1)
+            np_satdata[:, feature_id::len_features] = _scipy_stats.zscore(sub_img, axis=1)
 
     def __preproess_FILTER_SAVITZKY_GOLAY(self, np_satdata: _np.ndarray) -> None:
 
-        pass
+        len_features = len(self.features)
+        for feature_id in range(len_features):
+            sub_img = np_satdata[:, feature_id::len_features]
+
+            # apply Savitzky–Golay filter, parameters are user-defined
+            np_satdata[:, feature_id::len_features] = _scipy_signal.savgol_filter(
+                sub_img,
+                window_length=self.savgol_winlen,
+                polyorder=self.savgol_polyorder
+            )
 
     def __preprocess(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> (LIST_NDARRAYS, LIST_NDARRAYS):
 
