@@ -831,7 +831,7 @@ if __name__ == '__main__':
     )
 
     print('#ts = {}'.format(dataset_view.len_ts_satdata))
-    print('#firemaps = {}'.format(dataset_view.len_firemaps))
+    print('#firemaps = {}'.format(dataset_view.len_ts_firemaps))
     print(dataset_view.timestamps_reflectance)
     print(dataset_view.timestamps_firemaps)
 

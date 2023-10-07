@@ -280,7 +280,7 @@ class SatDataFuze(SatDataLoader):
 
         if not cnd_reflectance_sel:
             if self.lst_satdata_reflectance is not None:
-                rows = self._rs_rows; cols = self._rs_cols
+                rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
                 np_satdata_reflectance = _np.empty((_NFEATURES_REFLECTANCE * self._ntimestamps, rows, cols))
 
                 self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
