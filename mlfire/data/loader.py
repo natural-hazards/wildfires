@@ -33,14 +33,41 @@ class SatDataSelectOpt(Enum):
     ALL = 3
 
     def __and__(self, other):
+        if not isinstance(other, SatDataSelectOpt):
+            err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+        
         return SatDataSelectOpt(self.value & other.value)
 
-    def __eq__(self, other):
-        if other is None: return False
-        return self.value == other.value
-
     def __or__(self, other):
+        if not isinstance(other, SatDataSelectOpt):
+            err_msg = f'unsuported operand type(s) for |: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+
         return SatDataSelectOpt(self.value | other.value)
+
+    def __eq__(self, other):
+        if other is None:
+            return False
+        elif not isinstance(other, SatDataSelectOpt):
+            return False
+        else:
+            return self.value == other.value
+
+
+class SatDataFeatures(Enum):
+
+    RED = 'red'  # visible (wave length 620–670nm)
+    NIR = 'nir'  # near infra-red (wave length 841–876nm)
+    BLUE = 'blue'  # visible (wave length 459–479nm)
+    GREEN = 'green'  # visible (wave length 545–565nm)
+    SWIR1 = 'swir1'  # short-wave infra-red (wave length 1230–1250nm)
+    SWIR2 = 'swir2'  # short-wave infra-red (wave length 1628-1652nm)
+    SWIR3 = 'swir3'  # short-wave infra-red (wave length 2105-2155nm)
+    TEMPERATURE = 'temperature'  # TODO comment
+
+    def __str__(self):
+        return self.value
 
 
 class FireMapSelectOpt(Enum):
@@ -48,16 +75,15 @@ class FireMapSelectOpt(Enum):
     MTBS = 1
     CCI = 2
 
-    def __eq__(self, other):
-        if other is None: return False
+    def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        elif not isinstance(other, FireMapSelectOpt):
+            return False
+        else:
+            return self.value == other.value
 
-        if not isinstance(other, FireMapSelectOpt):
-            err_msg = ''
-            raise TypeError(err_msg)
-
-        return self.value == other.value
-
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
 
@@ -69,14 +95,24 @@ class MetaDataSelectOpt(Enum):
     ALL = 3
 
     def __and__(self, other):
-        return SatDataSelectOpt(self.value & other.value)
-
-    def __eq__(self, other):
-        if other is None: return False
-        return self.value == other.value
+        if not isinstance(other, MetaDataSelectOpt):
+            err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+        return MetaDataSelectOpt(self.value & other.value)
 
     def __or__(self, other):
-        return SatDataSelectOpt(self.value | other.value)
+        if not isinstance(other, MetaDataSelectOpt):
+            err_msg = f'unsuported operand type(s) for |: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+        return MetaDataSelectOpt(self.value | other.value)
+
+    def __eq__(self, other) -> bool:
+        if other is None:
+            return False
+        elif not isinstance(other, MetaDataSelectOpt):
+            return False
+        else:
+            return self.value == other.value
 
 
 class SatDataLoader(object):
@@ -124,13 +160,14 @@ class SatDataLoader(object):
         self.__len_ts_temperature = 0
         self.__len_firemaps = 0
 
-        # training, test, and validation data sets
+        self.__shape_satdata = None
+        self.__lst_features = None
 
-        # TODO move to ts.py?
+        # training, test, and validation data sets
 
         self._nfeatures_ts = 0  # TODO rename or remove?
 
-        # properties sources - reflectance, land surface temperature, and labels
+        # properties sources - reflectance, land surface temperature, and fire maps
 
         self.__lst_satdata_reflectance = None
         self.lst_satdata_reflectance = lst_satdata_reflectance
@@ -143,7 +180,7 @@ class SatDataLoader(object):
 
         self._satdata_processed = False
 
-        # properties source - labels (wildfire locations)
+        # properties source - fire maps (wildfire locations)
 
         self.__lst_firemap = None
         self.lst_firemaps = lst_firemaps
@@ -260,7 +297,7 @@ class SatDataLoader(object):
         self.__lst_satdata_temperature = lst_fn
 
     """
-    Timestamps - reflectance, land surface temperature, and labels for wildfire localization
+    Timestamps - reflectance, land surface temperature, and firemaps for wildfire localization
     """
 
     @property
@@ -332,7 +369,7 @@ class SatDataLoader(object):
         return self._df_timestamps_firemaps
 
     """
-    FireCII labels properties
+    FireCII firemaps properties
     """
 
     @property
@@ -347,12 +384,12 @@ class SatDataLoader(object):
             return
 
         if level < 0 or level > 100:
-            raise ValueError('confidence level for FireCCI labels must be positive int between 0 and 100')
+            raise ValueError('confidence level for FireCCI firemaps must be positive int between 0 and 100')
 
         self.__cci_confidence_level = level
 
     """
-    MTBS labels properties
+    MTBS firemaps properties
     """
 
     @property
@@ -503,14 +540,14 @@ class SatDataLoader(object):
         self._firemaps_processed = False  # TODO private?
 
     """
-    Load sources - reflectance, land surface temperature, or labels
+    Load sources - reflectance, land surface temperature, or firemaps
     """
 
     @staticmethod
     def __loadGeoTIFF_DATASETS(lst_sources: Union[list[str], tuple[str]]) -> list:
 
         # lazy import
-        gdal = lazy_import('osgeo.gdal')
+        gdal = lazy_import('osgeo.gdal')  # TODO move to beggining of script
 
         lst_ds = []
 
@@ -567,7 +604,7 @@ class SatDataLoader(object):
     def __loadGeoTIFF_FIREMAPS(self) -> None:
 
         if not self.lst_firemaps or self.lst_firemaps is None:
-            err_msg = 'Satellite data (labels - wildfires localization) is not set!'  # TODO rename
+            err_msg = 'Satellite data (firemaps - wildfires localization) is not set!'  # TODO rename
             raise TypeError(err_msg)
 
         del self._ds_firemaps; gc.collect()
@@ -575,7 +612,7 @@ class SatDataLoader(object):
 
         self._ds_firemaps = self.__loadGeoTIFF_DATASETS(self.lst_firemaps)
         if not self._ds_firemaps:
-            err_msg = 'satellite data (labels - wildfires localization) is not set!'  # TODO rename
+            err_msg = 'satellite data (firemaps - wildfires localization) is not set!'  # TODO rename
             raise IOError(err_msg)
 
     """
@@ -673,7 +710,7 @@ class SatDataLoader(object):
     def _processTimestamps_SATDATA(self, opt_select: SatDataSelectOpt = SatDataSelectOpt.ALL) -> None:
 
         if not (isinstance(opt_select, SatDataSelectOpt)):
-            err_msg = f'__processTimestamps_FIREMAPS() argument must be FireMapSelectOpt, not \'{type(opt_select)}\''
+            err_msg = f'__processTimestamps_FIREMAPS() argument must be FireMapSelectOpt, not {type(opt_select)}'
             raise TypeError(err_msg)
 
         # processing reflectance (MOD09A1)
@@ -756,7 +793,7 @@ class SatDataLoader(object):
             raise TypeError('satellite data (reflectance) do not contain any useful layer')
 
         self._layout_layers_reflectance = map_layout_satdata
-        self.__len_ts_reflectance = pos
+        self.__len_ts_reflectance = pos  # is this attribute necessary?
 
     def __processLayersLayout_SATDATA_TEMPERATURE(self) -> None:
 
@@ -794,7 +831,7 @@ class SatDataLoader(object):
             raise TypeError('satellite data (temperature) do not contain any useful layer')
 
         self._layout_layers_temperature = map_layout_satdata
-        self.__len_ts_temperature = pos
+        self.__len_ts_temperature = pos  # TODO is this attribute necessary?
 
     def _processMetadata_SATDATA(self) -> None:
 
@@ -959,7 +996,7 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         self._layout_layers_firemaps = map_layout_firemaps
-        self.__len_firemaps = pos
+        self.__len_firemaps = pos  # TODO is this attribute necessary
 
     def _processMetaData_FIREMAPS(self, opt_select: MetaDataSelectOpt = MetaDataSelectOpt.ALL) -> None:
 
@@ -1007,7 +1044,7 @@ class SatDataLoader(object):
         if cnd_reflectance: nfeatures += _NFEATURES_REFLECTANCE
         if cnd_temperature: nfeatures += 1
 
-        rows = self.rs_rows; cols = self.rs_cols
+        rows = self._rs_rows; cols = self._rs_cols
         self._np_satdata = _np.empty(shape=(nfeatures * self._ntimestamps, rows, cols), dtype=_np.float32)
 
         if cnd_reflectance:
@@ -1234,7 +1271,7 @@ class SatDataLoader(object):
         if self.opt_select_firemap == FireMapSelectOpt.MTBS:
             np_severity = self._processSeverity_MTBS(rs_ids=rs_ids)
 
-            # convert severity to labels
+            # convert severity to firemaps
             c1 = np_severity >= self.mtbs_min_severity.value; c2 = np_severity <= MTBSSeverity.HIGH.value
             self._np_firemaps = _np.logical_and(c1, c2).astype(_np.float32)
 
@@ -1243,7 +1280,7 @@ class SatDataLoader(object):
         elif self.opt_select_firemap == FireMapSelectOpt.CCI:
             np_confidence = self._processConfidenceLevel_CCI(rs_ids=rs_ids)
 
-            # convert confidence level to labels
+            # convert confidence level to firemaps
             c1 = np_confidence >= self.cci_confidence_level
             self._np_firemaps = c1.astype(_np.float32)
 
@@ -1255,7 +1292,7 @@ class SatDataLoader(object):
     """
 
     @property
-    def rs_rows(self) -> int:
+    def _rs_rows(self) -> int:
 
         if self.__rs_rows > -1: return self.__rs_rows
 
@@ -1288,7 +1325,7 @@ class SatDataLoader(object):
         return self.__rs_rows
 
     @property
-    def rs_cols(self) -> int:
+    def _rs_cols(self) -> int:  # TODO private property
 
         if self.__rs_cols > -1: return self.__rs_cols
 
@@ -1320,20 +1357,6 @@ class SatDataLoader(object):
 
         return self.__rs_cols
 
-    @property
-    def len_firemaps(self) -> int:
-
-        # TODO improve implementation
-
-        if not self._layout_layers_firemaps:
-            try:
-                self._processMetaData_FIREMAPS(opt_select=MetaDataSelectOpt.LAYOUT)
-            except TypeError:
-                err_msg = ''
-                raise TypeError(err_msg)
-
-        return self.__len_firemaps
-
     def getSatDataTimeseriesLength(self, opt_select: SatDataSelectOpt) -> int:
 
         if not isinstance(opt_select, SatDataSelectOpt):
@@ -1350,7 +1373,7 @@ class SatDataLoader(object):
             raise NotImplementedError
 
     @property
-    def len_satdata_ts(self) -> int:  # rename -> len_ts_satdata
+    def len_ts_satdata(self) -> int:  # rename -> len_ts_satdata and private property
 
         len_ts_reflectance = len_ts_temperature = length_ts = 0
 
@@ -1366,9 +1389,62 @@ class SatDataLoader(object):
 
         return length_ts
 
-    # TODO properties
-    # TODO shape_satdata
-    # TODO freatures (list of features)
+    @property
+    def len_firemaps(self) -> int:  # TODO private property
+
+        # TODO improve implementation
+
+        if not self._layout_layers_firemaps:
+            try:
+                self._processMetaData_FIREMAPS(opt_select=MetaDataSelectOpt.LAYOUT)
+            except TypeError:
+                err_msg = ''
+                raise TypeError(err_msg)
+
+        return self.__len_firemaps
+
+    @property
+    def features(self) -> tuple:
+
+        if self.__lst_features is not None: return self.__lst_features
+
+        cnd_reflectance_sel = self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE
+        cnd_reflectance_sel &= self.lst_satdata_reflectance is not None
+
+        cnd_temperature_sel = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
+        cnd_temperature_sel &= self.lst_satdata_temperature is not None
+
+        if cnd_reflectance_sel:
+            self.__lst_features = [
+                SatDataFeatures.RED,   # visible (wave length 620–670nm)
+                SatDataFeatures.NIR,   # near infra-red (wave length 841–876nm)
+                SatDataFeatures.BLUE,   # visible (wave length 459–479nm)
+                SatDataFeatures.GREEN,   # visible (wave length 545–565nm)
+                SatDataFeatures.SWIR1,   # short-wave infra-red (wave length 1230–1250nm)
+                SatDataFeatures.SWIR2,   # short-wave infra-red (wave length 1628-1652nm)
+                SatDataFeatures.SWIR3,   # short-wave infra-red (wave length 2105-2155nm)
+            ]
+
+        if cnd_temperature_sel:
+            self.__lst_features.append(
+                SatDataFeatures.TEMPERATURE  # TODO comment
+            )
+
+        # convert to tuple
+        self.__lst_features = tuple(self.__lst_features) if self.__lst_features is not None else None
+        return self.__lst_features
+
+    @property
+    def shape_satdata(self) -> tuple:
+
+        if self.__shape_satdata is not None: return self.__shape_satdata
+
+        rows = self._rs_rows; cols = self._rs_cols
+        len_ts = self.len_ts_satdata
+        len_features = len(self.features) if self.features is not None else 0
+
+        self.__shape_satdata = (rows, cols, len_ts, len_features)
+        return self.__shape_satdata
 
 
 if __name__ == '__main__':
@@ -1398,6 +1474,7 @@ if __name__ == '__main__':
     dataset_loader = SatDataLoader(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS,
+        opt_select_satdata=SatDataSelectOpt.REFLECTANCE,
         estimate_time=True
     )
 
@@ -1408,4 +1485,5 @@ if __name__ == '__main__':
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
+    print(dataset_loader.shape_satdata)
     dataset_loader.loadSatData()

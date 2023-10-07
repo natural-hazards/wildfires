@@ -7,11 +7,12 @@ from typing import Union
 # TODO comment
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
-from mlfire.data.loader import _NFEATURES_REFLECTANCE
 from mlfire.data.loader import SatDataLoader
 from mlfire.data.loader import FireMapSelectOpt, SatDataSelectOpt
+from mlfire.data.loader import _NFEATURES_REFLECTANCE
 
 # TODO comment
+from mlfire.utils.const import LIST_STRINGS
 from mlfire.utils.functool import lazy_import
 
 # lazy imports
@@ -36,7 +37,8 @@ class VegetationIndexSelectOpt(Enum):
         elif isinstance(other, int):
             return VegetationIndexSelectOpt(self.value & other)
         else:
-            raise NotImplementedError
+            err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
 
     def __or__(self, other):
 
@@ -45,7 +47,8 @@ class VegetationIndexSelectOpt(Enum):
         elif isinstance(other, int):
             return VegetationIndexSelectOpt(self.value & other)
         else:
-            raise NotImplementedError
+            err_msg = f'unsuported operand type(s) for |: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
 
     def __eq__(self, other):
 
@@ -54,21 +57,27 @@ class VegetationIndexSelectOpt(Enum):
         elif isinstance(other, int):
             return self.value == other
         else:
-            raise NotImplementedError
+            return False
 
     def __hash__(self):
 
         return self.value
 
 
+# defines
+LIST_VEGETATION_SELECT_OPT = Union[
+    VegetationIndexSelectOpt, tuple[VegetationIndexSelectOpt], list[VegetationIndexSelectOpt]
+]
+
+
 class SatDataFuze(SatDataLoader):
 
     def __init__(self,
-                 lst_firemaps: Union[tuple[str], list[str], None],
-                 lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
-                 lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
+                 lst_firemaps: LIST_STRINGS,
+                 lst_satdata_reflectance: LIST_STRINGS = None,
+                 lst_satdata_temperature: LIST_STRINGS = None,
                  # TODO comment
-                 opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
+                 opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,  # TODO change argument type
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -80,7 +89,7 @@ class SatDataFuze(SatDataLoader):
                  # TODO comment
                  mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
-                 lst_vegetation_add: Union[tuple[VegetationIndexSelectOpt], list[VegetationIndexSelectOpt]] = (VegetationIndexSelectOpt.NONE,),
+                 lst_vegetation_add: LIST_VEGETATION_SELECT_OPT = (VegetationIndexSelectOpt.NONE,),
                  # TODO comment
                  estimate_time: bool = True):
 
@@ -98,32 +107,51 @@ class SatDataFuze(SatDataLoader):
             estimate_time=estimate_time
         )
 
-        self._lst_vegetation_index = None; self._vi_ops = VegetationIndexSelectOpt.NONE.value
-        self.lst_vegetation_add = lst_vegetation_add
+        self._lst_vegetation_index = None; self._vi_ops = -1  # TODO private
+        self.lst_vegetation_add = lst_vegetation_add  # TODO rename
 
     @property
-    def lst_vegetation_add(self) -> Union[list[VegetationIndexSelectOpt], tuple[VegetationIndexSelectOpt]]:
+    def lst_vegetation_add(self) -> LIST_VEGETATION_SELECT_OPT:
 
         return self._lst_vegetation_index
 
     @lst_vegetation_add.setter
-    def lst_vegetation_add(self, lst_vi: Union[list[VegetationIndexSelectOpt], tuple[VegetationIndexSelectOpt]]) -> None:
+    def lst_vegetation_add(self, vi: LIST_VEGETATION_SELECT_OPT) -> None:
+        # check type of input argument
+        if vi is None: return
 
-        if self.lst_vegetation_add == lst_vi:
-            return
+        cnd_check = isinstance(vi, tuple) | isinstance(vi, list)
+        cnd_check = cnd_check & isinstance(vi[0], VegetationIndexSelectOpt)
+        cnd_check = cnd_check | isinstance(vi, VegetationIndexSelectOpt)
+
+        if not cnd_check:
+            err_msg = f'unsupported input type: {type(vi)}'
+            raise TypeError(err_msg)
 
         self._reset()
 
-        self._vi_ops = 0
-        self._lst_vegetation_index = lst_vi
-        for op in lst_vi: self._vi_ops |= op.value
+        if isinstance(vi, VegetationIndexSelectOpt):
+            self._vi_ops = vi.value
+            self._lst_vegetation_index = (vi,)
+        else:
+            self._vi_ops = 0
+            self._lst_vegetation_index = vi
+            for op in vi: self._vi_ops |= op.value
 
     """
     Vegetation
     """
 
     @staticmethod
-    def __computeVegetationIndex_EVI(reflec: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
+    def __computeVegetationIndex_EVI(reflec: _np.ndarray, firemaps: _np.ndarray) -> _np.ndarray:
+
+        if not isinstance(reflec, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(reflec)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
         rs_blue = reflec[:, :, (_ModisReflectanceSpectralBands.BLUE - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
         rs_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
@@ -146,19 +174,27 @@ class SatDataFuze(SatDataLoader):
             msg = f'#inf values = {ninfs} in EVI. The will be removed from data set!'
             print(msg)
 
-            labels[_np.any(evi_infs, axis=2)] = _np.nan
+            firemaps[_np.any(evi_infs, axis=2)] = _np.nan
             evi = _np.where(evi_infs, _np.nan, evi)
 
         if nnans > 0:
             msg = f'#NaN values = {nnans} in EVI. These values will be removed from data set!'
             print(msg)
 
-            labels[_np.any(evi_nans, axis=2)] = _np.nan
+            firemaps[_np.any(evi_nans, axis=2)] = _np.nan
 
         return evi
 
     @staticmethod
-    def __computeVegetationIndex_EVI2(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
+    def __computeVegetationIndex_EVI2(reflec: _np.ndarray, firemaps: _np.ndarray) -> (_np.ndarray, _np.ndarray):
+
+        if not isinstance(reflec, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(reflec)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
         ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
         ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::_NFEATURES_REFLECTANCE]  # TODO rename
@@ -178,19 +214,27 @@ class SatDataFuze(SatDataLoader):
             msg = f'#inf values = {ninfs} in EVI2. The will be removed from data set!'
             print(msg)
 
-            labels[_np.any(evi2_infs, axis=2)] = _np.nan
+            firemaps[_np.any(evi2_infs, axis=2)] = _np.nan
             evi2 = _np.where(evi2_infs, _np.nan, evi2)
 
         if nnans > 0:
             msg = f'#NaN values = {nnans} in EVI2. The will be removed from data set!'
             print(msg)
 
-            labels[_np.any(evi2_nans, axis=2)] = _np.nan
+            firemaps[_np.any(evi2_nans, axis=2)] = _np.nan
 
         return evi2
 
     @staticmethod
-    def __computeVegetationIndex_NDVI(reflec: _np.ndarray, labels: _np.ndarray) -> (_np.ndarray, _np.ndarray):
+    def __computeVegetationIndex_NDVI(reflec: _np.ndarray, firemaps: _np.ndarray) -> (_np.ndarray, _np.ndarray):
+
+        if not isinstance(reflec, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(reflec)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
         ref_nir = reflec[:, :, (_ModisReflectanceSpectralBands.NIR - 1)::_NFEATURES_REFLECTANCE]
         ref_red = reflec[:, :, (_ModisReflectanceSpectralBands.RED - 1)::_NFEATURES_REFLECTANCE]
@@ -207,19 +251,21 @@ class SatDataFuze(SatDataLoader):
         nnans = _np.count_nonzero(ndvi_nans)
 
         if ninfs > 0:
-            print(f'#inf values = {ninfs} in NDVI. The will be removed from data set!')
+            msg = f'#inf values = {ninfs} in NDVI. The will be removed from data set!'
+            print(msg)
 
-            labels[_np.any(ndvi_infs, axis=2)] = _np.nan
+            firemaps[_np.any(ndvi_infs, axis=2)] = _np.nan
             ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
 
         if nnans > 0:
-            print(f'#NaN values = {nnans} in NDVI. The will be removed from data set!')
+            msg = f'#NaN values = {nnans} in NDVI. The will be removed from data set!'
+            print(msg)
 
-            labels[_np.any(ndvi_nans, axis=2)] = _np.nan
+            firemaps[_np.any(ndvi_nans, axis=2)] = _np.nan
 
         return ndvi
 
-    def __addVegetationProperties(self):  # TODO rename
+    def __addVegetationFeatures(self) -> None:
 
         """
         https://en.wikipedia.org/wiki/Enhanced_vegetation_index
@@ -234,7 +280,7 @@ class SatDataFuze(SatDataLoader):
 
         if not cnd_reflectance_sel:
             if self.lst_satdata_reflectance is not None:
-                rows = self.rs_rows; cols = self.rs_cols
+                rows = self._rs_rows; cols = self._rs_cols
                 np_satdata_reflectance = _np.empty((_NFEATURES_REFLECTANCE * self._ntimestamps, rows, cols))
 
                 self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
@@ -266,19 +312,19 @@ class SatDataFuze(SatDataLoader):
 
         if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
             out_evi = self._np_satdata[:, :, idx_start::step_ts]
-            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=np_satdata_reflectance, labels=self._np_firemaps)
+            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=np_satdata_reflectance, firemaps=self._np_firemaps)
             idx_start += 1
             gc.collect()
 
         if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
             out_evi2 = self._np_satdata[:, :, idx_start::step_ts]
-            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=np_satdata_reflectance, labels=self._np_firemaps)
+            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=np_satdata_reflectance, firemaps=self._np_firemaps)
             idx_start += 1
             gc.collect()
 
         if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
             out_ndvi = self._np_satdata[:, :, idx_start::step_ts]
-            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=np_satdata_reflectance, labels=self._np_firemaps)
+            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=np_satdata_reflectance, firemaps=self._np_firemaps)
             gc.collect()
 
         if not cnd_temperature_sel:
@@ -297,16 +343,16 @@ class SatDataFuze(SatDataLoader):
         self._processMetaData_FIREMAPS()
         self.loadFiremaps()
 
-        self.__addVegetationProperties()
+        self.__addVegetationFeatures()
 
     """
     
     """
 
     @property
-    def len_satdata_ts(self) -> int:
+    def len_ts_satdata(self) -> int:
 
-        len_ts = super().len_satdata_ts
+        len_ts = super().len_ts_satdata
 
         if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI: len_ts += self._ntimestamps
         if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2: len_ts += self._ntimestamps

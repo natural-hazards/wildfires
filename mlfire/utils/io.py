@@ -25,12 +25,12 @@ def saveDataset_PETSC_BINARY(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np
     raise NotImplementedError
 
     # ts = ds[0]
-    # labels = ds[1]
+    # firemaps = ds[1]
     #
     # ts_pixels = ts.reshape((-1, ds[0].shape[2]))
-    # labels = labels.reshape(-1)
+    # firemaps = firemaps.reshape(-1)
     #
-    # vec_labels = labels.view(io_petsc.Vec)
+    # vec_labels = firemaps.view(io_petsc.Vec)
     # # mat_ts = ts.view(PetscBinaryIO.MatDense) this is not supported yet
     # mat_ts = _scipy_sparse.csr_matrix(ts_pixels)
     # petsc_ds = (mat_ts, vec_labels)
@@ -69,10 +69,10 @@ def saveDataset_HDF5(ds: Union[tuple[_np.ndarray, _np.ndarray], list[_np.ndarray
         ascii_type = io_h5py.string_dtype('ascii', 6)
         hfds.attrs[attr_name] = _np.array(str_type.encode('ascii'), dtype=ascii_type)
 
-        # store vector of labels
+        # store vector of firemaps
         hf.create_dataset('y', shape=labels_drop_nans.shape, dtype=_np.float64, data=labels_drop_nans)
 
-        # store mask of labels
+        # store mask of firemaps
         hf.create_dataset('mask', shape=mask.shape, dtype=_np.bool_, data=mask)
 
 

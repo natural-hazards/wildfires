@@ -1,3 +1,4 @@
+
 import gc
 
 from enum import Enum
@@ -6,19 +7,22 @@ from typing import Union
 # TODO comment
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
+from mlfire.data.fuze import VegetationIndexSelectOpt, LIST_VEGETATION_SELECT_OPT
 from mlfire.data.loader import FireMapSelectOpt, SatDataSelectOpt
-from mlfire.data.fuze import SatDataFuze, VegetationIndexSelectOpt
-from mlfire.data.view import SatDataView, SatImgViewOpt, FireLabelsViewOpt
+from mlfire.data.view import SatImgViewOpt, FireMapsViewOpt
+
+from mlfire.data.fuze import SatDataFuze
+from mlfire.data.view import SatDataView
 
 # utils imports
+from mlfire.utils.const import LIST_STRINGS, LIST_NDARRAYS
 from mlfire.utils.functool import lazy_import
 
 # lazy imports
 _np = lazy_import('numpy')
 _sk_model_selection = lazy_import('sklearn.model_selection')
 
-# defines
-_LIST_NDARRAYS = Union[list[_np.ndarray], tuple[_np.ndarray]]
+_scipy_stats = lazy_import('scipy.stats')
 
 
 class SatDataSplitOpt(Enum):
@@ -28,12 +32,59 @@ class SatDataSplitOpt(Enum):
     IMG_VERTICAL_SPLIT = 2
 
 
+class SatDataPreprocessOpt(Enum):
+
+    NONE = 0
+    STANDARTIZE_ZSCORE = 1
+    PCA = 2
+    PCA_PER_BAND = 4
+    SAVITZKY_GOLAY = 8
+    NOT_PROCESS_UNCHARTED_PIXELS = 16
+
+    def __and__(self, other):
+
+        if isinstance(other, SatDataPreprocessOpt):
+            return SatDataPreprocessOpt(self.value & other.value)
+        elif isinstance(other, int):
+            return SatDataPreprocessOpt(self.value & other)
+        else:
+            err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+
+    def __or__(self, other):
+
+        if isinstance(other, SatDataPreprocessOpt):
+            return SatDataPreprocessOpt(self.value & other.value)
+        elif isinstance(other, int):
+            return SatDataPreprocessOpt(self.value & other)
+        else:
+            err_msg = f'unsuported operand type(s) for |: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+
+    def __eq__(self, other):
+
+        if isinstance(other, SatDataPreprocessOpt):
+            return self.value == other.value
+        elif isinstance(other, int):
+            return self.value == other
+        else:
+            return False
+
+
+LIST_PREPROCESS_SATDATA_OPT = Union[
+    SatDataPreprocessOpt, tuple[SatDataPreprocessOpt], list[SatDataPreprocessOpt]
+]
+
+
 class SatDataAdapterTS(SatDataFuze, SatDataView):
 
     def __init__(self,
-                 lst_firemaps: Union[tuple[str], list[str], None],
-                 lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
-                 lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
+                 lst_firemaps: LIST_STRINGS,
+                 # lst_firemaps_test = None
+                 lst_satdata_reflectance: LIST_STRINGS = None,
+                 # lst_satdata_reflectance_test = None
+                 lst_satdata_temperature: LIST_STRINGS = None,
+                 # lst_satdata_temperature_test = None
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -46,18 +97,23 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
                  mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
-                 lst_vegetation_add: Union[tuple[VegetationIndexSelectOpt], list[VegetationIndexSelectOpt]] = (VegetationIndexSelectOpt.NONE,),
+                 lst_vegetation_add: LIST_VEGETATION_SELECT_OPT = (VegetationIndexSelectOpt.NONE,),
                  # TODO comment
                  opt_split_satdata: SatDataSplitOpt = SatDataSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = .33,
                  val_ratio: float = .0,
+                 # TODO comment
+                 opt_preprocess_satdata: LIST_PREPROCESS_SATDATA_OPT = (SatDataPreprocessOpt.STANDARTIZE_ZSCORE,),
                  # view
                  ndvi_view_threshold: Union[float, None] = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
-                 firemaps_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL,
+                 firemaps_view_opt: FireMapsViewOpt = FireMapsViewOpt.LABEL,
                  # TODO comment
                  estimate_time: bool = True,
                  random_state: int = 42):
+
+        self.__lst_satdata = None
+        self.__lst_firemaps = None
 
         self._ds_training = None
         self._ds_test = None
@@ -87,6 +143,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         )
 
         # TODO properties for creating datasets
+        self.__lst_preprocess_satdata = None; self.__satdata_opt = -1
+        self.opt_preprocess_satdata = opt_preprocess_satdata
 
         self.__opt_split_satdata = None
         self.opt_split_satdata = opt_split_satdata
@@ -99,6 +157,34 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         self.__random_state = None
         self.random_state = random_state
+
+    @property
+    def opt_preprocess_satdata(self) -> LIST_PREPROCESS_SATDATA_OPT:
+
+        return self.__lst_preprocess_satdata
+
+    @opt_preprocess_satdata.setter
+    def opt_preprocess_satdata(self, ops: LIST_PREPROCESS_SATDATA_OPT):
+        # check type of input argument
+        if ops is None: return
+
+        cnd_check = isinstance(ops, tuple) | isinstance(ops, list)
+        cnd_check = cnd_check & isinstance(ops[0], SatDataPreprocessOpt)
+        cnd_check = cnd_check | isinstance(ops, SatDataPreprocessOpt)
+
+        if not cnd_check:
+            err_msg = f'unsupported input type: {type(ops)}'
+            raise TypeError(err_msg)
+
+        self._reset()
+
+        if isinstance(ops, SatDataPreprocessOpt):
+            self.__satdata_opt = ops.value
+            self.__lst_preprocess_satdata = (ops,)
+        else:
+            self.__satdata_opt = 0
+            self.__lst_preprocess_satdata = ops
+            for op in ops: self.__satdata_opt |= op.value
 
     @property
     def opt_split_satdata(self) -> SatDataSplitOpt:
@@ -160,6 +246,9 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         SatDataFuze._reset(self)
 
+        del self.__lst_satdata; self.__lst_satdata = None
+        del self.__lst_firemaps; self.__lst_firemaps = None
+
         del self._ds_training; self._ds_training = None
         del self._ds_test; self._ds_test = None
         del self._ds_val; self._ds_val = None
@@ -170,21 +259,62 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     TODO comment
     """
 
-    def __preprocess(self, lst_satdata: _LIST_NDARRAYS, lst_firemaps: _LIST_NDARRAYS) -> (_LIST_NDARRAYS, _LIST_NDARRAYS):
+    def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray) -> None:
+
+        NFEATURES_TS = self._nfeatures_ts  # TODO implement for additional indexes such as NDVI and LST
+
+        for band_id in range(NFEATURES_TS):
+
+            img_band = np_satdata[:, band_id::NFEATURES_TS]
+
+            # check if standard deviation is greater than 0
+            std_band = _np.std(img_band)
+            if std_band == 0.: continue
+
+            np_satdata[:, band_id::NFEATURES_TS] = _scipy_stats.zscore(img_band, axis=1)
+
+    def __preproess_FILTER_SAVITZKY_GOLAY(self, np_satdata: _np.ndarray) -> None:
 
         pass
+
+    def __preprocess(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> (LIST_NDARRAYS, LIST_NDARRAYS):
+
+        for np_satdata, np_firmaps in zip(lst_satdata, lst_firemaps):
+
+            cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
+            if cnd_reshape: np_satdata = np_satdata.reshape(-1)
+
+            # standardization
+            if SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt == SatDataPreprocessOpt.STANDARTIZE_ZSCORE:
+                self.__preprocess_STANDARTIZE(np_satdata=np_satdata)
+
+            # filtering using savitzky-golay filter
+            if SatDataPreprocessOpt.SAVITZKY_GOLAY & self.__satdata_opt == SatDataPreprocessOpt.SAVITZKY_GOLAY:
+                self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata)
+
+        # dimensionality reduction
+        cnd_pca = SatDataPreprocessOpt.PCA & self.__satdata_opt == SatDataPreprocessOpt.PCA
+        cnd_pca |= SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND
+
+        if cnd_pca:
+            pass
 
     """
     TODO comment
     """
 
-    def __splitData_SHUFFLE(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (_LIST_NDARRAYS, _LIST_NDARRAYS):
+    def __splitData_SHUFFLE(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
 
-        # TODO check inputs
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
         # TODO comment
         satdata = satdata.reshape((-1, satdata.shape[2]))
-        # TODO comment
         firemaps = firemaps.reshape(-1)
 
         if self.test_ratio > 0.:
@@ -213,9 +343,15 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         return satdata, firemaps
 
-    def __splitData_HORIZONTAL(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (_LIST_NDARRAYS, _LIST_NDARRAYS):
+    def __splitData_HORIZONTAL(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
 
-        # TODO check inputs
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
         if self.test_ratio > 0.:
             rows, _, _ = satdata.shape
@@ -241,9 +377,15 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         return satdata, firemaps
 
-    def __splitData_VERTICAL(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (_LIST_NDARRAYS, _LIST_NDARRAYS):
+    def __splitData_VERTICAL(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
 
-        # TODO check inputs
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
         if self.test_ratio > 0.:
             _, cols, _ = satdata.shape
@@ -269,7 +411,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         return satdata, firemaps
 
-    def __splitData(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (_LIST_NDARRAYS, _LIST_NDARRAYS):
+    def __splitData(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
 
         if self.opt_split_satdata == SatDataSplitOpt.SHUFFLE_SPLIT:
             return self.__splitData_SHUFFLE(satdata=satdata, firemaps=firemaps)
@@ -289,11 +431,13 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self.fuzeData()  # load and combine satellite data, and load fire maps either
 
         lst_satdata, lst_firemaps = self.__splitData(satdata=self._np_satdata, firemaps=self._np_firemaps)
-        # lst_satdata, lst_firemaps = self.__preprocess(lst_satdata=lst_satdata, lst_firemaps=lst_firemaps)
+        self.__preprocess(lst_satdata=lst_satdata, lst_firemaps=lst_firemaps)
 
         self._ds_training = (lst_satdata[0], lst_firemaps[0])
         if self.test_ratio > 0.: self._ds_test = (lst_satdata[1], lst_firemaps[1])
         if self.val_ratio > 0.: self._ds_val = (lst_satdata[2], lst_firemaps[2])
+
+        # set list of satellite data and fire maps
 
     def getTrainingDataset(self) -> tuple[_np.ndarray, _np.ndarray]:
 

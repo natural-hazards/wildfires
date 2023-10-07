@@ -30,10 +30,9 @@ class SatImgViewOpt(Enum):
     SHORTWAVE_INFRARED1 = 'Shortwave Infrared using SWIR1'
     SHORTWAVE_INFRARED2 = 'Shortwave Infrared using SWIR2'
     TEMPERATURE = 'Land surface temperature'
-    # TODO temperature
 
 
-class FireLabelsViewOpt(Enum):  # TODO rename FireMapsViewOpt
+class FireMapsViewOpt(Enum):
 
     LABEL = 1
     CONFIDENCE_LEVEL = 2
@@ -56,7 +55,7 @@ class SatDataView(SatDataLoader):
                  # TODO comment
                  ndvi_view_threshold: Union[float, None] = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
-                 labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL,
+                 labels_view_opt: FireMapsViewOpt = FireMapsViewOpt.LABEL,
                  estimate_time: bool = False) -> None:
 
         super().__init__(
@@ -92,12 +91,12 @@ class SatDataView(SatDataLoader):
         self._satimg_view_opt = opt
 
     @property
-    def labels_view_opt(self) -> FireLabelsViewOpt:
+    def labels_view_opt(self) -> FireMapsViewOpt:
 
         return self._labels_view_opt
 
     @labels_view_opt.setter
-    def labels_view_opt(self, opt: FireLabelsViewOpt) -> None:
+    def labels_view_opt(self, opt: FireMapsViewOpt) -> None:
 
         if self._labels_view_opt == opt: return
         self._labels_view_opt = opt
@@ -381,7 +380,7 @@ class SatDataView(SatDataLoader):
         if self.satimg_view_opt == SatImgViewOpt.NDVI and self.ndvi_view_threshold > -1:
             str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
 
-        # show labels and binary mask related to localization of wildfires (CCI labels)
+        # show firemaps and binary mask related to localization of wildfires (CCI firemaps)
         imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
@@ -472,13 +471,13 @@ class SatDataView(SatDataLoader):
         label = _np.empty(shape=rs_cl.shape + (3,), dtype=_np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
 
-        if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL: mask_fires = rs_cl >= self.cci_confidence_level
+        if with_fire_mask or self.labels_view_opt == FireMapsViewOpt.LABEL: mask_fires = rs_cl >= self.cci_confidence_level
 
-        if self.labels_view_opt == FireLabelsViewOpt.LABEL:
+        if self.labels_view_opt == FireMapsViewOpt.LABEL:
 
             label[mask_fires, :3] = colors.Colors.RED_COLOR.value
 
-        elif self.labels_view_opt == FireLabelsViewOpt.CONFIDENCE_LEVEL:
+        elif self.labels_view_opt == FireMapsViewOpt.CONFIDENCE_LEVEL:
 
             cmap = lazy_import('mlfire.utils.cmap')
 
@@ -492,7 +491,7 @@ class SatDataView(SatDataLoader):
                 c = [int(v * 255) for v in cmap_helper.getRGB(v)]
                 label[rs_cl == v, :] = c
         else:
-            raise AttributeError('Not supported option for viewing labels!')
+            raise AttributeError('Not supported option for viewing firemaps!')
 
         if with_uncharted_areas:
             PIXEL_NOT_OBSERVED = -1
@@ -511,7 +510,7 @@ class SatDataView(SatDataLoader):
         calendar = lazy_import('calendar')  # TODO move to begining of script
 
         # put a region name to a plot title
-        str_title = 'CCI labels'
+        str_title = 'CCI firemaps'
 
         # get date or start/end dates
         if isinstance(id_bands, range):
@@ -539,10 +538,10 @@ class SatDataView(SatDataLoader):
         # put date to a figure title
         str_title = '{} ({})'.format(str_title, str_date)
 
-        # get fire labels
+        # get fire firemaps
         labels = self.__getFireLabels_CCI(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
-        # show labels and binary mask related to localization of wildfires (CCI labels)
+        # show firemaps and binary mask related to localization of wildfires (CCI firemaps)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
     # def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:   # TODO move to loader.py
@@ -594,16 +593,16 @@ class SatDataView(SatDataLoader):
         label = _np.empty(shape=rs_severity.shape + (3,), dtype=_np.uint8)
         label[:, :] = colors.Colors.GRAY_COLOR.value
 
-        if with_fire_mask or self.labels_view_opt == FireLabelsViewOpt.LABEL:
+        if with_fire_mask or self.labels_view_opt == FireMapsViewOpt.LABEL:
 
             c1 = rs_severity >= self.mtbs_min_severity.value; c2 = rs_severity <= MTBSSeverity.HIGH.value  # TODO rewrite
             mask_fires = _np.logical_and(c1, c2)
 
-        if self.labels_view_opt == FireLabelsViewOpt.LABEL:
+        if self.labels_view_opt == FireMapsViewOpt.LABEL:
 
             label[mask_fires, :] = colors.Colors.RED_COLOR.value
 
-        elif self.labels_view_opt == FireLabelsViewOpt.SEVERITY:
+        elif self.labels_view_opt == FireMapsViewOpt.SEVERITY:
 
             cmap = lazy_import('mlfire.utils.cmap')
 
@@ -635,7 +634,7 @@ class SatDataView(SatDataLoader):
                               show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         # put a region name to a plot title
-        str_title = 'MTBS labels ({}'.format(self.mtbs_region.name)
+        str_title = 'MTBS firemaps ({}'.format(self.mtbs_region.name)
 
         # get date or start/end dates
         if isinstance(id_bands, range):
@@ -651,21 +650,21 @@ class SatDataView(SatDataLoader):
         # put date to a figure title
         str_title = '{} {})'.format(str_title, str_date)
 
-        # get fire labels
+        # get fire firemaps
         labels = self.__getFireLabels_MTBS(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
-        # show up labels and binary mask (non-) related to localization of wildfires (MTBS labels)
+        # show up firemaps and binary mask (non-) related to localization of wildfires (MTBS firemaps)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                        show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         if not self._firemaps_processed:
-            # processing descriptions of bands related to fire labels and obtain dates from them
+            # processing descriptions of bands related to fire firemaps and obtain dates from them
             try:
                 self._processMetaData_FIREMAPS()
             except IOError or ValueError:
-                raise IOError('Cannot process meta data related to labels!')
+                raise IOError('Cannot process meta data related to firemaps!')
 
         if isinstance(id_bands, int):
             if id_bands < 0:
@@ -699,7 +698,7 @@ class SatDataView(SatDataLoader):
         date_satimg = self.timestamps_reflectance.iloc[id_img]['Timestamps']
         date_label = datetime.date(year=date_satimg.year, month=date_satimg.month, day=1)
 
-        # get index of corresponding labels
+        # get index of corresponding firemaps
         label_index = int(self.timestamps_firemaps.index[self._df_timestamps_firemaps['Timestamps'] == date_label][0])
         label, mask_fires = self.__getFireLabels_CCI(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
@@ -713,7 +712,7 @@ class SatDataView(SatDataLoader):
         date_satimg = self.timestamps_reflectance.iloc[id_img]['Timestamps']
         date_label = datetime.date(year=date_satimg.year, month=1, day=1)
 
-        # get index of corresponding labels
+        # get index of corresponding firemaps
         label_index = int(self._df_timestamps_firemaps.index[self._df_timestamps_firemaps['Timestamps'] == date_label][0])
         label, mask_fires = self.__getFireLabels_MTBS(id_bands=label_index, with_fire_mask=True, with_uncharted_areas=False)
 
@@ -742,13 +741,13 @@ class SatDataView(SatDataLoader):
             # increase image brightness
             satimg = opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
-        # get labels and confidence level/severity
+        # get firemaps and confidence level/severity
         labels, mask = self.__getLabelsForSatImg(id_img)
         satimg[mask, :] = labels[mask, :]
 
         ref_date = self.timestamps_reflectance.iloc[id_img]['Timestamps']
         img_type = self.satimg_view_opt.value
-        str_title = 'MODIS ({}, {}, labels={})'.format(img_type, ref_date, self.opt_select_firemap.name)
+        str_title = 'MODIS ({}, {}, firemaps={})'.format(img_type, ref_date, self.opt_select_firemap.name)
 
         # show multi spectral image as RGB with additional information about localization of wildfires
         imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
@@ -758,11 +757,11 @@ class SatDataView(SatDataLoader):
                                    show: bool = True, ax=None) -> None:
 
         if not self._firemaps_processed:
-            # processing descriptions of bands related to fire labels and obtain dates from them
+            # processing descriptions of bands related to fire firemaps and obtain dates from them
             try:
                 self._processMetaData_FIREMAPS()
             except IOError or ValueError:
-                raise IOError('Cannot process meta data related to labels!')
+                raise IOError('Cannot process meta data related to firemaps!')
 
         if not self._satdata_processed:
             # process descriptions of bands related to satellite images and obtain dates from them
@@ -815,8 +814,8 @@ if __name__ == '__main__':
     VAR_NDVI_THRESHOLD = 0.5
     VAR_CCI_CONFIDENCE_LEVEL = 70
 
-    VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.CONFIDENCE_LEVEL if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else FireLabelsViewOpt.SEVERITY
-    # VAR_LABELS_VIEW_OPT = FireLabelsViewOpt.LABEL  # uncomment this line for viewing fire labels instead of confidence level or severity
+    VAR_LABELS_VIEW_OPT = FireMapsViewOpt.CONFIDENCE_LEVEL if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else FireMapsViewOpt.SEVERITY
+    # VAR_LABELS_VIEW_OPT = FireMapsViewOpt.LABEL  # uncomment this line for viewing fire firemaps instead of confidence level or severity
 
     # setup of data set loader
     dataset_view = SatDataView(
@@ -831,7 +830,7 @@ if __name__ == '__main__':
         estimate_time=False
     )
 
-    print('#ts = {}'.format(dataset_view.len_satdata_ts))
+    print('#ts = {}'.format(dataset_view.len_ts_satdata))
     print('#firemaps = {}'.format(dataset_view.len_firemaps))
     print(dataset_view.timestamps_reflectance)
     print(dataset_view.timestamps_firemaps)
@@ -840,7 +839,7 @@ if __name__ == '__main__':
     dataset_view.showSatImage(70)
     dataset_view.showSatImageWithFireLabels(70)
 
-    # labels aggregation
+    # firemaps aggregation
     dataset_view.showFireLabels(18 if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else 0)
     dataset_view.showFireLabels(19 if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else 1)
     dataset_view.showFireLabels(range(18, 20) if VAR_LABEL_COLLECTION == FireMapSelectOpt.CCI else range(0, 2))

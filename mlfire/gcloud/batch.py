@@ -54,7 +54,7 @@ class EarthEngineBatch(object):
         self._collection_img_modis = None
         self._collection_img_labels = None
 
-        # properties related to exporting labels and satellite images
+        # properties related to exporting firemaps and satellite images
         self._json_rois = None
         self.file_json = file_json
 
@@ -358,7 +358,7 @@ class EarthEngineBatch(object):
                 # get name related to collection name
                 collection_name = self.labels_collection.name.lower()
 
-                # define job for exporting labels
+                # define job for exporting firemaps
                 task_labels = earthengine.batch.Export.image.toDrive(
                     image=labels_bands,
                     description='{}area_{}_{}_labels'.format(_desc, i, collection_name),

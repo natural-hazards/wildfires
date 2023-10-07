@@ -12,7 +12,7 @@ class AucRoc(object):
 
     def __init__(self, labels_true, labels_pred):
 
-        # TODO check if labels true and labels pred has same nan values
+        # TODO check if firemaps true and firemaps pred has same nan values
 
         self._labels_true = labels_true.reshape(-1)
         self._labels_true = self._labels_true[~_np.isnan(self._labels_true)]
