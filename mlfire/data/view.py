@@ -666,17 +666,20 @@ class SatDataView(SatDataLoader):
             except IOError or ValueError:
                 raise IOError('Cannot process meta data related to firemaps!')
 
+        # TODO comment
+        len_firemaps = len(self.timestamps_firemaps)
+
         if isinstance(id_bands, int):
             if id_bands < 0:
                 raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-            elif self.nbands_label - 1 < id_bands:
-                raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
+            elif len_firemaps - 1 < id_bands:
+                raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(len_firemaps))
         elif isinstance(id_bands, range):
             for id_band in (id_bands[0], id_bands[-1]):
                 if id_band < 0:
                     raise ValueError('Wrong band indentificator! It must be value greater or equal to 0!')
-                elif self.nbands_label - 1 < id_band:
-                    raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(self.nbands_label))
+                elif len_firemaps - 1 < id_band:
+                    raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(len_firemaps))
 
         if self.opt_select_firemap == FireMapSelectOpt.CCI:
             self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
@@ -731,7 +734,7 @@ class SatDataView(SatDataLoader):
                                            brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.),
                                            show: bool = True, ax=None) -> None:
         # lazy import
-        opencv = lazy_import('cv2')  # TODO to beginning of script
+        opencv = lazy_import('cv2')  # TODO move to preamble?
 
         # get image numpy array
         satimg = self.__getSatelliteImageArray(id_img)

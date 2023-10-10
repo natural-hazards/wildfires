@@ -1,5 +1,6 @@
 
 from enum import Enum
+from typing import Union
 
 # utils
 from mlfire.utils.functool import lazy_import
@@ -10,19 +11,43 @@ _stats = lazy_import('scipy.stats')
 _sklearn_decomposition = lazy_import('sklearn.decomposition')
 
 
-class FactorOP(Enum):
+class FactorOP(Enum):  # TODO rename
 
     NONE = 0
     USER_SET = 1
     CUMULATIVE_EXPLAINED_VARIANCE = 2
+    ALL = 3
+
+    def __and__(self, other):
+        # TODO improve implementation
+        if isinstance(other, FactorOP):
+            return FactorOP(self.value & other.value)
+        elif isinstance(other, int):
+            return FactorOP(self.value & other)
+        else:
+            raise NotImplementedError
+
+    def __or__(self, other):
+        # TODO improve implementation
+        return FactorOP(self.value | other.value)
+
+    # TODO or
+    # TODO eq
+    # TODO str
+
+
+# defines
+LIST_PCA_FACTOR_OPT = Union[
+    FactorOP, list[FactorOP], tuple[FactorOP], None
+]
 
 
 class TransformPCA(object):
 
     def __init__(self,
-                 train_ds: _np.ndarray,
+                 train_ds: _np.ndarray,  # rename init ds
                  nlatent_factors: int = 2,
-                 factor_ops: list[FactorOP] = (FactorOP.USER_SET,),
+                 factor_ops: LIST_PCA_FACTOR_OPT = (FactorOP.USER_SET,),
                  retained_variance: float = 0.95,
                  verbose: bool = True) -> None:
 
@@ -45,7 +70,7 @@ class TransformPCA(object):
         self.retained_variance = retained_variance
 
         # verbose
-        self._verbose = False
+        self._verbose = False # change to estimate time
         self.verbose = verbose
 
         self._is_trained = False
@@ -87,6 +112,8 @@ class TransformPCA(object):
 
     @factor_ops.setter
     def factor_ops(self, ops: list[FactorOP]):
+
+        # TODO reimplement
 
         if self._lst_factor_ops == ops:
             return

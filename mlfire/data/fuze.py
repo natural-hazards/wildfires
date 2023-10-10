@@ -40,7 +40,7 @@ class VegetationIndexSelectOpt(Enum):
             err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
             raise TypeError(err_msg)
 
-    def __or__(self, other):
+    def __or__(self, other):  # TODO remove?
 
         if isinstance(other, VegetationIndexSelectOpt):
             return VegetationIndexSelectOpt(self.value & other.value)
@@ -118,7 +118,7 @@ class SatDataFuze(SatDataLoader):
         self.lst_vegetation_add = lst_vegetation_add  # TODO rename
 
     @property
-    def lst_vegetation_add(self) -> LIST_VEGETATION_SELECT_OPT:
+    def lst_vegetation_add(self) -> LIST_VEGETATION_SELECT_OPT:  # TODO return tuple
 
         return self._lst_vegetation_index
 
@@ -185,15 +185,15 @@ class SatDataFuze(SatDataLoader):
         nnans = _np.count_nonzero(evi_nans)
 
         if ninfs > 0:
-            msg = f'#inf values = {ninfs} in EVI. The will be removed from data set!'
-            print(msg)
+            msg = f'#inf values = {ninfs} in EVI. These values will be removed from data set!'
+            print(msg)  # TODO print warning
 
             firemaps[_np.any(evi_infs, axis=2)] = _np.nan
             evi = _np.where(evi_infs, _np.nan, evi)
 
         if nnans > 0:
             msg = f'#NaN values = {nnans} in EVI. These values will be removed from data set!'
-            print(msg)
+            print(msg)  # TODO print warning
 
             firemaps[_np.any(evi_nans, axis=2)] = _np.nan
 
@@ -225,14 +225,14 @@ class SatDataFuze(SatDataLoader):
         nnans = _np.count_nonzero(evi2_nans)
 
         if ninfs > 0:
-            msg = f'#inf values = {ninfs} in EVI2. The will be removed from data set!'
+            msg = f'#inf values = {ninfs} in EVI2. These values will be removed from data set!'
             print(msg)
 
             firemaps[_np.any(evi2_infs, axis=2)] = _np.nan
             evi2 = _np.where(evi2_infs, _np.nan, evi2)
 
         if nnans > 0:
-            msg = f'#NaN values = {nnans} in EVI2. The will be removed from data set!'
+            msg = f'#NaN values = {nnans} in EVI2. These values will be removed from data set!'
             print(msg)
 
             firemaps[_np.any(evi2_nans, axis=2)] = _np.nan
@@ -265,14 +265,14 @@ class SatDataFuze(SatDataLoader):
         nnans = _np.count_nonzero(ndvi_nans)
 
         if ninfs > 0:
-            msg = f'#inf values = {ninfs} in NDVI. The will be removed from data set!'
+            msg = f'#inf values = {ninfs} in NDVI. These values will be removed from data set!'
             print(msg)
 
             firemaps[_np.any(ndvi_infs, axis=2)] = _np.nan
             ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
 
         if nnans > 0:
-            msg = f'#NaN values = {nnans} in NDVI. The will be removed from data set!'
+            msg = f'#NaN values = {nnans} in NDVI. These values will be removed from data set!'
             print(msg)
 
             firemaps[_np.any(ndvi_nans, axis=2)] = _np.nan
@@ -294,25 +294,26 @@ class SatDataFuze(SatDataLoader):
 
         if not cnd_reflectance_sel:
             if self.lst_satdata_reflectance is not None:
-                rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
-                len_features = len(self.selected_timestamps_satdata)
-                len_features *= _NFEATURES_REFLECTANCE
-
-                shape_reflectance = (len_features, rows, cols)
-                np_satdata_reflectance = _np.empty(shape=shape_reflectance)
-
-                self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
-                self._loadSatData_IMPL(
-                    ds_satdata=self._ds_satdata_reflectance,
-                    np_satdata=np_satdata_reflectance,
-                    opt_select=SatDataSelectOpt.REFLECTANCE
-                )
-
-                np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
-
-                # clean up
-                del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
-                gc.collect()
+                raise NotImplementedError
+                # rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
+                # len_features = len(self.selected_timestamps_satdata)
+                # len_features *= _NFEATURES_REFLECTANCE
+                #
+                # shape_reflectance = (len_features, rows, cols)
+                # np_satdata_reflectance = _np.empty(shape=shape_reflectance)
+                #
+                # self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+                # self._loadSatData_IMPL(
+                #     ds_satdata=self._ds_satdata_reflectance,
+                #     np_satdata=np_satdata_reflectance,
+                #     opt_select=SatDataSelectOpt.REFLECTANCE
+                # )
+                #
+                # np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
+                #
+                # # clean up
+                # del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
+                # gc.collect()
             else:
                 err_msg = 'satellite data (reflectance) is not set'
                 raise FileNotFoundError(err_msg)
@@ -353,15 +354,15 @@ class SatDataFuze(SatDataLoader):
         set_indexes = {VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI}
         extra_bands = 0
 
-        if self._vi_ops > 0: extra_bands = len(set_indexes & set(self._lst_vegetation_index))
+        # if self._vi_ops > 0: extra_bands = len(set_indexes & set(self._lst_vegetation_index))
 
         self._processMetadata_SATDATA()
-        self.loadSatData(extra_bands=extra_bands)
+        self.loadSatData()
 
         self._processMetaData_FIREMAPS()
         self.loadFiremaps()
 
-        self.__addVegetationFeatures()
+        # if self._vi_ops > 0: self.__addVegetationFeatures()
 
     """
     Shape (satellite data)  
@@ -398,8 +399,8 @@ if __name__ == '__main__':
     VAR_LST_SATIMGS_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
 
-    ADD_VEGETATION = [VegetationIndexSelectOpt.NDVI, VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2]
-    # ADD_VEGETATION = (VegetationIndexSelectOpt.NONE,)
+    # ADD_VEGETATION = [VegetationIndexSelectOpt.NDVI, VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2]
+    ADD_VEGETATION = (VegetationIndexSelectOpt.NONE,)
 
     for year in range(2004, 2006):
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
@@ -422,7 +423,7 @@ if __name__ == '__main__':
     dataset_fuzion = SatDataFuze(
         lst_firemaps=VAR_LST_FIREMAPS,
         lst_satdata_reflectance=VAR_LST_SATIMGS_REFLECTANCE,
-        lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,
+        # lst_satdata_temperature=VAR_LST_SATIMGS_TEMPERATURE,
         lst_vegetation_add=ADD_VEGETATION,
         opt_select_satdata=SatDataSelectOpt.ALL
     )

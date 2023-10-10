@@ -14,6 +14,9 @@ from mlfire.data.view import SatImgViewOpt, FireMapsViewOpt
 from mlfire.data.fuze import SatDataFuze
 from mlfire.data.view import SatDataView
 
+from mlfire.features.pca import TransformPCA, FactorOP  # TODO rename module mlfire.extractors
+from mlfire.features.pca import LIST_PCA_FACTOR_OPT
+
 # utils imports
 from mlfire.utils.const import LIST_STRINGS, LIST_NDARRAYS
 from mlfire.utils.functool import lazy_import
@@ -38,9 +41,10 @@ class SatDataPreprocessOpt(Enum):
     NONE = 0
     STANDARTIZE_ZSCORE = 1
     PCA = 2
-    PCA_PER_BAND = 4
+    PCA_PER_BAND = 4  # TODO rename PCA_PER_FEATURE
     SAVITZKY_GOLAY = 8
     NOT_PROCESS_UNCHARTED_PIXELS = 16
+    # ALL?
 
     def __and__(self, other):
 
@@ -52,12 +56,12 @@ class SatDataPreprocessOpt(Enum):
             err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
             raise TypeError(err_msg)
 
-    def __or__(self, other):
+    def __or__(self, other):  # TODO remove?
 
         if isinstance(other, SatDataPreprocessOpt):
-            return SatDataPreprocessOpt(self.value & other.value)
+            return SatDataPreprocessOpt(self.value | other.value)
         elif isinstance(other, int):
-            return SatDataPreprocessOpt(self.value & other)
+            return SatDataPreprocessOpt(self.value | other)
         else:
             err_msg = f'unsuported operand type(s) for |: {type(self)} and {type(other)}'
             raise TypeError(err_msg)
@@ -72,8 +76,9 @@ class SatDataPreprocessOpt(Enum):
             return False
 
 
+# defines
 LIST_PREPROCESS_SATDATA_OPT = Union[
-    SatDataPreprocessOpt, tuple[SatDataPreprocessOpt], list[SatDataPreprocessOpt]
+    None, SatDataPreprocessOpt, tuple[SatDataPreprocessOpt], list[SatDataPreprocessOpt]
 ]
 
 
@@ -98,7 +103,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
                  mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
                  # TODO comment
-                 lst_vegetation_add: LIST_VEGETATION_SELECT_OPT = (VegetationIndexSelectOpt.NONE,),
+                 lst_vegetation_add: LIST_VEGETATION_SELECT_OPT = (VegetationIndexSelectOpt.NONE,), # TODO rename
                  # TODO comment
                  opt_split_satdata: SatDataSplitOpt = SatDataSplitOpt.SHUFFLE_SPLIT,
                  test_ratio: float = .33,
@@ -108,6 +113,10 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  # TODO comment
                  savgol_polyorder: int = 1,
                  savgol_winlen: int = 5,
+                 # TODO comment
+                 opt_pca_factor: LIST_PCA_FACTOR_OPT = (FactorOP.USER_SET,),  # TODO rename
+                 pca_retained_variance: float = 0.95,
+                 pca_nfactors: int = 2,
                  # view
                  ndvi_view_threshold: Union[float, None] = None,
                  satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
@@ -146,6 +155,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self._ds_test = None
         self._ds_val = None
 
+        # TODO comment
+
         self.__lst_preprocess_satdata = None; self.__satdata_opt = -1
         self.opt_preprocess_satdata = opt_preprocess_satdata
 
@@ -154,6 +165,22 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         self.__savgol_winlen = None
         self.savgol_winlen = savgol_winlen
+
+        # TODO comment
+
+        self.__lst_pca_ops = None
+        self.__pca_ops = 0
+        self.opt_pca_factor = opt_pca_factor
+
+        self.__pca_retained_variance = None
+        self.pca_retained_variance = pca_retained_variance
+
+        self.__pca_nfactors = None
+        self.pca_nfactors = pca_nfactors
+
+        self.__lst_extractors = None
+
+        # TODO comment
 
         self.__opt_split_satdata = None
         self.opt_split_satdata = opt_split_satdata
@@ -168,32 +195,32 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self.random_state = random_state
 
     @property
-    def opt_preprocess_satdata(self) -> LIST_PREPROCESS_SATDATA_OPT:
+    def opt_preprocess_satdata(self) -> tuple[SatDataPreprocessOpt]:
 
         return self.__lst_preprocess_satdata
 
     @opt_preprocess_satdata.setter
-    def opt_preprocess_satdata(self, ops: LIST_PREPROCESS_SATDATA_OPT):
+    def opt_preprocess_satdata(self, opt: LIST_PREPROCESS_SATDATA_OPT):
         # check type of input argument
-        if ops is None: return
+        if opt is None: return
 
-        cnd_check = isinstance(ops, tuple) | isinstance(ops, list)
-        cnd_check = cnd_check & isinstance(ops[0], SatDataPreprocessOpt)
-        cnd_check = cnd_check | isinstance(ops, SatDataPreprocessOpt)
+        cnd_check = isinstance(opt, tuple) | isinstance(opt, list)
+        cnd_check = cnd_check & isinstance(opt[0], SatDataPreprocessOpt)
+        cnd_check = cnd_check | isinstance(opt, SatDataPreprocessOpt)
 
         if not cnd_check:
-            err_msg = f'unsupported input type: {type(ops)}'
+            err_msg = f'unsupported input type: {type(opt)}'
             raise TypeError(err_msg)
 
         self._reset()
 
-        if isinstance(ops, SatDataPreprocessOpt):
-            self.__satdata_opt = ops.value
-            self.__lst_preprocess_satdata = (ops,)
+        if isinstance(opt, SatDataPreprocessOpt):
+            self.__satdata_opt = opt.value
+            self.__lst_preprocess_satdata = (opt,)
         else:
             self.__satdata_opt = 0
-            self.__lst_preprocess_satdata = ops
-            for op in ops: self.__satdata_opt |= op.value
+            self.__lst_preprocess_satdata = tuple(opt)
+            for op in opt: self.__satdata_opt |= op.value
 
     @property
     def opt_split_satdata(self) -> SatDataSplitOpt:
@@ -279,6 +306,70 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self._reset()
         self.__savgol_winlen = winlen
 
+    @property
+    def opt_pca_factor(self) -> tuple[FactorOP]:
+
+        return self.__lst_pca_ops
+
+    @opt_pca_factor.setter
+    def opt_pca_factor(self, opt: LIST_PCA_FACTOR_OPT) -> None:
+        # TODO is this necessary or move this implementation to PCA
+
+        # check type of input argument
+        if opt is None: return
+
+        cnd_check = isinstance(opt, tuple) | isinstance(opt, list)
+        cnd_check = cnd_check & isinstance(opt[0], FactorOP)
+        cnd_check = cnd_check | isinstance(opt, FactorOP)
+
+        if not cnd_check:
+            err_msg = f'unsupported input type: {type(opt)}'
+            raise TypeError(err_msg)
+
+        cnd_not_list = isinstance(opt, FactorOP)
+        if cnd_not_list & ((opt,) == self.__lst_pca_ops):
+            return
+        elif opt == self.__lst_pca_ops:
+            return
+
+        self._reset()
+
+        if cnd_not_list:
+            self.__pca_ops = opt.value
+            self.__lst_pca_ops = (opt,)
+        else:
+            self.__pca_ops = 0
+            self.__lst_pca_ops = tuple(opt)
+            for op in opt: self.__pca_ops |= op.value # TODO fix later
+
+    @property
+    def pca_nfactors(self) -> int:
+
+        return self.__pca_nfactors
+
+    @pca_nfactors.setter
+    def pca_nfactors(self, n: int) -> None:  # TODO rename input argument to val
+        # TODO check type of input argument
+        if self.__pca_nfactors == n:
+            return
+
+        self._reset()
+        self.__pca_nfactors = n
+
+    @property
+    def pca_retained_variance(self) -> float:
+
+        return self.__pca_retained_variance
+
+    @pca_retained_variance.setter
+    def pca_retained_variance(self, val: float) -> None:
+        # TODO check type of input argument
+        if val == self.__pca_retained_variance:
+            return
+
+        self._reset()
+        self.__pca_retained_variance = val
+
     def _reset(self) -> None:
 
         SatDataFuze._reset(self)
@@ -290,6 +381,9 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         if hasattr(self, '_ds_test'): del self._ds_test; self._ds_test = None
         if hasattr(self, '_ds_val'): del self._ds_val; self._ds_val = None
 
+        if hasattr(self, '__lst_extractors'): del self.__lst_extractors; self.__lst_extractors = None
+
+        # clean up
         gc.collect()
 
     """
@@ -321,27 +415,147 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 polyorder=self.savgol_polyorder
             )
 
+    """
+    TODO comment
+    """
+
+    def __preprocess_PCA_FIT_ALL_FEATURES(self, np_satdata: _np.ndarray) -> None:
+
+        raise NotImplementedError
+
+    def __preprocess_PCA_FIT_PER_FEATURE(self, np_satdata: _np.ndarray) -> None:
+
+        if self.__lst_extractors is not None: return
+
+        lst_extractors = []
+        nfactors = 0
+
+        # TODO comment
+        len_features = len(self.features)
+        for feature_id in range(len_features):
+            sub_img = np_satdata[:, feature_id::len_features]
+
+            # TODO comment
+            extractor_pca = TransformPCA(
+                train_ds=sub_img,
+                factor_ops=self.opt_pca_factor,
+                nlatent_factors=self.pca_nfactors,
+                retained_variance=self.pca_retained_variance
+                # TODO verbose
+            )
+            extractor_pca.fit()
+
+            # TODO comment
+            nfactors = max(nfactors, extractor_pca.nlatent_factors)
+            lst_extractors.append(extractor_pca)
+
+        # TODO comment
+        # TODO own function refit
+        for feature_id in range(len_features):
+            extractor_pca = lst_extractors[feature_id]
+
+            # TODO comment
+            if extractor_pca.nlatent_factors < nfactors:
+                extractor_pca.nlatent_factors_user = nfactors
+
+                # TODO comment
+                mod_lst_pca_ops = list(self.__lst_pca_ops)
+                if FactorOP.CUMULATIVE_EXPLAINED_VARIANCE & self.__pca_ops == FactorOP.CUMULATIVE_EXPLAINED_VARIANCE:
+                    mod_lst_pca_ops.remove(FactorOP.CUMULATIVE_EXPLAINED_VARIANCE)
+                if FactorOP.USER_SET & self.__pca_ops != FactorOP.USER_SET:
+                    mod_lst_pca_ops.append(FactorOP.USER_SET)
+
+                # TODO comment
+                extractor_pca.factor_ops = mod_lst_pca_ops
+                extractor_pca.fit()
+
+        # TODO comment
+        self.__lst_extractors = lst_extractors
+
+    def __preprocess_PCA_FIT(self, np_satdata: _np.ndarray) -> None:
+
+        if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
+            self.__preprocess_PCA_FIT_PER_FEATURE(np_satdata=np_satdata)
+        else:
+            self.__preprocess_PCA_FIT_ALL_FEATURES(np_satdata=np_satdata)
+
+    def __preprocess_PCA_TRANSFORM_PER_FEATURE(self, np_satdata: _np.ndarray) -> None:
+
+        pass
+
+    def __preprocess_PCA_TRANSFORM_ALL_FEATURES(self, np_satdata: _np.ndarray) -> None:
+
+        pass
+
+    def __preprocess_PCA_TRANSFORM(self, np_satdata: _np.ndarray):
+
+        if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
+            self.__preprocess_PCA_TRANSFORM_PER_FEATURE(np_satdata=np_satdata)
+        else:
+            pass
+
+    def __preprocess_PCA(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS):
+
+        np_satdata_init = lst_satdata[0]; np_firemap_init = lst_firemaps[0]
+
+        cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
+        if cnd_reshape:
+            tmp_shape = np_satdata_init.shape
+            np_satdata_init = np_satdata_init.reshape(-1, tmp_shape[2])
+
+        flg = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS  # TODO remove after rename
+        if flg & self.__satdata_opt == flg:
+            np_firemaps = np_firemap_init.reshape(-1); np_mask = ~_np.isnan(np_firemaps)
+            np_satdata_init = np_satdata_init[np_mask, :]
+
+        # TODO comment
+        self.__preprocess_PCA_FIT(np_satdata=np_satdata_init)
+        # self.__preprocess_PCA_TRANSFORM(np_satdata=np_satdata_init)
+
+        # TODO comment
+        # if len(lst_satdata) > 1:
+        #     for np_satdata, np_firmap in zip(lst_satdata[1:], lst_firemaps[1:]):
+        #         if cnd_reshape: np_satdata = np_satdata.reshape(-1)
+        #
+        #         # TODO remove uncharted pixels from processing
+        #
+        #         self.__preprocess_PCA_TRANSFORM(np_satdata=np_satdata)
+
     def __preprocess(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> (LIST_NDARRAYS, LIST_NDARRAYS):
 
-        for np_satdata, np_firmaps in zip(lst_satdata, lst_firemaps):
+        # TODO measure time
 
-            cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
-            if cnd_reshape: np_satdata = np_satdata.reshape(-1)
+        cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
+        for np_satdata, np_firemaps in zip(lst_satdata, lst_firemaps):
+            if np_satdata is None: continue  # TODO improve implementation
+
+            if cnd_reshape:
+                tmp_shape = np_satdata.shape
+                np_satdata = np_satdata.reshape(-1, tmp_shape[2])
+
+            # remove uncharted pixels from processing
+            flg = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS  # TODO remove after rename
+            if flg & self.__satdata_opt == flg:
+                np_firemaps = np_firemaps.reshape(-1); np_mask = ~_np.isnan(np_firemaps)
+                np_satdata = np_satdata[np_mask, :]
 
             # standardization time series using zscore
             if SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt == SatDataPreprocessOpt.STANDARTIZE_ZSCORE:
                 self.__preprocess_STANDARTIZE(np_satdata=np_satdata)
 
-            # filtering using savitzky-golay filter
+            # filtering using Savitzky-golay filter
             if SatDataPreprocessOpt.SAVITZKY_GOLAY & self.__satdata_opt == SatDataPreprocessOpt.SAVITZKY_GOLAY:
                 self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata)
 
-        # dimensionality reduction
+        """
+        dimensionality reduction using principal component analysis
+        """
+
         cnd_pca = SatDataPreprocessOpt.PCA & self.__satdata_opt == SatDataPreprocessOpt.PCA
         cnd_pca |= SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND
 
         if cnd_pca:
-            pass
+            self.__preprocess_PCA(lst_satdata=lst_satdata, lst_firemaps=lst_firemaps)
 
     """
     TODO comment
@@ -377,7 +591,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 satdata,
                 firemaps,
                 test_size=self.val_ratio,
-                random_state=42
+                random_state=self.random_state
             )
         else:
             satdata_val = firemaps_val = None
@@ -559,4 +773,7 @@ if __name__ == '__main__':
     print(dataset_loader.shape_satdata)
 
     dataset_loader.createDatasets()
-    print(dataset_loader.getTrainingDataset()[0].shape)
+    ds_train = dataset_loader.getTrainingDataset()
+
+    # print(ds_train[0].shape)
+    # print(ds_train[0])
