@@ -42,7 +42,7 @@ LIST_PCA_FACTOR_OPT = Union[
 ]
 
 
-class TransformPCA(object):
+class TransformPCA(object):  # TODO rename -> ExtractorPCA
 
     def __init__(self,
                  train_ds: _np.ndarray,  # rename init ds
