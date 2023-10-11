@@ -1359,9 +1359,11 @@ class SatDataLoader(object):
             np_severity_agg = _np.max(np_severity, axis=-1)  # TODO mean
             np_severity = np_severity_agg; gc.collect()  # clean up
         else:
-            np_uncharted = np_severity == MTBSSeverity.NON_MAPPED_AREA.value
+            np_uncharted = np_severity == MTBSSeverity.NON_MAPPED_AREA.value  # TODO use __eq__
 
-        np_severity[np_uncharted] = MTBSSeverity.NON_MAPPED_AREA.value  # TODO set nan?
+        # TODO remove?
+        np_severity[np_uncharted] = _np.nan  # MTBSSeverity.NON_MAPPED_AREA.value  # TODO set nan?
+        print('#nans (severity):', _np.count_nonzero(_np.isnan(np_severity)))  # TODO remove
         del np_uncharted; gc.collect()  # clean up
 
         return np_severity
@@ -1399,9 +1401,13 @@ class SatDataLoader(object):
         if self.opt_select_firemap == FireMapSelectOpt.MTBS:
             np_severity = self._processSeverity_MTBS(rs_ids=rs_ids)
 
-            # convert severity to firemaps
+            # convert severity to fire map (label)
+            # TODO use __eq__, ...
             c1 = np_severity >= self.mtbs_min_severity.value; c2 = np_severity <= MTBSSeverity.HIGH.value
+            uncharted = _np.isnan(np_severity)  # TODO rename
+
             self._np_firemaps = _np.logical_and(c1, c2).astype(_np.float32)
+            self._np_firemaps[uncharted] = _np.nan
 
             # clean up
             del np_severity; gc.collect()
@@ -1411,6 +1417,7 @@ class SatDataLoader(object):
             # convert confidence level to firemaps
             c1 = np_confidence >= self.cci_confidence_level
             self._np_firemaps = c1.astype(_np.float32)
+            # TODO add nans
 
             # clean up
             del np_confidence; gc.collect()

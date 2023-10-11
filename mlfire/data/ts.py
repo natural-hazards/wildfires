@@ -628,31 +628,40 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         cnd_zscore = SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt
         cnd_zscore = cnd_zscore == SatDataPreprocessOpt.STANDARTIZE_ZSCORE
 
-        for np_satdata, np_firemaps in zip(lst_satdata, lst_firemaps):
+        for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
             if np_satdata is None: continue
 
-            if cnd_reshape:
-                tmp_shape = np_satdata.shape
-                np_satdata = np_satdata.reshape(-1, tmp_shape[2])
+            shape_satdata = mask_satdat = None
 
-            # not handle uncharted pixels in preprocessing
+            if cnd_reshape:
+                shape_satdata = np_satdata.shape
+                np_satdata = np_satdata.reshape(-1, shape_satdata[2])
+
             if cnd_not_process:
-                np_firemaps = np_firemaps.reshape(-1); np_mask = ~_np.isnan(np_firemaps)
-                np_satdata_ = np_satdata[np_mask, :]  # Developer note (Marek): this creates copy of an array
+                np_firemaps = np_firemaps.reshape(-1); mask_satdat = ~_np.isnan(np_firemaps)
+                np_satdata_ = np_satdata[mask_satdat, :]  # Developer note (Marek): this creates copy of an array
             else:
                 np_satdata_ = np_satdata
 
-            # standardization time series using zscore
             if cnd_zscore or cnd_pca:
                 msg = 'standardize time series using z-score'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
-                    np_satdata[:, :] = self.__preprocess_STANDARTIZE(np_satdata=np_satdata_)
+                    np_satdata_ = self.__preprocess_STANDARTIZE(np_satdata=np_satdata_)
 
             # filtering using Savitzky-golay filter
             if SatDataPreprocessOpt.SAVITZKY_GOLAY & self.__satdata_opt == SatDataPreprocessOpt.SAVITZKY_GOLAY:
                 msg = 'filtering data using Savitzky-Golay'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
-                    np_satdata[:, :] = self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata_)
+                    np_satdata_ = self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata_)
+
+            if cnd_not_process:
+                np_satdata[mask_satdat, :] = np_satdata_
+                np_satdata[~mask_satdat, :] = _np.nan
+
+            if cnd_reshape: np_satdata = np_satdata.reshape(shape_satdata)
+
+            # copy back
+            lst_satdata[id_ds][...] = np_satdata[...]
 
         """
         Global feature extraction using principal component analysis (PCA)
