@@ -385,6 +385,8 @@ class SatDataLoader(object):
 
         df_timestamps = None  # TODO as private attribute
 
+        # TODO improve implementation
+
         if isinstance(self.selected_timestamps[0], _datetime.date):
             begin_timestamp = self.selected_timestamps[0]
             end_timestamp = self.selected_timestamps[1]
@@ -1136,6 +1138,7 @@ class SatDataLoader(object):
             cnd = isinstance(self.selected_timestamps[0], _datetime.date)
             cnd &= begin_timestamp == self.selected_timestamps[0]
             cnd &= end_timestamp == self.selected_timestamps[1]
+
             if cnd: return self.__loadSatData_ALL_RASTERS(ds_satdata=ds_satdata, np_satdata=np_satdata)
         else:
             raise NotImplementedError
@@ -1155,6 +1158,8 @@ class SatDataLoader(object):
 
         if cnd_reflectance:
             # TODO move to own method
+
+            # TODO move to method get reflectance idx
             _, _, len_timestamps, len_features = self.shape_satdata
             end_selection = int(_NFEATURES_REFLECTANCE)
 
@@ -1197,38 +1202,9 @@ class SatDataLoader(object):
             # TODO comment
             self._np_satdata[idx, :, :] *= 0.02
 
+        # TODO comment
         self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
 
-    # def _loadSatData_SELECTED_RANGE(self) -> None:
-    #
-    #     raise NotImplementedError
-    #
-    # def __loadSatData_ALL_RASTERS(self, ds_satdata, np_satdata: _np.ndarray, type_name: str) -> _np.ndarray:
-    #
-    #     # TODO check input
-    #
-    #     len_ds = len(ds_satdata)
-    #
-    #     if len_ds > 1:
-    #         msg = f'Loading satdata sources ({type_name})'
-    #         with (elapsed_timer(msg=msg, enable=self.estimate_time)):
-    #
-    #             rstart = rend = 0
-    #
-    #             for i, img_ds in enumerate(ds_satdata):
-    #                 msg = f'Loading data from img #{i} ({type_name})'
-    #                 with elapsed_timer(msg=msg, enable=self.estimate_time):
-    #                     rend += img_ds.RasterCount; np_satdata[rstart:rend, :, :] = img_ds.ReadAsArray()
-    #                     rstart = rend
-    #     else:
-    #         msg = f'Loading satdata source ({type_name})'
-    #         with elapsed_timer(msg=msg, enable=self.estimate_time):
-    #             np_satdata[:, :, :] = ds_satdata[0].ReadAsArray()
-    #             np_satdata = _np.moveaxis(np_satdata, 0, -1)
-    #             np_satdata = np_satdata.astype(_np.float32)
-    #
-    #     return np_satdata
-    #
     # def _loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray, opt_select: SatDataSelectOpt = SatDataSelectOpt.REFLECTANCE):  # TODO rename
     #
     #     # TODO check input

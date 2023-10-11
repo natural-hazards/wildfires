@@ -1,5 +1,6 @@
 
 import gc
+import itertools
 
 from enum import Enum
 from typing import Union
@@ -293,33 +294,47 @@ class SatDataFuze(SatDataLoader):
         cnd_temperature_sel &= self.lst_satdata_temperature is not None
 
         if not cnd_reflectance_sel:
-            if self.lst_satdata_reflectance is not None:
-                raise NotImplementedError
-                # rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
-                # len_features = len(self.selected_timestamps_satdata)
-                # len_features *= _NFEATURES_REFLECTANCE
-                #
-                # shape_reflectance = (len_features, rows, cols)
-                # np_satdata_reflectance = _np.empty(shape=shape_reflectance)
-                #
-                # self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
-                # self._loadSatData_IMPL(
-                #     ds_satdata=self._ds_satdata_reflectance,
-                #     np_satdata=np_satdata_reflectance,
-                #     opt_select=SatDataSelectOpt.REFLECTANCE
-                # )
-                #
-                # np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
-                #
-                # # clean up
-                # del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
-                # gc.collect()
-            else:
-                err_msg = 'satellite data (reflectance) is not set'
-                raise FileNotFoundError(err_msg)
+            raise NotImplementedError
         else:
-            np_satdata_reflectance = self._np_satdata_reflectance
+            _, _, len_timestamps, len_features = self.shape_satdata
+            end_selection = int(_NFEATURES_REFLECTANCE)
 
+            # TODO comment
+            idx = list(itertools.chain(
+                *[range(i * len_features, i * len_features + end_selection) for i in range(len_timestamps)]
+            ))
+
+            np_satdata_reflectance = self._np_satdata[:, :, idx]
+
+        # if not cnd_reflectance_sel:
+        #     if self.lst_satdata_reflectance is not None:
+        #         raise NotImplementedError
+        #         # rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
+        #         # len_features = len(self.selected_timestamps_satdata)
+        #         # len_features *= _NFEATURES_REFLECTANCE
+        #         #
+        #         # shape_reflectance = (len_features, rows, cols)
+        #         # np_satdata_reflectance = _np.empty(shape=shape_reflectance)
+        #         #
+        #         # self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+        #         # self._loadSatData_IMPL(
+        #         #     ds_satdata=self._ds_satdata_reflectance,
+        #         #     np_satdata=np_satdata_reflectance,
+        #         #     opt_select=SatDataSelectOpt.REFLECTANCE
+        #         # )
+        #         #
+        #         # np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
+        #         #
+        #         # # clean up
+        #         # del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
+        #         # gc.collect()
+        #     else:
+        #         err_msg = 'satellite data (reflectance) is not set'
+        #         raise FileNotFoundError(err_msg)
+        # else:
+        #     np_satdata_reflectance = self._np_satdata_reflectance
+
+        # TODO use satdata_shape and improve implementation
         idx_start = 0
         if cnd_reflectance_sel: idx_start += _NFEATURES_REFLECTANCE
         if cnd_temperature_sel: idx_start += 1
@@ -351,18 +366,13 @@ class SatDataFuze(SatDataLoader):
 
     def fuzeData(self) -> None:  # TODO rename method
 
-        set_indexes = {VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI}
-        extra_bands = 0
-
-        # if self._vi_ops > 0: extra_bands = len(set_indexes & set(self._lst_vegetation_index))
-
         self._processMetadata_SATDATA()
         self.loadSatData()
 
         self._processMetaData_FIREMAPS()
         self.loadFiremaps()
 
-        # if self._vi_ops > 0: self.__addVegetationFeatures()
+        if self._vi_ops > 0: self.__addVegetationFeatures()
 
     """
     Shape (satellite data)  
