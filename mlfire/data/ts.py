@@ -45,7 +45,7 @@ class SatDataPreprocessOpt(Enum):
     PCA = 2
     PCA_PER_BAND = 4  # TODO rename PCA_PER_FEATURE and set 3
     SAVITZKY_GOLAY = 8
-    NOT_PROCESS_UNCHARTED_PIXELS = 16
+    NOT_PROCESS_UNCHARTED_PIXELS = 16  # TODO rename
     # ALL?
 
     def __and__(self, other):
@@ -394,40 +394,74 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     TODO comment
     """
 
-    def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
         if not isinstance(np_satdata, _np.ndarray):
-            err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
+            err_msg = f'unsupported type of argument #1: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
+        if mask is not None:
+            if not isinstance(mask, _np.ndarray):
+                err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+                raise TypeError(err_msg)
+            elif np_satdata.shape[0] != mask.shape[0]:
+                msg = ''  # TODO add error message
+                raise ValueError(msg)
+
+        np_satdata_inner = np_satdata[mask, :] if mask is not None else np_satdata
         len_features = len(self.features)
+
         for feature_id in range(len_features):
-            sub_img = np_satdata[:, feature_id::len_features]
+            sub_img = np_satdata_inner[:, feature_id::len_features]
 
             # check if standard deviation is greater than 0
             std_band = _np.std(sub_img)
-            if std_band == 0.: continue
+            if std_band == 0.: continue  # TODO add to fire maps as to not process
 
-            np_satdata[:, feature_id::len_features] = _scipy_stats.zscore(sub_img, axis=1)
+            np_satdata_inner[:, feature_id::len_features] = _scipy_stats.zscore(sub_img, axis=1)
+
+        if mask is not None:
+            np_satdata[mask, :] = np_satdata_inner; np_satdata[~mask, :] = _np.nan
+        else:
+            np_satdata = np_satdata_inner
 
         return np_satdata
 
-    def __preproess_FILTER_SAVITZKY_GOLAY(self, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __preproess_FILTER_SAVITZKY_GOLAY(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
         if not isinstance(np_satdata, _np.ndarray):
-            err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
+            err_msg = f'unsupported type of argument #1: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if mask is not None:
+            if not isinstance(mask, _np.ndarray):
+                err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+                raise TypeError(err_msg)
+            elif np_satdata.shape[0] != mask.shape[0]:
+                msg = ''  # TODO add error message
+                raise ValueError(msg)
+
+        np_satdata_inner = np_satdata[mask, :] if mask is not None else np_satdata
         len_features = len(self.features)
+
         for feature_id in range(len_features):
-            sub_img = np_satdata[:, feature_id::len_features]
+            sub_img = np_satdata_inner[:, feature_id::len_features]
 
             # apply Savitzky–Golay filter, parameters are user-defined
-            np_satdata[:, feature_id::len_features] = _scipy_signal.savgol_filter(
+            np_satdata_inner[:, feature_id::len_features] = _scipy_signal.savgol_filter(
                 sub_img,
                 window_length=self.savgol_winlen,
                 polyorder=self.savgol_polyorder
             )
+
+        if mask is not None:
+            np_satdata[mask, :] = np_satdata_inner; np_satdata[~mask, :] = _np.nan
+        else:
+            np_satdata = np_satdata_inner
 
         return np_satdata
 
@@ -436,6 +470,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     """
 
     def __preprocess_PCA_FIT_ALL_FEATURES(self, np_satdata: _np.ndarray) -> tuple:
+
+        # TODO add mask
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -455,6 +491,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         return (extractor_pca,)
 
     def __preprocess_PCA_FIT_PER_FEATURE(self, np_satdata: _np.ndarray) -> tuple:
+
+        # TODO add mask
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -500,9 +538,11 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 extractor_pca.fit()
 
         # convert list of extractor to tuple
-        return tuple(lst_extractors)  # lst_extractors
+        return tuple(lst_extractors)
 
     def __preprocess_PCA_FIT(self, np_satdata: _np.ndarray) -> tuple:
+
+        # TODO add mask
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -516,6 +556,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             return self.__preprocess_PCA_FIT_ALL_FEATURES(np_satdata=np_satdata)
 
     def __preprocess_PCA_TRANSFORM_PER_FEATURE(self, np_satdata: _np.ndarray) -> _np.ndarray:
+
+        # TODO add mask
 
         if not isinstance(np_satdata, _np.ndarray):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
@@ -538,6 +580,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
     def __preprocess_PCA_TRANSFORM_ALL_FEATURES(self, np_satdata: _np.ndarray) -> _np.ndarray:
 
+        # TODO add mask
+
         if not isinstance(np_satdata, _np.ndarray):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
@@ -545,6 +589,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         raise NotImplementedError
 
     def __preprocess_PCA_TRANSFORM(self, np_satdata: _np.ndarray) -> _np.ndarray:
+
+        # TODO add mask
 
         if not isinstance(np_satdata, _np.ndarray):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
@@ -558,7 +604,16 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
     def __preprocess_PCA(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> LIST_NDARRAYS:
 
-        # TODO check input argument
+        if not (isinstance(lst_satdata, (list, tuple)) and isinstance(lst_satdata[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #1: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
+
+        if not (isinstance(lst_firemaps, (list, tuple)) and isinstance(lst_firemaps[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #2: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
+
         # TODO don't forget on uncharted pixels
 
         if lst_satdata[0] is None:
@@ -569,103 +624,115 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
 
         # TODO comment
-        cnd_not_process = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt  # TODO rename
-        cnd_not_process = cnd_not_process == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
+        cnd_no_uncharted = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt  # TODO rename
+        cnd_no_uncharted = cnd_no_uncharted == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
 
-        tmp_shape = None
         lst_satdata = list(lst_satdata)
+        shape_satdata = None
 
         for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
-            # TODO comment
+
             if np_satdata is None: continue
-
-            if cnd_reshape:
-                tmp_shape = np_satdata.shape
-                np_satdata = np_satdata.reshape(-1, tmp_shape[2])
-
-            if cnd_not_process:
-                np_firemaps = np_firemaps.reshape(-1); np_mask = ~_np.isnan(np_firemaps)
-                _np_satdata = np_satdata[np_mask, :]  # Developer note (Marek): this creates copy of an array
-            else:
-                _np_satdata = np_satdata
-
-            # transform
-            if id_ds == 0:
-                # TODO elapsed time
-                self.__lst_extractors = self.__preprocess_PCA_FIT(np_satdata=_np_satdata)
-                # TODO check if this is right and then latent factors as property
-                self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors
-            # fit
-            # TODO elapsed time
-            _np_satdata = self.__preprocess_PCA_TRANSFORM(np_satdata=_np_satdata)
-            if cnd_reshape:
-                tmp_shape = (tmp_shape[0], tmp_shape[1], _np_satdata.shape[1])
-                _np_satdata = _np_satdata.reshape(tmp_shape)
-            lst_satdata[id_ds] = _np_satdata
-
-            # clean up memory
-            gc.collect()
-
-        return lst_satdata
-
-    def __preprocess(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> LIST_NDARRAYS:
-
-        # TODO check input arguments
-        # TODO return only time series
-
-        # TODO comment
-        cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
-
-        # TODO comment
-        cnd_not_process = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt  # TODO rename
-        cnd_not_process = cnd_not_process == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
-
-        # TODO comment
-        cnd_pca = SatDataPreprocessOpt.PCA & self.__satdata_opt == SatDataPreprocessOpt.PCA
-        cnd_pca |= SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND
-
-        # TODO comment
-        cnd_zscore = SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt
-        cnd_zscore = cnd_zscore == SatDataPreprocessOpt.STANDARTIZE_ZSCORE
-
-        for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
-            if np_satdata is None: continue
-
-            shape_satdata = mask_satdat = None
 
             if cnd_reshape:
                 shape_satdata = np_satdata.shape
                 np_satdata = np_satdata.reshape(-1, shape_satdata[2])
 
-            if cnd_not_process:
-                np_firemaps = np_firemaps.reshape(-1); mask_satdat = ~_np.isnan(np_firemaps)
-                np_satdata_ = np_satdata[mask_satdat, :]  # Developer note (Marek): this creates copy of an array
+            if cnd_no_uncharted:
+                np_firemaps = np_firemaps.reshape(-1); np_mask = ~_np.isnan(np_firemaps)
+                np_satdata_ = np_satdata[np_mask, :]  # Developer note (Marek): this creates copy of an array
             else:
                 np_satdata_ = np_satdata
 
-            if cnd_zscore or cnd_pca:
-                msg = 'standardize time series using z-score'
+            # transform
+            if id_ds == 0:
+                msg = ''
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
-                    np_satdata_ = self.__preprocess_STANDARTIZE(np_satdata=np_satdata_)
+                    # TODO set mask
+                    self.__lst_extractors = self.__preprocess_PCA_FIT(np_satdata=np_satdata_)
+                # TODO check if this is right and then latent factors as property
+                self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors
+            # fit
+            msg = ''
+            with elapsed_timer(msg=msg, enable=self.estimate_time):
+                # TODO set mask
+                np_satdata_ = self.__preprocess_PCA_TRANSFORM(np_satdata=np_satdata_)
+
+            if cnd_reshape:
+                new_shape = (shape_satdata[0], shape_satdata[1], np_satdata_.shape[1])
+                np_satdata_ = np_satdata_.reshape(new_shape)
+
+            # set new
+            lst_satdata[id_ds] = np_satdata_
+            # clean up memory
+            gc.collect()
+
+        return lst_satdata
+
+    """
+    TODO comment
+    """
+
+    def __preprocess(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> LIST_NDARRAYS:
+
+        if not (isinstance(lst_satdata, (list, tuple)) and isinstance(lst_satdata[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #1: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
+
+        if not (isinstance(lst_firemaps, (list, tuple)) and isinstance(lst_firemaps[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #2: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
+
+        # conditions
+
+        cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
+
+        cnd_no_uncharted = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt
+        cnd_no_uncharted = cnd_no_uncharted == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
+
+        cnd_pca = SatDataPreprocessOpt.PCA & self.__satdata_opt == SatDataPreprocessOpt.PCA
+        cnd_pca |= SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND
+
+        cnd_zscore = SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt
+        cnd_zscore = cnd_zscore == SatDataPreprocessOpt.STANDARTIZE_ZSCORE
+
+        # satellite data preprocessing
+
+        shape_satdata = None
+        mask_satdata = None
+
+        for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
+
+            if np_satdata is None: continue
+
+            if cnd_reshape:
+                shape_satdata = np_satdata.shape
+                np_satdata = np_satdata.reshape(-1, shape_satdata[2])
+
+            if cnd_no_uncharted:
+                np_firemaps = np_firemaps.reshape(-1)
+                mask_satdata = ~_np.isnan(np_firemaps)
 
             # filtering using Savitzky-golay filter
             if SatDataPreprocessOpt.SAVITZKY_GOLAY & self.__satdata_opt == SatDataPreprocessOpt.SAVITZKY_GOLAY:
                 msg = 'filtering data using Savitzky-Golay'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
-                    np_satdata_ = self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata_)
+                    np_satdata[...] = self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata, mask=mask_satdata)
 
-            if cnd_not_process:
-                np_satdata[mask_satdat, :] = np_satdata_
-                np_satdata[~mask_satdat, :] = _np.nan
+            # standardize time series defined for pixels using z-score
+            if cnd_zscore or cnd_pca:
+                msg = 'standardize time series using z-score'
+                with elapsed_timer(msg=msg, enable=self.estimate_time):
+                    np_satdata[...] = self.__preprocess_STANDARTIZE(np_satdata=np_satdata, mask=mask_satdata)
 
             if cnd_reshape: np_satdata = np_satdata.reshape(shape_satdata)
 
             # copy back
             lst_satdata[id_ds][...] = np_satdata[...]
 
-        """
-        Global feature extraction using principal component analysis (PCA)
-        """
+        # Global feature extraction using principal component analysis (PCA)
 
         if cnd_pca:
             lst_satdata = self.__preprocess_PCA(lst_satdata=lst_satdata, lst_firemaps=lst_firemaps)
@@ -677,6 +744,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     """
 
     def __splitData_SHUFFLE(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
+
+        # TODO rename argument np_satdata, np_firemaps?
 
         if not isinstance(satdata, _np.ndarray):
             err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
@@ -819,24 +888,26 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         # TODO set list of satellite data and fire maps
 
-    def getTrainingDataset(self) -> tuple[_np.ndarray, _np.ndarray]:
+    def getTrainingDataset(self) -> tuple[_np.ndarray]:
 
         if self._ds_training is None: self.createDatasets()
 
         return self._ds_training
 
-    def getTestDataset(self) -> tuple[_np.ndarray, _np.ndarray]:
+    def getTestDataset(self) -> Union[None, tuple[_np.ndarray]]:
 
         if self.test_ratio == 0:
-            pass  # TODO warning
+            # TODO warning
+            return None
 
         if self._ds_test is None: self.createDatasets()
         return self._ds_test
 
-    def getValDataset(self) -> tuple[_np.ndarray, _np.ndarray]:
+    def getValDataset(self) -> Union[None, tuple[_np.ndarray]]:
 
         if self.val_ratio == 0:
-            pass  # TODO warning
+            # TODO warning
+            return None
 
         if self._ds_val is None: self.createDatasets()
         return self._ds_val

@@ -1373,6 +1373,7 @@ class SatDataLoader(object):
         if self._np_firemaps is not None: return
         if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
+        # TODO firx this
         if isinstance(self.selected_timestamps[0], _datetime.date):
             begin_timestamp = self.selected_timestamps[0]; end_timestamp = self.selected_timestamps[1]
             months = [0] * 2
