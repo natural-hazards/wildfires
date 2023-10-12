@@ -1169,7 +1169,7 @@ class SatDataLoader(object):
             ))
 
             # TODO comment
-            msg = ''
+            msg = 'loading satellite data (reflectance)'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
                 # TODO change to ellipsis
                 self._np_satdata[idx, :, :] = self.__loadSatData_IMPL(
@@ -1191,7 +1191,7 @@ class SatDataLoader(object):
             idx = slice(idx_start, len_timestamps * len_features, len_features)
 
             # TODO comment
-            msg = ''
+            msg = 'loading satellite data (temperature)'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
                 # TODO change to ellipsis
                 self._np_satdata[idx, :, :] = self.__loadSatData_IMPL(
@@ -1363,7 +1363,6 @@ class SatDataLoader(object):
 
         # TODO remove?
         np_severity[np_uncharted] = _np.nan  # MTBSSeverity.NON_MAPPED_AREA.value  # TODO set nan?
-        print('#nans (severity):', _np.count_nonzero(_np.isnan(np_severity)))  # TODO remove
         del np_uncharted; gc.collect()  # clean up
 
         return np_severity
@@ -1373,7 +1372,7 @@ class SatDataLoader(object):
         if self._np_firemaps is not None: return
         if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
-        # TODO firx this
+        # TODO fix this
         if isinstance(self.selected_timestamps[0], _datetime.date):
             begin_timestamp = self.selected_timestamps[0]; end_timestamp = self.selected_timestamps[1]
             months = [0] * 2

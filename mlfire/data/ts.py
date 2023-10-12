@@ -469,15 +469,20 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     TODO comment
     """
 
-    def __preprocess_PCA_FIT_ALL_FEATURES(self, np_satdata: _np.ndarray) -> tuple:
-
-        # TODO add mask
+    def __preprocess_PCA_FIT_ALL_FEATURES(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple:
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
         if not isinstance(np_satdata, _np.ndarray):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
+
+        # TODO check mask dimension
+
+        # TODO improve implementation
+
+        if mask is not None:
+            np_satdata = np_satdata[mask, :]
 
         extractor_pca = TransformPCA(
             train_ds=np_satdata,
@@ -490,9 +495,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         return (extractor_pca,)
 
-    def __preprocess_PCA_FIT_PER_FEATURE(self, np_satdata: _np.ndarray) -> tuple:
-
-        # TODO add mask
+    def __preprocess_PCA_FIT_PER_FEATURE(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple:
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -500,13 +503,18 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
+        # TODO check mask dimension
+
         lst_extractors = []
         nfactors = 0
 
-        # transforming initial satellite data using PCA
+        np_satdata_inner = np_satdata[mask, :] if mask is not None else np_satdata
         len_features = len(self.features)
+
+        # transforming initial satellite data using PCA
         for feature_id in range(len_features):
-            sub_img = np_satdata[:, feature_id::len_features]
+
+            sub_img = np_satdata_inner[:, feature_id::len_features]
 
             extractor_pca = TransformPCA(
                 train_ds=sub_img,
@@ -540,7 +548,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         # convert list of extractor to tuple
         return tuple(lst_extractors)
 
-    def __preprocess_PCA_FIT(self, np_satdata: _np.ndarray) -> tuple:
+    def __preprocess_PCA_FIT(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple:
 
         # TODO add mask
 
@@ -551,11 +559,11 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             raise TypeError(err_msg)
 
         if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
-            return self.__preprocess_PCA_FIT_PER_FEATURE(np_satdata=np_satdata)
+            return self.__preprocess_PCA_FIT_PER_FEATURE(np_satdata=np_satdata, mask=mask)
         else:
-            return self.__preprocess_PCA_FIT_ALL_FEATURES(np_satdata=np_satdata)
+            return self.__preprocess_PCA_FIT_ALL_FEATURES(np_satdata=np_satdata, mask=mask)
 
-    def __preprocess_PCA_TRANSFORM_PER_FEATURE(self, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __preprocess_PCA_TRANSFORM_PER_FEATURE(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
         # TODO add mask
 
@@ -563,22 +571,31 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
+        # TODO check dimension of mask and satellite images
+
         len_px = np_satdata.shape[0]; len_features = len(self.features)
         nfactors = self.__lst_extractors[0].nlatent_factors  # TODO this as property
 
-        # TODO alloc with mem map
         proj_shape = (len_px, nfactors * len_features)
-        proj_satdata = _np.zeros(proj_shape, dtype=_np.float32)
+
+        # TODO alloc with mem map
+        proj_satdata = _np.empty(proj_shape, dtype=_np.float32)
+        proj_satdata_inner = proj_satdata[mask, :] if mask is not None else proj_satdata
 
         for feature_id in range(len_features):
             pca_extractor = self.__lst_extractors[feature_id]
 
-            sub_img = np_satdata[:, feature_id::len_features]
-            proj_satdata[:, feature_id::len_features] = pca_extractor.transform(sub_img)
+            sub_img = (np_satdata[mask, feature_id::len_features] if mask is not None
+                       else np_satdata[:, feature_id:len_features])
+            proj_satdata_inner[:, feature_id::len_features] = pca_extractor.transform(sub_img)
+
+        if mask is not None:
+            proj_satdata[mask, :] = proj_satdata_inner
+            proj_satdata[~mask, :] = _np.nan
 
         return proj_satdata
 
-    def __preprocess_PCA_TRANSFORM_ALL_FEATURES(self, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __preprocess_PCA_TRANSFORM_ALL_FEATURES(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
         # TODO add mask
 
@@ -588,21 +605,20 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         raise NotImplementedError
 
-    def __preprocess_PCA_TRANSFORM(self, np_satdata: _np.ndarray) -> _np.ndarray:
-
-        # TODO add mask
+    def __preprocess_PCA_TRANSFORM(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
         if not isinstance(np_satdata, _np.ndarray):
             err_msg = f'unsupported type of argument: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
-        if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
-            return self.__preprocess_PCA_TRANSFORM_PER_FEATURE(np_satdata=np_satdata)
-        else:
-            raise NotImplementedError
-            # return self.__preprocess_PCA_FIT_ALL_FEATURES(np_satdata=np_satdata)
+        # TODO check satdata and mask dimension
 
-    def __preprocess_PCA(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> LIST_NDARRAYS:
+        if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
+            return self.__preprocess_PCA_TRANSFORM_PER_FEATURE(np_satdata=np_satdata, mask=mask)
+        else:
+            return self.__preprocess_PCA_FIT_ALL_FEATURES(np_satdata=np_satdata, mask=mask)
+
+    def __preprocess_PCA(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> tuple[_np.ndarray, ...]:
 
         if not (isinstance(lst_satdata, (list, tuple)) and isinstance(lst_satdata[0], _np.ndarray)):
             err_msg = f'unsupported type of argument #1: {type(lst_satdata)}'
@@ -614,21 +630,15 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
             raise TypeError(err_msg)
 
-        # TODO don't forget on uncharted pixels
+        # conditions
 
-        if lst_satdata[0] is None:
-            # TODO error
-            pass
-
-        # TODO comment
         cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
 
-        # TODO comment
-        cnd_no_uncharted = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt  # TODO rename
+        cnd_no_uncharted = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt
         cnd_no_uncharted = cnd_no_uncharted == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
 
         lst_satdata = list(lst_satdata)
-        shape_satdata = None
+        shape_satdata = mask_satdata = None
 
         for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
 
@@ -639,35 +649,28 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 np_satdata = np_satdata.reshape(-1, shape_satdata[2])
 
             if cnd_no_uncharted:
-                np_firemaps = np_firemaps.reshape(-1); np_mask = ~_np.isnan(np_firemaps)
-                np_satdata_ = np_satdata[np_mask, :]  # Developer note (Marek): this creates copy of an array
-            else:
-                np_satdata_ = np_satdata
+                np_firemaps = np_firemaps.reshape(-1)
+                mask_satdata = ~_np.isnan(np_firemaps)
 
-            # transform
             if id_ds == 0:
-                msg = ''
+                msg = 'fitting PCA projector'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
-                    # TODO set mask
-                    self.__lst_extractors = self.__preprocess_PCA_FIT(np_satdata=np_satdata_)
-                # TODO check if this is right and then latent factors as property
-                self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors
-            # fit
-            msg = ''
+                    self.__lst_extractors = self.__preprocess_PCA_FIT(np_satdata=np_satdata, mask=mask_satdata)
+                    self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors  # TODO as property
+
+            msg = f'reducting dimension of a data set #{id_ds} (PCA)'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
-                # TODO set mask
-                np_satdata_ = self.__preprocess_PCA_TRANSFORM(np_satdata=np_satdata_)
+                proj_satdata = self.__preprocess_PCA_TRANSFORM(np_satdata=np_satdata, mask=mask_satdata)
 
             if cnd_reshape:
-                new_shape = (shape_satdata[0], shape_satdata[1], np_satdata_.shape[1])
-                np_satdata_ = np_satdata_.reshape(new_shape)
+                new_shape = (shape_satdata[0], shape_satdata[1], proj_satdata.shape[1])
+                proj_satdata = proj_satdata.reshape(new_shape)
 
-            # set new
-            lst_satdata[id_ds] = np_satdata_
-            # clean up memory
+            lst_satdata[id_ds] = proj_satdata
+            # clean up
             gc.collect()
 
-        return lst_satdata
+        return tuple(lst_satdata)
 
     """
     TODO comment
@@ -723,7 +726,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
             # standardize time series defined for pixels using z-score
             if cnd_zscore or cnd_pca:
-                msg = 'standardize time series using z-score'
+                msg = 'standardize data using z-score'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
                     np_satdata[...] = self.__preprocess_STANDARTIZE(np_satdata=np_satdata, mask=mask_satdata)
 
@@ -945,6 +948,17 @@ if __name__ == '__main__':
         fn_labels_mtbs = _os.path.join(VAR_DATA_DIR, fn_labels_mtbs)
         VAR_LST_FIREMAPS.append(fn_labels_mtbs)
 
+    # transform ops
+    TRANSFORM_OPS = (
+        SatDataPreprocessOpt.STANDARTIZE_ZSCORE,
+        # SatDataPreprocessOpt.SAVITZKY_GOLAY,
+        SatDataPreprocessOpt.PCA_PER_BAND,
+        SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
+    )
+
+    PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
+    PCA_RETAINED_VARIANCE = 0.9  # 10% information could be noisy
+
     # setup of data set loader
     dataset_loader = SatDataAdapterTS(
         lst_firemaps=VAR_LST_FIREMAPS,
@@ -953,6 +967,7 @@ if __name__ == '__main__':
         opt_split_satdata=SatDataSplitOpt.IMG_HORIZONTAL_SPLIT,
         lst_vegetation_add=[VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI],
         opt_select_satdata=SatDataSelectOpt.ALL,
+        opt_preprocess_satdata=TRANSFORM_OPS,
         estimate_time=True
     )
 
