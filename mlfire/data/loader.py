@@ -380,26 +380,67 @@ class SatDataLoader(object):
 
         return df_timestamps  # TODO as private attribute
 
-    @property
-    def selected_timestamps_satdata(self) -> _PandasDataFrame:
+    def __getSelectedTimestamps_SATDATA_FROM_LIST(self, lst_timestamps_satdata: list) -> _PandasDataFrame:
 
-        df_timestamps = None  # TODO as private attribute
+        if not isinstance(lst_timestamps_satdata, (list, tuple)):
+            raise NotImplementedError
 
-        # TODO improve implementation
+        if len(lst_timestamps_satdata) != 2:
+            raise NotImplementedError
 
-        if isinstance(self.selected_timestamps[0], _datetime.date):
-            begin_timestamp = self.selected_timestamps[0]
-            end_timestamp = self.selected_timestamps[1]
+        if isinstance(lst_timestamps_satdata[0], (_datetime.date, int)):
+            timestamp_start = lst_timestamps_satdata[0]
+            timestamp_end = lst_timestamps_satdata[1]
 
-            if (begin_timestamp == self.timestamps_satdata['Timestamps'].iloc[0] and
-                    end_timestamp == self.timestamps_satdata['Timestamps'].iloc[-1]):
+            if isinstance(lst_timestamps_satdata[0], int):
+                timestamp_start = self.timestamps_satdata.iloc[timestamp_start]['Timestamps']
+                timestamp_end = self.timestamps_satdata.iloc[timestamp_end]['Timestamps']
+
+            cnd = timestamp_start == self.timestamps_satdata.iloc[0]['Timestamps']
+            cnd &= timestamp_end == self.timestamps_satdata.iloc[-1]['Timestamps']
+
+            if cnd:
                 df_timestamps = self.timestamps_satdata
             else:
-                raise NotImplementedError
+                df_timestamps = self.timestamps_satdata[
+                    (self.timestamps_satdata['Timestamps'] >= timestamp_start) &
+                    (self.timestamps_satdata['Timestamps'] <= timestamp_end)
+                ]
         else:
             raise NotImplementedError
 
-        return df_timestamps  # TODO as private attributes
+        return df_timestamps
+
+    def __getSelectedTimestamps_SATDATA_FROM_LIST_LIST(self, lst_timestamps_satdata: list) -> _PandasDataFrame:
+
+        if not isinstance(lst_timestamps_satdata, (list, tuple)):
+            raise NotImplementedError
+
+        df_timestamps = None
+        for timestamps in lst_timestamps_satdata:
+            df = self.__getSelectedTimestamps_SATDATA_FROM_LIST(
+                lst_timestamps_satdata=timestamps
+            )
+            df_timestamps = df if df_timestamps is None else _pd.concat([df_timestamps, df])
+
+        return df_timestamps
+
+    @property
+    def selected_timestamps_satdata(self) -> _PandasDataFrame:
+
+        if not isinstance(self.selected_timestamps, (list, tuple)):
+            raise NotImplementedError
+
+        if isinstance(self.selected_timestamps[0], (int, _datetime.date)):
+            df_timestamps = self.__getSelectedTimestamps_SATDATA_FROM_LIST(
+                lst_timestamps_satdata=self.selected_timestamps)
+        else:
+            df_timestamps = self.__getSelectedTimestamps_SATDATA_FROM_LIST_LIST(
+                lst_timestamps_satdata=self.selected_timestamps
+            )
+
+        # df_timestamps as private attribute
+        return df_timestamps
 
     @property
     def timestamps_firemaps(self) -> _PandasDataFrame:
@@ -983,7 +1024,7 @@ class SatDataLoader(object):
                 )
                 raise IOError(err_msg)
 
-        map_layout_firemaps = {}
+        map_layout_firemaps = {}  # TODO rename
         pos = 0
 
         nsources = len(self._ds_firemaps)
@@ -1100,6 +1141,35 @@ class SatDataLoader(object):
         # TODO memmap?
         self._np_satdata = _np.empty(shape=np_shape, dtype=_np.float32)
 
+    def __loadSatData_GET_IDX_FROM_LIST(self) -> range:  # TODO rename
+
+        if len(self.selected_timestamps) == 2:
+            if isinstance(self.selected_timestamps[0], int):
+                id_start = self.selected_timestamps[0]; id_end = self.selected_timestamps[1]
+                return range(id_start, id_end + 1)
+            elif isinstance(self.selected_timestamps[1], _datetime.data):
+                series_timestamps = self.timestamps_temperature['Timestamps']
+                index = series_timestamps.index
+
+                cnd = series_timestamps == self.selected_timestamps[0]
+                cnd |= series_timestamps == self.selected_timestamps[1]
+
+                idx = index[cnd].to_list()
+                if len(idx) != 2:
+                    err_msg = ''
+                    raise ValueError(err_msg)
+
+                return range(idx[0], idx[1] + 1)
+            else:
+                err_msg = ''
+                raise TypeError(err_msg)
+        else:
+            raise NotImplementedError
+
+    def __loadSatData_GET_IDX_FROM_LIST_LIST(self) -> list:
+
+        raise NotImplementedError
+
     def __loadSatData_ALL_RASTERS(self, ds_satdata: _np.ndarray, np_satdata: _np.ndarray) -> _np.ndarray:
 
         # TODO check input
@@ -1120,32 +1190,137 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def __loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __loadSatData_SELECTED_TIMESTAMPS(self, ds_satadata, np_satdata: _np.ndarray,
+                                          layout_layers: dict, nfeatures: int) -> _np.ndarray:
 
+        pass
+
+        # if not isinstance(np_satdata, _np.ndarray):
+        #     pass
+        #
+        # if not isinstance(layout_layers, dict):
+        #     pass
+        #
+        # if not isinstance(np_satdata, int):
+        #     pass
+        #
+        # # conditions
+        # cnd1 = isinstance(self.selected_timestamps, (list, tuple))
+        # cnd2 = isinstance(self.selected_timestamps[0], (_datetime.date, int))
+        #
+        # if cnd1 and cnd2:
+        #     if len(self.selected_timestamps) == 2:
+        #         range_idx = self.__loadSatData_GET_IDX_FROM_LIST()
+        #     else:
+        #         raise NotImplementedError
+        # elif isinstance(self.selected_timestamps[0], (list, tuple)):
+        #     if isinstance(self.selected_timestamps[0][0], (_datetime.data, int)):
+        #         range_idx = self.__loadSatData_GET_IDX_FROM_LIST_LIST()
+        #     else:
+        #         raise NotImplementedError  # TODO change to type error
+        # else:
+        #     raise NotImplementedError
+        #
+        # pos = 0
+        #
+        # for i in range_idx:
+        #     img_id, rs_id_start = layout_layers[i]
+        #     for feature_id in range(nfeatures):
+        #         np_satdata[:, :, pos] = ds_satadata.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
+
+    def __loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        pass
         # TODO check input
+        # if not isinstance(np_satdata, _np.ndarray):
+        #     pass
+        #
+        # if not isinstance(layout_layers, dict):
+        #     pass
+        #
+        # if not isinstance(nfeatures, int):
+        #     pass
+        #
+        # if isinstance(self.selected_timestamps, (list, tuple)):
+        #     if isinstance(self.selected_timestamps[0], (_datetime.date, int)):
+        #         timestamp_start = self.selected_timestamps[0]
+        #         timestamp_end = self.selected_timestamps[1]
+        #
+        #         if isinstance(self.selected_timestamps[0], int):
+        #             timestamp_start = self.timestamps_satdata[timestamp_start]
+        #             timestamp_end = self.timestamps_satdata[timestamp_end]
+        #     elif isinstance(self.selected_timestamps[0], (list, tuple)):
+        #         raise NotImplementedError
+        #     else:
+        #         raise NotImplementedError
+        # else:
+        #     raise NotImplementedError
+        #
+        # if (isinstance(self.selected_timestamps, (list, tuple)) and
+        #         ~isinstance(self.selected_timestamps[0], (list, tuple))):
+        #     cnd = timestamp_start == self.selected_timestamps_satdata.iloc[0]['Timestamps']
+        #     cnd &= timestamp_end == self.selected_timestamps_satdata.iloc[-1]['Timestamps']
+        #
+        #     if cnd:
+        #         return self.__loadSatData_ALL_RASTERS(ds_satdata=ds_satdata, np_satdata=np_satdata)
+        #     else:
+        #         return self.__loadSatData_SELECTED_TIMESTAMPS(
+        #             ds_satadata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
+        #         )
+        # else:
+        #     return self.__loadSatData_SELECTED_TIMESTAMPS(
+        #         ds_satadata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
+        #     )
 
-        if isinstance(self.selected_timestamps, (list, tuple)):
-            if isinstance(self.selected_timestamps[0], _datetime.date):
-                begin_timestamp = self.selected_timestamps[0]
-                end_timestamp = self.selected_timestamps[1]
-                # TODO comment
-            else:
-                raise NotImplementedError
-        else:
-            raise NotImplementedError
+    def __loadSatData_REFLETANCE(self) -> None:
 
-        if isinstance(self.selected_timestamps, (list, tuple)):
-            cnd = isinstance(self.selected_timestamps[0], _datetime.date)
-            cnd &= begin_timestamp == self.selected_timestamps[0]
-            cnd &= end_timestamp == self.selected_timestamps[1]
+        _, _, len_timestamps, len_features = self.shape_satdata
+        end_selection = int(_NFEATURES_REFLECTANCE)
 
-            if cnd: return self.__loadSatData_ALL_RASTERS(ds_satdata=ds_satdata, np_satdata=np_satdata)
-        else:
-            raise NotImplementedError
+        idx = list(itertools.chain(
+            *[range(i * len_features, i * len_features + end_selection) for i in range(len_timestamps)]
+        ))
+
+        msg = 'loading satellite data (reflectance)'
+        with elapsed_timer(msg=msg, enable=self.estimate_time):
+            self._np_satdata[idx, ...] = self.__loadSatData_IMPL(
+                ds_satdata=self._ds_satdata_reflectance,
+                np_satdata=self._np_satdata[idx, :, :],
+                layout_layers=self._layout_layers_reflectance,
+                nfeatures=7
+            )
+
+        # scale pixel values using MODIS09 scale factor (0.0001) for reflectance
+        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
+        self._np_satdata[idx, :, :] *= 1e-4
+
+    def __loadSatData_TEMPERATURE(self) -> None:
+
+        cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
+                           self._ds_satdata_reflectance is not None)
+
+        _, _, _, len_features = self.shape_satdata
+        len_timestamps = len(self.selected_timestamps_satdata)
+
+        idx_start = _NFEATURES_REFLECTANCE if cnd_reflectance else 0
+        idx = slice(idx_start, len_timestamps * len_features, len_features)
+
+        msg = 'loading satellite data (temperature)'
+        with elapsed_timer(msg=msg, enable=self.estimate_time):
+            self._np_satdata[idx, ...] = self.__loadSatData_IMPL(
+                ds_satdata=self._ds_satdata_temperature,
+                np_satdata=self._np_satdata[idx, :, :],
+                layout_layers=self._layout_layers_temperature,
+                nfeatures=1
+            )
+
+        # scale pixel values using MODIS11 scale factor (0.02) for temperature
+        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD11A1
+        self._np_satdata[idx, :, :] *= 1e-2
 
     def loadSatData(self) -> None:
 
-        # TODO check if data is loaded
+        if self._np_satdata is not None: return
 
         # TODO comment
         self.__allocSatDataBuffer()
@@ -1157,137 +1332,12 @@ class SatDataLoader(object):
                            self._ds_satdata_temperature is not None)
 
         if cnd_reflectance:
-            # TODO move to own method
-
-            # TODO move to method get reflectance idx
-            _, _, len_timestamps, len_features = self.shape_satdata
-            end_selection = int(_NFEATURES_REFLECTANCE)
-
-            # TODO comment
-            idx = list(itertools.chain(
-                *[range(i * len_features, i * len_features + end_selection) for i in range(len_timestamps)]
-            ))
-
-            # TODO comment
-            msg = 'loading satellite data (reflectance)'
-            with elapsed_timer(msg=msg, enable=self.estimate_time):
-                # TODO change to ellipsis
-                self._np_satdata[idx, :, :] = self.__loadSatData_IMPL(
-                    ds_satdata=self._ds_satdata_reflectance,
-                    np_satdata=self._np_satdata[idx, :, :]
-                )
-
-            # scale pixel values using MODIS scale factor (0.0001) for reflectance
-            # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-            self._np_satdata[idx, :, :] *= 1e-4
-
+            self.__loadSatData_REFLETANCE()
         if cnd_temperature:
-            # TODO move to own method
-            _, _, _, len_features = self.shape_satdata
-            len_timestamps = len(self.selected_timestamps_satdata)
-
-            # TODO comment
-            idx_start = _NFEATURES_REFLECTANCE if cnd_reflectance else 0
-            idx = slice(idx_start, len_timestamps * len_features, len_features)
-
-            # TODO comment
-            msg = 'loading satellite data (temperature)'
-            with elapsed_timer(msg=msg, enable=self.estimate_time):
-                # TODO change to ellipsis
-                self._np_satdata[idx, :, :] = self.__loadSatData_IMPL(
-                    ds_satdata=self._ds_satdata_temperature,
-                    np_satdata=self._np_satdata[idx, :, :]
-                )
-
-            # TODO comment
-            self._np_satdata[idx, :, :] *= 0.02
+            self.__loadSatData_TEMPERATURE()
 
         # TODO comment
         self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
-
-    # def _loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray, opt_select: SatDataSelectOpt = SatDataSelectOpt.REFLECTANCE):  # TODO rename
-    #
-    #     # TODO check input
-    #
-    #     if not self._satdata_processed: self._processMetadata_SATDATA()
-    #
-    #     if isinstance(self.selected_timestamps[0], _datetime.date):
-    #         begin_timestamp = self.selected_timestamps[0]
-    #         end_timestamp = self.selected_timestamps[1]
-    #     else:
-    #         raise NotImplementedError
-    #
-    #     if (begin_timestamp == self.timestamps_satdata['Timestamps'].iloc[0] and
-    #             end_timestamp == self.timestamps_satdata['Timestamps'].iloc[-1]):
-    #         self.__loadSatData_ALL_RASTERS(
-    #             ds_satdata=ds_satdata, np_satdata=np_satdata, type_name=opt_select.name.lower()
-    #         )
-    #     else:
-    #         raise NotImplementedError
-    #
-    # def loadSatData(self, extra_bands: int = 0) -> None:  # TODO protected?
-    #
-    #     # TODO reimplement
-    #     # TODO remove extra_bands
-    #
-    #     # TODO check allocated
-    #     if not self._satdata_processed: self._processMetadata_SATDATA()
-    #
-    #     # TODO check error
-    #     self.__allocSatDataBuffer(extra_features=extra_bands)
-    #
-    #     # TODO use _loadSatData_IMPL
-    #
-    #     # TODO check loaded
-    #     # TODO check if reflectance and temperature timestamps are same
-    #     if isinstance(self.selected_timestamps[0], _datetime.date):
-    #         begin_timestamp = self.selected_timestamps[0]
-    #         end_timestamp = self.selected_timestamps[1]
-    #     else:
-    #         raise NotImplementedError
-    #
-    #     # move below to loadSatData_IMPL
-    #     cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
-    #                        self._ds_satdata_reflectance is not None)
-    #     cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
-    #                        self._ds_satdata_temperature is not None)
-    #
-    #     if (begin_timestamp == self.timestamps_satdata['Timestamps'].iloc[0] and
-    #             end_timestamp == self.timestamps_satdata['Timestamps'].iloc[-1]):  # and self.selected_timestamps is list
-    #
-    #         if cnd_reflectance:
-    #             type_name = str(SatDataSelectOpt.REFLECTANCE)
-    #             self._np_satdata_reflectance[:, :, :] = self.__loadSatData_ALL_RASTERS(
-    #                 ds_satdata=self._ds_satdata_reflectance, np_satdata=self._np_satdata_reflectance, type_name=type_name
-    #             )
-    #
-    #             # scale pixel values using MODIS scale factor (0.0001) for reflectance
-    #             # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-    #             self._np_satdata_reflectance /= 1e4
-    #
-    #         if cnd_temperature:
-    #             type_name = str(SatDataSelectOpt.TEMPERATURE)
-    #             self._np_satdata_temperature = self.__loadSatData_ALL_RASTERS(
-    #                 ds_satdata=self._ds_satdata_temperature, np_satdata=self._np_satdata_temperature, type_name=type_name
-    #             )
-    #
-    #             # TODO comment
-    #             self._np_satdata_temperature /= 50
-    #
-    #     else:
-    #         raise NotImplementedError
-    #
-    #         # begin_cond = self._df_timestamps_reflectance['Date'] == begin_timestamp
-    #         # end_cond = self._df_timestamps_reflectance['Date'] == end_timestamp
-    #         #
-    #         # rs_id = (
-    #         #     self._df_timestamps_reflectance.index[begin_cond][0],
-    #         #     self._df_timestamps_reflectance.index[end_cond][0]
-    #         # )
-    #
-    #     self._np_satdata = _np.moveaxis(self._np_satdata, 0, -1)
-    #     if cnd_reflectance: self._np_satdata_reflectance = _np.moveaxis(self._np_satdata_reflectance, 0, -1)  # TODO remove
-    #     if cnd_temperature: self._np_satdata_temperature = _np.moveaxis(self._np_satdata_temperature, 0, -1)  # TODO remove
 
     """
     Loading fire maps - MTBS and FireCCI 
@@ -1295,7 +1345,7 @@ class SatDataLoader(object):
 
     def _processConfidenceLevel_CCI(self, rs_ids) -> _np.ndarray:
 
-        if isinstance(rs_ids, int): rs_ids = [rs_ids]
+        if isinstance(rs_ids, int): rs_ids = (rs_ids,)
         # TODO check input
 
         rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
@@ -1620,17 +1670,32 @@ if __name__ == '__main__':
         estimate_time=True
     )
 
-    print(dataset_loader.timestamps_firemaps)
+    VAR_START_IDX = 10
+    VAR_END_IDX = -10
 
-    VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']
-    VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
+    VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[VAR_START_IDX]['Timestamps']
+    VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[VAR_END_IDX]['Timestamps']
 
-    dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
+    dataset_loader.selected_timestamps = ((10, 20), (25, 40))
+    # dataset_loader.selected_timestamps = (VAR_START_IDX, VAR_END_IDX)
+    # dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
-    print(dataset_loader.shape_satdata)
-    print(dataset_loader.shape_firemaps)
+    # print(dataset_loader.timestamps_firemaps)
 
-    print(f'len ts: {len(dataset_loader.timestamps_satdata)}')
-    print(f'len ts: {len(dataset_loader.timestamps_firemaps)}')
+    print(dataset_loader.timestamps_satdata)
+    print(dataset_loader.selected_timestamps_satdata)
 
-    dataset_loader.loadSatData()
+    # VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']
+    # VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
+
+    # dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
+    # print(dataset_loader.selected_timestamps_satdata.iloc[0]['Timestamps'])
+    #
+    # print(dataset_loader.shape_satdata)
+    # print(dataset_loader.shape_firemaps)
+    #
+    # print(f'len ts: {len(dataset_loader.timestamps_satdata)}')
+    # print(f'len ts: {len(dataset_loader.timestamps_firemaps)}')
+
+    # print(dataset_loader.selected_timestamps_satdata)
+    # dataset_loader.loadSatData()
