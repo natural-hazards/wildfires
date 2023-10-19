@@ -1170,9 +1170,12 @@ class SatDataLoader(object):
 
         raise NotImplementedError
 
-    def __loadSatData_ALL_RASTERS(self, ds_satdata: _np.ndarray, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __loadSatData_ALL_RASTERS(self, ds_satdata, np_satdata: _np.ndarray) -> _np.ndarray:
 
-        # TODO check input
+        if not isinstance(np_satdata, _np.ndarray):
+            pass
+
+        # TODO check other arguments
 
         len_ds = len(ds_satdata)
 
@@ -1230,47 +1233,21 @@ class SatDataLoader(object):
 
     def __loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
 
-        pass
-        # TODO check input
-        # if not isinstance(np_satdata, _np.ndarray):
-        #     pass
-        #
-        # if not isinstance(layout_layers, dict):
-        #     pass
-        #
-        # if not isinstance(nfeatures, int):
-        #     pass
-        #
-        # if isinstance(self.selected_timestamps, (list, tuple)):
-        #     if isinstance(self.selected_timestamps[0], (_datetime.date, int)):
-        #         timestamp_start = self.selected_timestamps[0]
-        #         timestamp_end = self.selected_timestamps[1]
-        #
-        #         if isinstance(self.selected_timestamps[0], int):
-        #             timestamp_start = self.timestamps_satdata[timestamp_start]
-        #             timestamp_end = self.timestamps_satdata[timestamp_end]
-        #     elif isinstance(self.selected_timestamps[0], (list, tuple)):
-        #         raise NotImplementedError
-        #     else:
-        #         raise NotImplementedError
-        # else:
-        #     raise NotImplementedError
-        #
-        # if (isinstance(self.selected_timestamps, (list, tuple)) and
-        #         ~isinstance(self.selected_timestamps[0], (list, tuple))):
-        #     cnd = timestamp_start == self.selected_timestamps_satdata.iloc[0]['Timestamps']
-        #     cnd &= timestamp_end == self.selected_timestamps_satdata.iloc[-1]['Timestamps']
-        #
-        #     if cnd:
-        #         return self.__loadSatData_ALL_RASTERS(ds_satdata=ds_satdata, np_satdata=np_satdata)
-        #     else:
-        #         return self.__loadSatData_SELECTED_TIMESTAMPS(
-        #             ds_satadata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
-        #         )
-        # else:
-        #     return self.__loadSatData_SELECTED_TIMESTAMPS(
-        #         ds_satadata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
-        #     )
+        if not isinstance(np_satdata, _np.ndarray):
+            pass
+
+        if not isinstance(layout_layers, dict):
+            pass
+
+        if not isinstance(nfeatures, int):
+            pass
+
+        if self.timestamps_satdata['Timestamps'].equals(self.selected_timestamps_satdata['Timestamps']):
+            return self.__loadSatData_ALL_RASTERS(ds_satdata=ds_satdata, np_satdata=np_satdata)
+        else:
+            return self.__loadSatData_SELECTED_TIMESTAMPS(
+                ds_satadata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
+            )
 
     def __loadSatData_REFLETANCE(self) -> None:
 
@@ -1419,34 +1396,35 @@ class SatDataLoader(object):
 
     def loadFiremaps(self):  # TODO protected?
 
+        # TODO fix implementation
+
         if self._np_firemaps is not None: return
         if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
         # TODO fix this
-        if isinstance(self.selected_timestamps[0], _datetime.date):
-            begin_timestamp = self.selected_timestamps[0]; end_timestamp = self.selected_timestamps[1]
-            months = [0] * 2
+        # if isinstance(self.selected_timestamps_satdata
+        begin_timestamp = self.selected_timestamps_satdata.iloc[0]['Timestamps']
+        end_timestamp = self.selected_timestamps_satdata.iloc[-1]['Timestamps']
+        months = [0] * 2
 
-            if self.opt_select_firemap == FireMapSelectOpt.MTBS:
-                months[0] = months[1] = 1
-            elif self.opt_select_firemap == FireMapSelectOpt.CCI:
-                months[0] = begin_timestamp.month
-                months[1] = end_timestamp.month
+        if self.opt_select_firemap == FireMapSelectOpt.MTBS:
+            months[0] = months[1] = 1
+        elif self.opt_select_firemap == FireMapSelectOpt.CCI:
+            months[0] = begin_timestamp.month
+            months[1] = end_timestamp.month
 
-            begin_timestamp = _datetime.date(year=begin_timestamp.year, month=months[0], day=1)
-            end_timestamp = _datetime.date(year=end_timestamp.year, month=months[1], day=1)
+        begin_timestamp = _datetime.date(year=begin_timestamp.year, month=months[0], day=1)
+        end_timestamp = _datetime.date(year=end_timestamp.year, month=months[1], day=1)
 
-            cnd_begin_idx = self._df_timestamps_firemaps['Timestamps'] == begin_timestamp
-            begin_idx = self._df_timestamps_firemaps.index[cnd_begin_idx][0]
+        cnd_begin_idx = self._df_timestamps_firemaps['Timestamps'] == begin_timestamp
+        begin_idx = self._df_timestamps_firemaps.index[cnd_begin_idx][0]
 
-            if begin_timestamp != end_timestamp:
-                cnd_end_idx = self._df_timestamps_firemaps['Timestamps'] == end_timestamp
-                end_idx = self._df_timestamps_firemaps.index[cnd_end_idx][0]
-                rs_ids = range(begin_idx, end_idx + 1)
-            else:
-                rs_ids = begin_idx
+        if begin_timestamp != end_timestamp:
+            cnd_end_idx = self._df_timestamps_firemaps['Timestamps'] == end_timestamp
+            end_idx = self._df_timestamps_firemaps.index[cnd_end_idx][0]
+            rs_ids = range(begin_idx, end_idx + 1)
         else:
-            raise NotImplementedError
+            rs_ids = begin_idx
 
         if self.opt_select_firemap == FireMapSelectOpt.MTBS:
             np_severity = self._processSeverity_MTBS(rs_ids=rs_ids)
@@ -1670,14 +1648,14 @@ if __name__ == '__main__':
         estimate_time=True
     )
 
-    VAR_START_IDX = 10
-    VAR_END_IDX = -10
+    VAR_START_IDX = 0
+    VAR_END_IDX = -1
 
     VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[VAR_START_IDX]['Timestamps']
     VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[VAR_END_IDX]['Timestamps']
 
-    dataset_loader.selected_timestamps = ((10, 20), (25, 40))
-    # dataset_loader.selected_timestamps = (VAR_START_IDX, VAR_END_IDX)
+    # dataset_loader.selected_timestamps = ((10, 20), (25, 40))
+    dataset_loader.selected_timestamps = (VAR_START_IDX, VAR_END_IDX)
     # dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
     # print(dataset_loader.timestamps_firemaps)
