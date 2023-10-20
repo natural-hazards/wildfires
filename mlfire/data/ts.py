@@ -80,7 +80,7 @@ class SatDataPreprocessOpt(Enum):
 
 # defines
 LIST_PREPROCESS_SATDATA_OPT = Union[
-    None, SatDataPreprocessOpt, tuple[SatDataPreprocessOpt], list[SatDataPreprocessOpt]
+    None, SatDataPreprocessOpt, tuple[SatDataPreprocessOpt, ...], list[SatDataPreprocessOpt, ...]
 ]
 
 
@@ -1031,7 +1031,7 @@ if __name__ == '__main__':
         lst_satdata_reflectance=VAR_LST_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_TEMPERATURE,
         opt_split_satdata=SatDataSplitOpt.IMG_HORIZONTAL_SPLIT,
-        lst_vegetation_add=[VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI],
+        lst_vegetation_add=(VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI),
         opt_select_satdata=SatDataSelectOpt.ALL,
         opt_preprocess_satdata=TRANSFORM_OPS,
         estimate_time=True

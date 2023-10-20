@@ -71,7 +71,7 @@ class VegetationIndexSelectOpt(Enum):
 
 # defines
 LIST_VEGETATION_SELECT_OPT = Union[
-    VegetationIndexSelectOpt, tuple[VegetationIndexSelectOpt], list[VegetationIndexSelectOpt]
+    VegetationIndexSelectOpt, tuple[VegetationIndexSelectOpt, ...], list[VegetationIndexSelectOpt, ...]
 ]
 
 
