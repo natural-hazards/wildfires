@@ -361,7 +361,7 @@ class SatDataFuze(SatDataLoader):
             del self._layout_layers_temperature; self._layout_layers_reflectance = None
             del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
             del np_reflec
-            
+
             # clean up
             gc.collect()
 

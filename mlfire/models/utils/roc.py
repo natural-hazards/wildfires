@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 
 from sklearn.metrics import roc_curve, auc
 
+# import utils
 from mlfire.utils.functool import lazy_import
 
 # lazy import
@@ -67,52 +68,49 @@ class AucRoc(object):
         tpr = self.tpr
 
         if ax is None:
-
             plt.plot(
                 fpr,
                 tpr,
                 color='darkorange',
                 label='AUC ROC = {0:.4f}'.format(self._auc),
             )
-            plt.plot([0, 1], [0, 1], color='navy', linestyle='--')
+
+            plt.fill_between(fpr, tpr, color='C1', alpha=0.2)
+            plt.plot([0, 1], [0, 1], linestyle='--')
 
             plt.xlim([0.0, 1.0])
             plt.ylim([0.0, 1.05])
 
-            plt.xlabel('False Positive Rate')
-            plt.ylabel('True Positive Rate')
+            plt.xlabel(xlabel='False Positive Rate')  #, fontsize=15)
+            plt.ylabel(ylabel='True Positive Rate')   #, fontsize=15)
 
-            plt.title('Receiver operating characteristic')
+            plt.title(label='Receiver operating characteristic', fontsize=14)   #, fontsize=15)
             plt.legend(loc='lower right')
 
             plt.show()
-
+            # plt.savefig('/Users/marek/Playground/wildfires/auc_roc.png')
         else:
-
             ax.plot(
                 fpr,
                 tpr,
                 color='darkorange',
                 label='AUC ROC = {0:.4f}'.format(self._auc),
             )
-            ax.plot([0, 1], [0, 1], color='navy', linestyle='--')
+            ax.fill_between(fpr, tpr, color='C1', alpha=0.2)
+            ax.plot([0, 1], [0, 1], linestyle='--')
 
             ax.set_xlim([0.0, 1.0])
             ax.set_ylim([0.0, 1.05])
 
-            ax.set_xlabel('False Positive Rate')
-            ax.set_ylabel('True Positive Rate')
+            ax.set_xlabel(xlabel='False Positive Rate')  # , fontsize=12)
+            ax.set_ylabel(ylabel='True Positive Rate')   #, fontsize=12)
 
-            ax.set_title('Receiver operating characteristic')
+            ax.set_title(label='Receiver operating characteristic')   #, fontsize=15)
             ax.legend(loc='lower right')
 
 
 # test
 if __name__ == '__main__':
-
-    _np = lazy_import('numpy')
-    _plt_pylab = lazy_import('matplotlib.pylab')
-    _utils_cmat = lazy_import('mlfire.utils.cmat')
 
     VAR_Y_TRUE = _np.asarray([1, 0, 1, 1, 0])
     VAR_Y_PRED = _np.asarray([0, 0, 1, 1, 0])

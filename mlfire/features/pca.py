@@ -183,8 +183,10 @@ class TransformPCA(object):  # TODO rename -> ExtractorPCA
         self._nlatent_factors = _np.argmax(cumsum_var_ratio >= self.retained_variance)
 
         # if self.verbose:
-        msg = 'PCA, found {} latent factor using cumulative explained variance'.format(self._nlatent_factors)
+        msg = f'PCA, found {self._nlatent_factors} latent factor'
         if self._nlatent_factors > 1: msg = f'{msg}s'
+        msg = f'{msg} using cumulative explained variance'
+      
         print(msg)
 
     def fit(self) -> None:
