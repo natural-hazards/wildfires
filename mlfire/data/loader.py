@@ -246,7 +246,7 @@ class SatDataLoader(object):
         self.__selected_timestamps = timestamps
 
     @property
-    def opt_select_satdata(self) -> SatDataSelectOpt: # TODO return tuple
+    def opt_select_satdata(self) -> SatDataSelectOpt:  # TODO return tuple
 
         return self.__opt_select_satdata
 
@@ -455,6 +455,30 @@ class SatDataLoader(object):
         return self._df_timestamps_firemaps
 
     """
+    TODO comment
+    """
+
+    @property
+    def _layout_reflectance(self) -> Union[dict, None]:   # TODO rename
+
+        if self._layout_layers_reflectance is not None:
+            return self._layout_layers_reflectance
+
+        # TODO try-except
+        self.__processLayersLayout_SATDATA_REFLECTANCE()
+        return self._layout_layers_reflectance
+
+    @property
+    def _layout_temperature(self) -> Union[dict, None]:  # TODO rename
+
+        if self._layout_layers_temperature is not None:
+            return self._layout_layers_temperature
+
+        # TODO try-except
+        self.__processLayersLayout_SATDATA_TEMPERATURE()
+        return self._layout_layers_temperature
+
+    """
     FireCII (ESA firemaps) firemaps properties
     """
 
@@ -562,7 +586,8 @@ class SatDataLoader(object):
     @estimate_time.setter
     def estimate_time(self, flg: bool) -> None:
 
-        # TODO check input type
+        if not isinstance(flg, bool):
+            return
 
         self.__estimate_time = flg
 
@@ -600,7 +625,7 @@ class SatDataLoader(object):
     """
 
     @staticmethod
-    def __loadGeoTIFF_DATASETS(lst_sources: Union[list[str], tuple[str]]) -> list:
+    def __loadGeoTIFF_DATASETS(lst_sources: Union[list[str], tuple[str]]) -> list:  # TODO return tuple?
 
         # TODO check input type
 
@@ -849,7 +874,7 @@ class SatDataLoader(object):
             raise TypeError('satellite data (reflectance) do not contain any useful layer')
 
         self._layout_layers_reflectance = map_layout_satdata
-        self.__len_ts_reflectance = pos  # is this attribute necessary?
+        self.__len_ts_reflectance = pos  # TODO is this attribute necessary?
 
     def __processLayersLayout_SATDATA_TEMPERATURE(self) -> None:
 
@@ -1100,10 +1125,10 @@ class SatDataLoader(object):
         # TODO memmap?
         self._np_satdata = _np.empty(shape=np_shape, dtype=_np.float32)
 
-    def __loadSatData_ALL_RASTERS(self, ds_satdata, np_satdata: _np.ndarray) -> _np.ndarray:
+    def __loadSatData_ALL_RASTERS(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray) -> _np.ndarray:
 
         if not isinstance(ds_satdata, list) and not isinstance(ds_satdata[0], _gdal.Dataset):
-            err_msg = '' # TODO error message
+            err_msg = ''  # TODO error message
             raise TypeError(err_msg)
 
         if not isinstance(np_satdata, _np.ndarray):
@@ -1169,7 +1194,7 @@ class SatDataLoader(object):
                             np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
                             pos += 1
 
-    def __loadSatData_IMPL(self, ds_satdata, np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
+    def _loadSatData_IMPL(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
 
         if not isinstance(ds_satdata, list) and not isinstance(ds_satdata[0], _gdal.Dataset):
             err_msg = ''
@@ -1207,7 +1232,7 @@ class SatDataLoader(object):
 
         msg = 'loading satellite data (reflectance)'
         with elapsed_timer(msg=msg, enable=self.estimate_time):
-            self._np_satdata[idx, ...] = self.__loadSatData_IMPL(
+            self._np_satdata[idx, ...] = self._loadSatData_IMPL(
                 ds_satdata=self._ds_satdata_reflectance,
                 np_satdata=self._np_satdata[idx, :, :],
                 layout_layers=self._layout_layers_reflectance,
@@ -1231,7 +1256,7 @@ class SatDataLoader(object):
 
         msg = 'loading satellite data (temperature)'
         with elapsed_timer(msg=msg, enable=self.estimate_time):
-            self._np_satdata[idx, ...] = self.__loadSatData_IMPL(
+            self._np_satdata[idx, ...] = self._loadSatData_IMPL(
                 ds_satdata=self._ds_satdata_temperature,
                 np_satdata=self._np_satdata[idx, :, :],
                 layout_layers=self._layout_layers_temperature,
@@ -1528,7 +1553,7 @@ class SatDataLoader(object):
     """
 
     @property
-    def _rs_rows_firemaps(self) -> int:
+    def _rs_rows_firemap(self) -> int:
 
         if self.__rs_rows_firemaps > -1: return self.__rs_rows_firemaps
 
@@ -1538,7 +1563,7 @@ class SatDataLoader(object):
         return self.__rs_rows_firemaps
 
     @property
-    def _rs_cols_firemaps(self) -> int:
+    def _rs_cols_firemap(self) -> int:
 
         if self.__rs_cols_firemaps > -1: return self.__rs_cols_firemaps
 
@@ -1548,11 +1573,11 @@ class SatDataLoader(object):
         return self.__rs_cols_firemaps
 
     @property
-    def shape_firemaps(self) -> tuple:  # TODO use firemap instead of firemaps
+    def shape_firemap(self) -> tuple:
 
         if self.__shape_firemaps is not None: return self.__shape_firemaps
 
-        rows = self._rs_rows_firemaps; cols = self._rs_cols_firemaps
+        rows = self._rs_rows_firemap; cols = self._rs_cols_firemap
         len_ts = len(self.timestamps_firemaps)
 
         self.__shape_firemaps = (rows, cols, len_ts)
@@ -1624,7 +1649,7 @@ if __name__ == '__main__':
     # print(dataset_loader.selected_timestamps_satdata.iloc[0]['Timestamps'])
     #
     # print(dataset_loader.shape_satdata)
-    # print(dataset_loader.shape_firemaps)
+    # print(dataset_loader.shape_firemap)
     #
     # print(f'len ts: {len(dataset_loader.timestamps_satdata)}')
     # print(f'len ts: {len(dataset_loader.timestamps_firemaps)}')

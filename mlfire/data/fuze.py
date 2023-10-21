@@ -15,6 +15,7 @@ from mlfire.data.loader import _NFEATURES_REFLECTANCE
 # TODO comment
 from mlfire.utils.const import LIST_STRINGS
 from mlfire.utils.functool import lazy_import
+from mlfire.utils.time import elapsed_timer
 
 # lazy imports
 _np = lazy_import('numpy')
@@ -294,7 +295,30 @@ class SatDataFuze(SatDataLoader):
         cnd_temperature_sel &= self.lst_satdata_temperature is not None
 
         if not cnd_reflectance_sel:
-            raise NotImplementedError
+            if self.lst_satdata_reflectance is not None:
+                # TODO raise error
+                pass
+
+            len_timestamps = len(self.selected_timestamps_satdata); nfeatures = int(_NFEATURES_REFLECTANCE)
+            rows, cols, _, _ = self.shape_satdata
+
+            shape_reflectance = (len_timestamps * nfeatures, rows, cols)
+            # TODO alloc with memory map
+            np_reflec = _np.empty(shape=shape_reflectance)
+
+            # TODO incorporate into ds_satdata_reflectance property
+            self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
+
+            msg = 'loading satellite data (temperature)'
+            with elapsed_timer(msg=msg, enable=self.estimate_time):
+                np_reflec = self._loadSatData_IMPL(
+                    ds_satdata=self._ds_satdata_reflectance,  # TODO as property
+                    np_satdata=np_reflec,
+                    layout_layers=self._layout_reflectance,
+                    nfeatures=nfeatures
+                )
+
+            np_reflec = _np.moveaxis(np_reflec, 0, -1); np_reflec *= 1e-4
         else:
             _, _, len_timestamps, len_features = self.shape_satdata
             end_selection = int(_NFEATURES_REFLECTANCE)
@@ -304,35 +328,7 @@ class SatDataFuze(SatDataLoader):
                 *[range(i * len_features, i * len_features + end_selection) for i in range(len_timestamps)]
             ))
 
-            np_satdata_reflectance = self._np_satdata[:, :, idx]
-
-        # if not cnd_reflectance_sel:
-        #     if self.lst_satdata_reflectance is not None:
-        #         raise NotImplementedError
-        #         # rows = self._rs_rows_satdata; cols = self._rs_cols_satdata
-        #         # len_features = len(self.selected_timestamps_satdata)
-        #         # len_features *= _NFEATURES_REFLECTANCE
-        #         #
-        #         # shape_reflectance = (len_features, rows, cols)
-        #         # np_satdata_reflectance = _np.empty(shape=shape_reflectance)
-        #         #
-        #         # self._loadGeoTIFF_DATASETS_SATDATA(opt_select=SatDataSelectOpt.REFLECTANCE)
-        #         # self._loadSatData_IMPL(
-        #         #     ds_satdata=self._ds_satdata_reflectance,
-        #         #     np_satdata=np_satdata_reflectance,
-        #         #     opt_select=SatDataSelectOpt.REFLECTANCE
-        #         # )
-        #         #
-        #         # np_satdata_reflectance = _np.moveaxis(np_satdata_reflectance, 0, -1)
-        #         #
-        #         # # clean up
-        #         # del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
-        #         # gc.collect()
-        #     else:
-        #         err_msg = 'satellite data (reflectance) is not set'
-        #         raise FileNotFoundError(err_msg)
-        # else:
-        #     np_satdata_reflectance = self._np_satdata_reflectance
+            np_reflec = self._np_satdata[:, :, idx]
 
         # TODO use satdata_shape and improve implementation
         idx_start = 0
@@ -346,23 +342,28 @@ class SatDataFuze(SatDataLoader):
 
         if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
             out_evi = self._np_satdata[:, :, idx_start::step_ts]
-            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=np_satdata_reflectance, firemaps=self._np_firemaps)
+            out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=np_reflec, firemaps=self._np_firemaps)
             idx_start += 1
             gc.collect()
 
         if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
             out_evi2 = self._np_satdata[:, :, idx_start::step_ts]
-            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=np_satdata_reflectance, firemaps=self._np_firemaps)
+            out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=np_reflec, firemaps=self._np_firemaps)
             idx_start += 1
             gc.collect()
 
         if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
             out_ndvi = self._np_satdata[:, :, idx_start::step_ts]
-            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=np_satdata_reflectance, firemaps=self._np_firemaps)
+            out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=np_reflec, firemaps=self._np_firemaps)
             gc.collect()
 
-        if not cnd_temperature_sel:
-            del np_satdata_reflectance; gc.collect()
+        if not cnd_reflectance_sel:
+            del self._layout_layers_temperature; self._layout_layers_reflectance = None
+            del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
+            del np_reflec
+            
+            # clean up
+            gc.collect()
 
     def fuzeData(self) -> None:  # TODO rename method
 
@@ -444,7 +445,7 @@ if __name__ == '__main__':
     dataset_fuzion.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
     print(dataset_fuzion.shape_satdata)
-    print(dataset_fuzion.shape_firemaps)
+    print(dataset_fuzion.shape_firemap)
     print(dataset_fuzion.features)
 
     dataset_fuzion.fuzeData()
