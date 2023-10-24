@@ -121,8 +121,9 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  pca_nfactors: int = 2,
                  # view
                  ndvi_view_threshold: Union[float, None] = None,
-                 satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
-                 firemaps_view_opt: FireMapsViewOpt = FireMapsViewOpt.LABEL,
+                 # TODO comment
+                 view_opt_satdata: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
+                 view_opt_firemap: FireMapsViewOpt = FireMapsViewOpt.LABEL,
                  # TODO comment
                  estimate_time: bool = True,
                  random_state: int = 42):
@@ -131,8 +132,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             self,
             lst_firemaps=None,
             ndvi_view_threshold=ndvi_view_threshold,
-            satimg_view_opt=satimg_view_opt,
-            labels_view_opt=firemaps_view_opt
+            view_opt_satdata=view_opt_satdata,
+            view_opt_firemap=view_opt_firemap
         )
 
         SatDataFuze.__init__(
@@ -711,12 +712,12 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 mask_satdata = ~_np.isnan(np_firemaps)
 
             if id_ds == 0:
-                msg = 'fitting PCA projector'
+                msg = 'fitting PCA'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
                     self.__lst_extractors = self.__preprocess_PCA_FIT(satdata=np_satdata, mask=mask_satdata)
                     self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors
 
-            msg = f'reducting dimension of a data set #{id_ds} (PCA)'
+            msg = f'dimensionality reduction (PCA, data set #{id_ds})'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
                 proj_satdata = self.__preprocess_PCA_TRANSFORM(satdata=np_satdata, mask=mask_satdata)
 
@@ -778,13 +779,13 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
             # filtering using Savitzky-golay filter
             if SatDataPreprocessOpt.SAVITZKY_GOLAY & self.__satdata_opt == SatDataPreprocessOpt.SAVITZKY_GOLAY:
-                msg = 'filtering data using Savitzky-Golay'
+                msg = 'filtering (Savitzky-Golay)'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
                     np_satdata[...] = self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata, mask=mask_satdata)
 
             # standardize time series defined for pixels using z-score
             if cnd_zscore or cnd_pca:
-                msg = 'standardize data using z-score'
+                msg = 'standardize (z-score)'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
                     np_satdata[...] = self.__preprocess_STANDARTIZE(np_satdata=np_satdata, mask=mask_satdata)
 

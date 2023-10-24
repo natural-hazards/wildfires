@@ -134,7 +134,7 @@ class SatDataLoader(object):
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
-                 opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
+                 opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt], None] = SatDataSelectOpt.ALL,
                  # TODO comment
                  select_timestamps: Union[list, tuple, None] = None,  # TODO rename -> lst_selected_timestamps
                  # TODO comment
@@ -159,9 +159,9 @@ class SatDataLoader(object):
         self._ds_firemaps = None
         self._df_timestamps_firemaps = None
 
-        self._layout_layers_reflectance = None
-        self._layout_layers_temperature = None
-        self._layout_layers_firemaps = None
+        self._layout_layers_reflectance = None  # TODO private
+        self._layout_layers_temperature = None  # TODO private
+        self._layout_layers_firemaps = None  # TODO private
 
         self.__rs_rows_satadata = -1
         self.__rs_cols_satdata = -1
