@@ -22,6 +22,7 @@ _np = lazy_import('numpy')
 
 _ee_collection = lazy_import('mlfire.earthengine.collections')
 
+# lazy import (classes)
 _ModisReflectanceSpectralBands = _ee_collection.ModisReflectanceSpectralBands
 
 
@@ -312,9 +313,9 @@ class SatDataFuze(SatDataLoader):
             msg = 'loading satellite data (temperature)'
             with elapsed_timer(msg=msg, enable=self.estimate_time):
                 np_reflec = self._loadSatData_IMPL(
-                    ds_satdata=self._ds_satdata_reflectance,  # TODO as property
+                    ds_satdata=self._ds_satdata_reflectance,
                     np_satdata=np_reflec,
-                    layout_layers=self._layout_reflectance,
+                    layout_layers=self._layout_layers_reflectance,
                     nfeatures=nfeatures
                 )
 
@@ -358,8 +359,7 @@ class SatDataFuze(SatDataLoader):
             gc.collect()
 
         if not cnd_reflectance_sel:
-            del self._layout_layers_temperature; self._layout_layers_reflectance = None
-            del self._ds_satdata_reflectance; self._ds_satdata_reflectance = None
+            del self._layout_layers_reflectance; del self._ds_satdata_reflectance
             del np_reflec
 
             # clean up

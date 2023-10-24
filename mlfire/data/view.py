@@ -131,6 +131,8 @@ class SatDataView(SatDataLoader):
 
     def __getSatelliteImageArray_MODIS_CIR(self, img_id: int) -> _np.ndarray:
 
+        # TODO check input argument
+
         id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
@@ -155,6 +157,8 @@ class SatDataView(SatDataLoader):
 
     def __getSatelliteImageArray_MODIS_EVI(self, img_id: int) -> _np.ndarray:
 
+        # TODO check input argument
+
         id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
@@ -167,7 +171,7 @@ class SatDataView(SatDataLoader):
         band_id = start_band_id + ModisReflectanceSpectralBands.RED.value - 1
         ref_red = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
 
-        _np.seterr(divide='ignore')
+        _np.seterr(divide='ignore', invalid='ignore')
 
         # constants
         L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
@@ -197,6 +201,8 @@ class SatDataView(SatDataLoader):
 
     def __getSatelliteImageArray_MODIS_EVI2(self, img_id: int):
 
+        # TODO check input argument
+
         id_ds, start_band_id = self._layout_layers_reflectance[img_id]
         ds_satimg = self._ds_satdata_reflectance[id_ds]
 
@@ -204,6 +210,8 @@ class SatDataView(SatDataLoader):
 
         band_id = start_band_id + ModisReflectanceSpectralBands.NIR.value - 1
         ref_nir = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
+
+        _np.seterr(divide='ignore', invalid='ignore')
 
         evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1.)
         ninf = _np.count_nonzero(evi2 == _np.inf)
@@ -235,7 +243,7 @@ class SatDataView(SatDataLoader):
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.GREEN.value - 1
-        ref_green = self._ds_satdata_reflectance[id_ds].GetRasterBand(band_id).ReadAsArray()
+        ref_green = ds_satimg.GetRasterBand(band_id).ReadAsArray()
 
         band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
         ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray()
@@ -267,7 +275,7 @@ class SatDataView(SatDataLoader):
         # Credit: Zachary Langford @langfordzl
         cmap = plt.get_cmap(name='RdYlGn') if self.ndvi_view_threshold > -1. else plt.get_cmap(name='seismic')
 
-        _np.seterr(divide='ignore')
+        _np.seterr(divide='ignore', invalid='ignore')
 
         ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
         ninf = _np.count_nonzero(ndvi == _np.inf)
@@ -353,8 +361,8 @@ class SatDataView(SatDataLoader):
         # else:
         #    raise NotImplementedError
 
-    def __showSatImage_MODIS(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]],
-                             brightness_factors: Union[tuple[float, float], list[float, float]], show: bool = True, ax=None) -> None:
+    def __showSatImage_MODIS(self, id_img: int, figsize: Union[tuple[float, ...], list[float, ...]],
+                             brightness_factors: Union[tuple[float, ...], list[float, ...]], show: bool = True, ax=None) -> None:
         # lazy imports
         opencv = lazy_import('cv2')  # TODO to preamble
 
@@ -387,7 +395,7 @@ class SatDataView(SatDataLoader):
         if self.view_opt_satdata == SatImgViewOpt.NDVI and self.ndvi_view_threshold > -1:
             str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
 
-        # show firemap and binary mask related to localization of wildfires (CCI firemaps)
+        # show a fire map and binary mask related to localization of wildfires (CCI firemaps)
         imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
@@ -601,7 +609,6 @@ class SatDataView(SatDataLoader):
         label[:, :] = colors.Colors.GRAY_COLOR.value
 
         if with_fire_mask or self.view_opt_firemap == FireMapsViewOpt.LABEL:
-
             c1 = rs_severity >= self.mtbs_min_severity.value; c2 = rs_severity <= MTBSSeverity.HIGH.value  # TODO rewrite
             mask_fires = _np.logical_and(c1, c2)
 
@@ -636,9 +643,6 @@ class SatDataView(SatDataLoader):
     def __showFireLabels_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]],
                               show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
-        # put a region name to a plot title
-        str_title = 'MTBS firemaps ({}'.format(self.mtbs_region.name)
-
         # get date or start/end dates
         if isinstance(id_bands, range):
             first_date = self.timestamps_firemaps.iloc[id_bands[0]]['Timestamps']
@@ -651,23 +655,18 @@ class SatDataView(SatDataLoader):
             raise NotImplementedError
 
         # put date to a figure title
-        str_title = '{} {})'.format(str_title, str_date)
+        str_title = f'MTBS firemap ({self.mtbs_region}, {str_date})'
 
-        # get fire firemaps
+        # get a fire map
         labels = self.__getFireLabels_MTBS(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
-        # show up firemaps and binary mask (non-) related to localization of wildfires (MTBS firemaps)
+        # show up fire map and binary mask (non-) related to localization of wildfires (MTBS collection)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
     def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
                        show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
-        if not self._firemaps_processed:
-            # processing descriptions of bands related to fire firemaps and obtain dates from them
-            try:
-                self._processMetaData_FIREMAPS()
-            except IOError or ValueError:
-                raise IOError('Cannot process meta data related to firemaps!')
+        # TODO check input arguments
 
         # TODO comment
         len_firemaps = len(self.timestamps_firemaps)
@@ -773,18 +772,6 @@ class SatDataView(SatDataLoader):
 
         # TODO check input arguments
 
-        # processing descriptions of bands of fire maps and obtain timestamps from them
-        try:
-            self._processMetaData_FIREMAPS()
-        except IOError or ValueError:
-            raise IOError('Cannot process meta data related to firemaps!')
-
-        # processing descriptions of bands of fire maps and obtain timestamps from them
-        try:
-            self._processMetadata_SATDATA()
-        except IOError or ValueError:
-            raise IOError('Cannot process meta data related to satellite images!')
-
         if self.view_opt_satdata == SatImgViewOpt.TEMPERATURE:
             raise NotImplementedError
         else:
@@ -848,7 +835,7 @@ if __name__ == '__main__':
         lst_satdata_reflectance=VAR_LST_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_TEMPERATURE,
         # selection of modis collection
-        opt_select_satdata=SatDataSelectOpt.ALL,  # TODO as variable
+        opt_select_satdata=SatDataSelectOpt.TEMPERATURE,  # TODO as variable
         # fire map collection
         opt_select_firemap=VAR_OPT_SELECT_FIREMAP,
         # TODO comment

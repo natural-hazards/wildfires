@@ -81,6 +81,9 @@ class MTBSRegion(Enum):
     HAWAI = 'HI'
     PUERTO_RICO = 'PR'
 
+    def __str__(self) -> str:
+        return self.value
+
 
 @constproperty
 def NFEATURES_REFLECTANCE() -> int:

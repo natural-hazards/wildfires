@@ -150,18 +150,16 @@ class SatDataLoader(object):
 
         self._ds_satdata_reflectance = None
         self._df_timestamps_reflectance = None
-        self._np_satdata_reflectance = None  # TODO remove
 
         self._ds_satdata_temperature = None
         self._df_timestamps_temperature = None
-        self._np_satdata_temperature = None  # TODO remove
 
         self._ds_firemaps = None
         self._df_timestamps_firemaps = None
 
-        self._layout_layers_reflectance = None  # TODO private
-        self._layout_layers_temperature = None  # TODO private
-        self._layout_layers_firemaps = None  # TODO private
+        self._layout_layers_reflectance = None
+        self._layout_layers_temperature = None  # TODO property
+        self._layout_layers_firemaps = None  # TODO property
 
         self.__rs_rows_satadata = -1
         self.__rs_cols_satdata = -1
@@ -459,24 +457,85 @@ class SatDataLoader(object):
     """
 
     @property
-    def _layout_reflectance(self) -> Union[dict, None]:   # TODO rename
+    def _layout_layers_reflectance(self) -> Union[dict, None]:   # TODO rename
 
-        if self._layout_layers_reflectance is not None:
-            return self._layout_layers_reflectance
+        if self.__layout_layers_reflectance is not None:
+            return self.__layout_layers_reflectance
 
         # TODO try-except
         self.__processLayersLayout_SATDATA_REFLECTANCE()
-        return self._layout_layers_reflectance
+        return self.__layout_layers_reflectance
+
+    @_layout_layers_reflectance.setter
+    def _layout_layers_reflectance(self, layout) -> None:
+        # TODO check input type
+        self.__layout_layers_reflectance = layout
+
+    @_layout_layers_reflectance.deleter
+    def _layout_layers_reflectance(self) -> None:
+        del self.__layout_layers_reflectance
+        self.__layout_layers_reflectance = None
 
     @property
-    def _layout_temperature(self) -> Union[dict, None]:  # TODO rename
-
-        if self._layout_layers_temperature is not None:
-            return self._layout_layers_temperature
+    def _layout_layers_temperature(self) -> Union[dict, None]:  # TODO rename
+        if self.__layout_layers_temperature is not None:
+            return self.__layout_layers_temperature
 
         # TODO try-except
         self.__processLayersLayout_SATDATA_TEMPERATURE()
-        return self._layout_layers_temperature
+        return self.__layout_layers_temperature
+
+    @_layout_layers_temperature.setter
+    def _layout_layers_temperature(self, layout) -> None:
+        # TODO check input type
+        self.__layout_layers_temperature = layout
+
+    @_layout_layers_temperature.deleter
+    def _layout_layers_temperature(self) -> None:
+        del self.__layout_layers_temperature
+        self.__layout_layers_temperature = None
+
+    """
+    TODO comment
+    """
+
+    @property
+    def _ds_satdata_reflectance(self):
+        if self.__ds_satdata_reflectance is not None:
+            return self.__ds_satdata_reflectance
+
+        # TODO try-except
+        self.__loadGeoTIFF_DATASETS_REFLECTANCE()
+        return self.__ds_satdata_reflectance
+
+    @_ds_satdata_reflectance.setter
+    def _ds_satdata_reflectance(self, ds) -> None:
+        # TODO check input
+        self.__ds_satdata_reflectance = ds
+
+    @_ds_satdata_reflectance.deleter
+    def _ds_satdata_reflectance(self) -> None:
+        del self.__ds_satdata_reflectance
+        self.__ds_satdata_reflectance = None
+
+    @property
+    def _ds_satdata_temperature(self):
+        if self.__ds_satdata_temperature is not None:
+            return self.__ds_satdata_temperature
+
+        # try-except
+        self.__loadGeoTIFF_DATASETS_TEMPERATURE()
+        return self.__ds_satdata_temperature
+
+    @_ds_satdata_temperature.setter
+    def _ds_satdata_temperature(self, ds) -> None:
+        # TODO check input type
+        self.__ds_satdata_temperature = ds
+
+    @_ds_satdata_temperature.deleter
+    def _ds_satdata_temperature(self) -> None:
+        del self.__ds_satdata_temperature
+        self.__ds_satdata_temperature = None
 
     """
     FireCII (ESA firemaps) firemaps properties
@@ -840,10 +899,10 @@ class SatDataLoader(object):
 
     def __processLayersLayout_SATDATA_REFLECTANCE(self) -> None:
 
-        if self._layout_layers_reflectance is not None:
+        if self.__layout_layers_reflectance is not None:
             return
 
-        if self._ds_satdata_reflectance is None:
+        if self._ds_satdata_reflectance is None:  # TODO remove
             try:
                 self.__loadGeoTIFF_DATASETS_REFLECTANCE()
             except IOError:
@@ -878,7 +937,7 @@ class SatDataLoader(object):
 
     def __processLayersLayout_SATDATA_TEMPERATURE(self) -> None:
 
-        if self._layout_layers_temperature is not None:
+        if self.__layout_layers_temperature is not None:
             return
 
         if self._ds_satdata_temperature is None:
@@ -1219,7 +1278,7 @@ class SatDataLoader(object):
                 ds_satdata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
             )
 
-    def __loadSatData_REFLETANCE(self) -> None:
+    def __loadSatData_REFLETANCE(self) -> None:  # TODO fix name
 
         rows, cols, _, len_features = self.shape_satdata
         len_timestamps = len(self.selected_timestamps_satdata)
