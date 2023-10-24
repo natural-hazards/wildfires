@@ -395,11 +395,11 @@ class SatDataView(SatDataLoader):
         if self.view_opt_satdata == SatImgViewOpt.NDVI and self.ndvi_view_threshold > -1:
             str_title = '{}, threshold={:.2f})'.format(str_title[:-1], self.ndvi_view_threshold)
 
-        # show a fire map and binary mask related to localization of wildfires (CCI firemaps)
+        # show a fire map and binary mask related to localization of wildfires (CCI collection)
         imshow(src=satimg, title=str_title, figsize=figsize, show=show, ax=ax)
 
-    def showSatImage(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
-                     brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.), show: bool = True, ax=None) -> None:
+    def showSatData(self, id_img: int, figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                    brightness_factors: Union[tuple[float, float], list[float, float]] = (5., 5.), show: bool = True, ax=None) -> None:
 
         # if self.modis_collection == ModisCollection.REFLECTANCE:
         self.__showSatImage_MODIS(id_img=id_img, figsize=figsize, brightness_factors=brightness_factors, show=show, ax=ax)  # TODO reflectance
@@ -410,71 +410,7 @@ class SatDataView(SatDataLoader):
     Display functionality (firemap)
     """
 
-    # def __readFireConfidenceLevel_RANGE_CCI(self, id_bands: range) -> (_np.ndarray, _np.ndarray):  # TODO move to loader.py
-    #
-    #     lst_cl = []
-    #     lst_flags = []
-    #
-    #     for id_band in id_bands:
-    #
-    #         id_ds, id_rs = self._layout_layers_firemaps[id_band]
-    #
-    #         # get bands
-    #         rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
-    #         rs_flags = self._ds_firemaps[id_ds].GetRasterBand(id_rs + 1)
-    #
-    #         # get descriptions
-    #         dsc_cl = rs_cl.GetDescription()
-    #         dsc_flags = rs_flags.GetDescription()
-    #
-    #         if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
-    #             raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
-    #
-    #         lst_flags.append(rs_flags.ReadAsArray())
-    #         lst_cl.append(rs_cl.ReadAsArray())
-    #
-    #     np_cl = _np.array(lst_cl)
-    #     del lst_cl; gc.collect()  # invoke garbage collector
-    #
-    #     np_cl_agg = _np.max(np_cl, axis=0)
-    #     del np_cl; gc.collect()  # invoke garbage collector
-    #
-    #     np_flags = _np.array(lst_flags)
-    #     del lst_flags; gc.collect()  # invoke garbage collector
-    #
-    #     np_flags_agg = _np.max(np_flags, axis=0); np_flags_agg[_np.any(np_flags == -1, axis=0)] = -1
-    #     del np_flags; gc.collect()
-    #
-    #     return np_cl_agg, np_flags_agg
-    #
-    # def _readFireConfidenceLevel_CCI(self, id_bands: Union[int, range]) -> (_np.ndarray, _np.ndarray): # TODO move to loader.py
-    #
-    #     # TODO move to loader
-    #
-    #     if isinstance(id_bands, range):
-    #
-    #         return self.__readFireConfidenceLevel_RANGE_CCI(id_bands)
-    #
-    #     elif isinstance(id_bands, int):
-    #
-    #         id_ds, id_rs = self._layout_layers_firemaps[id_bands]
-    #
-    #         # get bands
-    #         rs_cl = self._ds_firemaps[id_ds].GetRasterBand(id_rs)
-    #         rs_flags = self._ds_firemaps[id_ds].GetRasterBand(id_rs + 1)
-    #
-    #         # get descriptions
-    #         dsc_cl = rs_cl.GetDescription()
-    #         dsc_flags = rs_flags.GetDescription()
-    #
-    #         if band2date_firecci(dsc_cl) != band2date_firecci(dsc_flags):
-    #             raise ValueError('Dates between ConfidenceLevel and ObservedFlag bands are not same!')
-    #
-    #         return rs_cl.ReadAsArray(), rs_flags.ReadAsArray()
-    #     else:
-    #         raise NotImplementedError
-
-    def __getFireLabels_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_uncharted_areas: bool = True) -> \
+    def __getFireMap_CCI(self, id_bands: Union[int, range], with_fire_mask=False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:  # TODO rename that reflect the result is for visualization
 
         # lazy imports
@@ -518,8 +454,8 @@ class SatDataView(SatDataLoader):
             del mask_fires; gc.collect()
             return label
 
-    def __showFireLabels_CCI(self, id_bands: Union[int, range],  figsize: Union[tuple[float, float], list[float, float]],
-                             show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
+    def __showFireMap_CCI(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]],
+                          show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         # lazy imports
         calendar = lazy_import('calendar')  # TODO move to begining of script
@@ -554,48 +490,12 @@ class SatDataView(SatDataLoader):
         str_title = f'{str_title} ({str_date})'
 
         # get fire map
-        labels = self.__getFireLabels_CCI(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
+        labels = self.__getFireMap_CCI(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
         # show fire map and binary mask related to localization of wildfires (CCI collection)
         imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
 
-    # def __readFireSeverity_RANGE_MTBS(self, id_bands: range) -> _np.ndarray:   # TODO move to loader.py
-    #
-    #     lst_severity = []
-    #
-    #     for id_band in id_bands:
-    #
-    #         id_ds, id_rs = self._layout_layers_firemaps[id_band]
-    #         rs_severity = self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
-    #
-    #         lst_severity.append(rs_severity)
-    #
-    #     np_severity = _np.array(lst_severity)
-    #     del lst_severity; gc.collect()  # invoke garbage collector
-    #
-    #     np_severity_agg = _np.max(np_severity, axis=0)  # TODO mean
-    #     np_non_mapped = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=0)
-    #     np_severity_agg[np_non_mapped] = MTBSSeverity.NON_MAPPED_AREA.value
-    #
-    #     # invoke garbage collector
-    #     del np_severity, np_non_mapped
-    #     gc.collect()
-    #
-    #     return np_severity_agg
-    #
-    # # TODO move to loader.py
-    # def _readFireSeverity_MTBS(self, id_bands: Union[int, range]) -> lazy_import('numpy').ndarray:  # TODO move to loader.py
-    #
-    #     if isinstance(id_bands, range):
-    #         return self.__readFireSeverity_RANGE_MTBS(id_bands)
-    #     elif isinstance(id_bands, int):
-    #         id_ds, id_rs = self._layout_layers_firemaps[id_bands]
-    #         return self._ds_firemaps[id_ds].GetRasterBand(id_rs).ReadAsArray()
-    #     else:
-    #         raise NotImplementedError
-
-    # TODO move to loader.py
-    def __getFireLabels_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_uncharted_areas: bool = True) -> \
+    def __getFireMap_MTBS(self, id_bands: Union[int, range], with_fire_mask: bool = False, with_uncharted_areas: bool = True) -> \
             Union[_np.ndarray, tuple[_np.ndarray]]:
 
         # lazy imports
@@ -640,10 +540,10 @@ class SatDataView(SatDataLoader):
             del mask_fires; gc.collect()
             return label
 
-    def __showFireLabels_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]],
-                              show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
+    def __showFireMap_MTBS(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]],
+                           show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
-        # get date or start/end dates
+        # get date or range of dates
         if isinstance(id_bands, range):
             first_date = self.timestamps_firemaps.iloc[id_bands[0]]['Timestamps']
             last_date = self.timestamps_firemaps.iloc[id_bands[-1]]['Timestamps']
@@ -658,13 +558,13 @@ class SatDataView(SatDataLoader):
         str_title = f'MTBS firemap ({self.mtbs_region}, {str_date})'
 
         # get a fire map
-        labels = self.__getFireLabels_MTBS(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
+        firemap = self.__getFireMap_MTBS(id_bands=id_bands, with_uncharted_areas=show_uncharted_areas)
 
         # show up fire map and binary mask (non-) related to localization of wildfires (MTBS collection)
-        imshow(src=labels, title=str_title, figsize=figsize, show=show, ax=ax)
+        imshow(src=firemap, title=str_title, figsize=figsize, show=show, ax=ax)
 
-    def showFireLabels(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
-                       show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
+    def showFireMap(self, id_bands: Union[int, range], figsize: Union[tuple[float, float], list[float, float]] = (6.5, 6.5),
+                    show_uncharted_areas: bool = True, show: bool = True, ax=None) -> None:
 
         # TODO check input arguments
 
@@ -684,9 +584,9 @@ class SatDataView(SatDataLoader):
                     raise ValueError('Wrong band indentificator! GeoTIFF contains only {} bands.'.format(len_firemaps))
 
         if self.opt_select_firemap == FireMapSelectOpt.CCI:
-            self.__showFireLabels_CCI(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
+            self.__showFireMap_CCI(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
         elif self.opt_select_firemap == FireMapSelectOpt.MTBS:
-            self.__showFireLabels_MTBS(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
+            self.__showFireMap_MTBS(id_bands=id_bands, figsize=figsize, show_uncharted_areas=show_uncharted_areas, show=show, ax=ax)
         else:
             raise NotImplementedError
 
@@ -695,7 +595,7 @@ class SatDataView(SatDataLoader):
     Display functionality (MULTISPECTRAL SATELLITE IMAGE + LABELS)
     """
 
-    def __getLabelsForSatImg_CCI(self, id_img: int) -> tuple[_np.ndarray, ...]:
+    def __getFireMapForSatImg_CCI(self, id_img: int) -> tuple[_np.ndarray, ...]:
 
         # TODO check input argument
 
@@ -707,13 +607,13 @@ class SatDataView(SatDataLoader):
         cnd = self._df_timestamps_firemaps['Timestamps'] == date_firemap
         firemap_index = int(self.timestamps_firemaps.index[cnd][0])
 
-        firemap, mask = self.__getFireLabels_CCI(
+        firemap, mask = self.__getFireMap_CCI(
             id_bands=firemap_index, with_fire_mask=True, with_uncharted_areas=False
         )
 
         return firemap, mask
 
-    def __getLabelsForSatImg_MTBS(self, id_img: int) -> tuple[_np.ndarray, ...]:
+    def __getFireMapForSatImg_MTBS(self, id_img: int) -> tuple[_np.ndarray, ...]:
 
         # TODO check input argument
 
@@ -725,20 +625,20 @@ class SatDataView(SatDataLoader):
         cnd = self._df_timestamps_firemaps['Timestamps'] == date_firemap
         firemap_index = int(self._df_timestamps_firemaps.index[cnd][0])
 
-        firemap, mask = self.__getFireLabels_MTBS(
+        firemap, mask = self.__getFireMap_MTBS(
             id_bands=firemap_index, with_fire_mask=True, with_uncharted_areas=False
         )
 
         return firemap, mask
 
-    def __getLabelsForSatImg(self, id_img: int) -> tuple[_np.ndarray, ...]:
+    def __getFireMapForSatImg(self, id_img: int) -> tuple[_np.ndarray, ...]:
 
         # TODO check input argument
 
         if self.opt_select_firemap == FireMapSelectOpt.CCI:
-            return self.__getLabelsForSatImg_CCI(id_img)
+            return self.__getFireMapForSatImg_CCI(id_img)
         elif self.opt_select_firemap == FireMapSelectOpt.MTBS:
-            return self.__getLabelsForSatImg_MTBS(id_img)
+            return self.__getFireMapForSatImg_MTBS(id_img)
         else:
             raise NotImplementedError
 
@@ -757,7 +657,7 @@ class SatDataView(SatDataLoader):
             satimg = _opencv.convertScaleAbs(satimg, alpha=brightness_factors[0], beta=brightness_factors[1])
 
         # get fire map and confidence level/severity
-        labels, mask = self.__getLabelsForSatImg(id_img)
+        labels, mask = self.__getFireMapForSatImg(id_img)
         satimg[mask, :] = labels[mask, :]
 
         ref_date = self.timestamps_reflectance.iloc[id_img]['Timestamps']
@@ -856,20 +756,20 @@ if __name__ == '__main__':
     print(dataset_view.timestamps_satdata)
     print(dataset_view.timestamps_firemaps)
 
-    dataset_view.showFireLabels(18 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 1)
+    dataset_view.showFireMap(18 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 1)
     dataset_view.view_opt_satdata = VAR_SATDATA_VIEW_OPT
 
-    # dataset_view.showSatImage(70)
+    dataset_view.showSatData(70)
     dataset_view.showSatDataWithFireMap(70)
 
     # fire maps aggregation
-    # dataset_view.showFireLabels(18 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 0)
-    # dataset_view.showFireLabels(19 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 1)
-    # dataset_view.showFireLabels(range(18, 20) if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else range(0, 2))
-    #
-    # # view evi and evi2
-    # dataset_view.view_opt_satdata = SatImgViewOpt.EVI
-    # dataset_view.showSatImage(70, show=True)
-    #
-    # dataset_view.view_opt_satdata = SatImgViewOpt.EVI2
-    # dataset_view.showSatImage(70, show=True)
+    dataset_view.showFireMap(18 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 0)
+    dataset_view.showFireMap(19 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 1)
+    dataset_view.showFireMap(range(18, 20) if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else range(0, 2))
+
+    # view evi and evi2
+    dataset_view.view_opt_satdata = SatImgViewOpt.EVI
+    dataset_view.showSatData(70, show=True)
+
+    dataset_view.view_opt_satdata = SatImgViewOpt.EVI2
+    dataset_view.showSatData(70, show=True)
