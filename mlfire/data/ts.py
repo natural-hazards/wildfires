@@ -765,7 +765,6 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         mask_satdata = None
 
         for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
-
             if np_satdata is None: continue
 
             if cnd_reshape:
@@ -868,7 +867,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             satdata_test = None; firemaps_test = None
 
         if self.val_ratio > 0.:
-            rows, _, _ = satdata.shape
+            rows, _, _ = satdata_train.shape
             hi_rows = int(rows * (1. - self.val_ratio))
 
             satdata_val = satdata_train[hi_rows:, :, :]; firemaps_val = firemaps_train[hi_rows:, :]
