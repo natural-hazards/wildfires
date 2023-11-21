@@ -5,21 +5,18 @@ import itertools
 from enum import Enum
 from typing import Union
 
-# TODO comment
 from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
 from mlfire.data.loader import SatDataLoader
 from mlfire.data.loader import FireMapSelectOpt, SatDataSelectOpt
 from mlfire.data.loader import _NFEATURES_REFLECTANCE
 
-# TODO comment
 from mlfire.utils.const import LIST_STRINGS
 from mlfire.utils.functool import lazy_import
 from mlfire.utils.time import elapsed_timer
 
 # lazy imports
 _np = lazy_import('numpy')
-
 _ee_collection = lazy_import('mlfire.earthengine.collections')
 
 # lazy import (classes)
@@ -34,7 +31,6 @@ class VegetationIndexSelectOpt(Enum):
     NDVI = 8
 
     def __and__(self, other):
-
         if isinstance(other, VegetationIndexSelectOpt):
             return VegetationIndexSelectOpt(self.value & other.value)
         elif isinstance(other, int):
@@ -44,7 +40,6 @@ class VegetationIndexSelectOpt(Enum):
             raise TypeError(err_msg)
 
     def __or__(self, other):  # TODO remove?
-
         if isinstance(other, VegetationIndexSelectOpt):
             return VegetationIndexSelectOpt(self.value & other.value)
         elif isinstance(other, int):
@@ -54,7 +49,6 @@ class VegetationIndexSelectOpt(Enum):
             raise TypeError(err_msg)
 
     def __eq__(self, other):
-
         if isinstance(other, VegetationIndexSelectOpt):
             return self.value == other.value
         elif isinstance(other, int):
@@ -63,11 +57,9 @@ class VegetationIndexSelectOpt(Enum):
             return False
 
     def __hash__(self):
-
         return self.value
 
     def __str__(self) -> str:
-
         return self.name.lower()
 
 
@@ -117,13 +109,13 @@ class SatDataFuze(SatDataLoader):
         self.__shape_satdata = None
         self.__lst_features = None
 
-        self._lst_vegetation_index = None; self._vi_ops = -1  # TODO private
+        self.__lst_vegetation_index = None; self.__vi_ops = -1
         self.lst_vegetation_add = lst_vegetation_add  # TODO rename
 
     @property
-    def lst_vegetation_add(self) -> LIST_VEGETATION_SELECT_OPT:  # TODO return tuple
+    def lst_vegetation_add(self) -> tuple[VegetationIndexSelectOpt, ...]:
 
-        return self._lst_vegetation_index
+        return self.__lst_vegetation_index
 
     @lst_vegetation_add.setter
     def lst_vegetation_add(self, vi: LIST_VEGETATION_SELECT_OPT) -> None:
@@ -141,12 +133,12 @@ class SatDataFuze(SatDataLoader):
         self._reset()
 
         if isinstance(vi, VegetationIndexSelectOpt):
-            self._vi_ops = vi.value
-            self._lst_vegetation_index = (vi,)
+            self.__vi_ops = vi.value
+            self.__lst_vegetation_index = (vi,)
         else:
-            self._vi_ops = 0
-            self._lst_vegetation_index = vi
-            for op in vi: self._vi_ops |= op.value
+            self.__vi_ops = 0
+            self.__lst_vegetation_index = tuple(vi)
+            for op in vi: self.__vi_ops |= op.value
 
     def _reset(self) -> None:
 
@@ -161,7 +153,7 @@ class SatDataFuze(SatDataLoader):
 
     @staticmethod
     def __computeVegetationIndex_EVI(reflec: _np.ndarray, firemaps: _np.ndarray) -> _np.ndarray:
-
+        # check arguments
         if not isinstance(reflec, _np.ndarray):
             err_msg = f'unsupported type of argument #1: {type(reflec)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
@@ -189,14 +181,14 @@ class SatDataFuze(SatDataLoader):
 
         if ninfs > 0:
             msg = f'#inf values = {ninfs} in EVI. These values will be removed from data set!'
-            print(msg)  # TODO print warning
+            Warning(msg)
 
             firemaps[_np.any(evi_infs, axis=2)] = _np.nan
             evi = _np.where(evi_infs, _np.nan, evi)
 
         if nnans > 0:
             msg = f'#NaN values = {nnans} in EVI. These values will be removed from data set!'
-            print(msg)  # TODO print warning
+            Warning(msg)
 
             firemaps[_np.any(evi_nans, axis=2)] = _np.nan
 
@@ -229,14 +221,14 @@ class SatDataFuze(SatDataLoader):
 
         if ninfs > 0:
             msg = f'#inf values = {ninfs} in EVI2. These values will be removed from data set!'
-            print(msg)
+            Warning(msg)
 
             firemaps[_np.any(evi2_infs, axis=2)] = _np.nan
             evi2 = _np.where(evi2_infs, _np.nan, evi2)
 
         if nnans > 0:
             msg = f'#NaN values = {nnans} in EVI2. These values will be removed from data set!'
-            print(msg)
+            Warning(msg)
 
             firemaps[_np.any(evi2_nans, axis=2)] = _np.nan
 
@@ -269,14 +261,14 @@ class SatDataFuze(SatDataLoader):
 
         if ninfs > 0:
             msg = f'#inf values = {ninfs} in NDVI. These values will be removed from data set!'
-            print(msg)
+            Warning(msg)
 
             firemaps[_np.any(ndvi_infs, axis=2)] = _np.nan
             ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
 
         if nnans > 0:
             msg = f'#NaN values = {nnans} in NDVI. These values will be removed from data set!'
-            print(msg)
+            Warning(msg)
 
             firemaps[_np.any(ndvi_nans, axis=2)] = _np.nan
 
@@ -337,23 +329,23 @@ class SatDataFuze(SatDataLoader):
         if cnd_temperature_sel: idx_start += 1
 
         step_ts = idx_start
-        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI: step_ts += 1
-        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2: step_ts += 1
-        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI: step_ts += 1
+        if VegetationIndexSelectOpt.EVI & self.__vi_ops == VegetationIndexSelectOpt.EVI: step_ts += 1
+        if VegetationIndexSelectOpt.EVI2 & self.__vi_ops == VegetationIndexSelectOpt.EVI2: step_ts += 1
+        if VegetationIndexSelectOpt.NDVI & self.__vi_ops == VegetationIndexSelectOpt.NDVI: step_ts += 1
 
-        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
+        if VegetationIndexSelectOpt.EVI & self.__vi_ops == VegetationIndexSelectOpt.EVI:
             out_evi = self._np_satdata[:, :, idx_start::step_ts]
             out_evi[:, :, :] = self.__computeVegetationIndex_EVI(reflec=np_reflec, firemaps=self._np_firemaps)
             idx_start += 1
             gc.collect()
 
-        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
+        if VegetationIndexSelectOpt.EVI2 & self.__vi_ops == VegetationIndexSelectOpt.EVI2:
             out_evi2 = self._np_satdata[:, :, idx_start::step_ts]
             out_evi2[:, :, :] = self.__computeVegetationIndex_EVI2(reflec=np_reflec, firemaps=self._np_firemaps)
             idx_start += 1
             gc.collect()
 
-        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
+        if VegetationIndexSelectOpt.NDVI & self.__vi_ops == VegetationIndexSelectOpt.NDVI:
             out_ndvi = self._np_satdata[:, :, idx_start::step_ts]
             out_ndvi[:, :, :] = self.__computeVegetationIndex_NDVI(reflec=np_reflec, firemaps=self._np_firemaps)
             gc.collect()
@@ -373,7 +365,7 @@ class SatDataFuze(SatDataLoader):
         self._processMetaData_FIREMAPS()
         self.loadFiremaps()
 
-        if self._vi_ops > 0: self.__addVegetationFeatures()
+        if self.__vi_ops > 0: self.__addVegetationFeatures()
 
     """
     Shape (satellite data)  
@@ -385,11 +377,11 @@ class SatDataFuze(SatDataLoader):
         if self.__lst_features is not None: return self.__lst_features
 
         lst_features = list(super().features)
-        if VegetationIndexSelectOpt.EVI & self._vi_ops == VegetationIndexSelectOpt.EVI:
+        if VegetationIndexSelectOpt.EVI & self.__vi_ops == VegetationIndexSelectOpt.EVI:
             lst_features.append(str(VegetationIndexSelectOpt.EVI))
-        if VegetationIndexSelectOpt.EVI2 & self._vi_ops == VegetationIndexSelectOpt.EVI2:
+        if VegetationIndexSelectOpt.EVI2 & self.__vi_ops == VegetationIndexSelectOpt.EVI2:
             lst_features.append(str(VegetationIndexSelectOpt.EVI2))
-        if VegetationIndexSelectOpt.NDVI & self._vi_ops == VegetationIndexSelectOpt.NDVI:
+        if VegetationIndexSelectOpt.NDVI & self.__vi_ops == VegetationIndexSelectOpt.NDVI:
             lst_features.append(str(VegetationIndexSelectOpt.NDVI))
 
         self.__lst_features = tuple(lst_features)
