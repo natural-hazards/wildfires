@@ -529,7 +529,6 @@ class SatDataView(SatDataLoader):
             raise AttributeError
 
         if with_uncharted_areas:
-
             mask_uncharted = _np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
             if len(mask_uncharted) != 0: label[mask_uncharted, :] = 0
 

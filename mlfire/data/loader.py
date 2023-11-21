@@ -21,7 +21,6 @@ from mlfire.utils.utils_string import band2date_firecci, band2date_mtbs
 _datetime = lazy_import('datetime')
 
 _gdal = lazy_import('osgeo.gdal')
-
 _np = lazy_import('numpy')
 _pd = lazy_import('pandas')
 
@@ -62,7 +61,7 @@ class SatDataSelectOpt(Enum):
         return self.name.lower()
 
 
-class SatDataFeatures(Enum):  # or rename SatDataFeaturesName
+class SatDataFeatures(Enum):  # TODO or rename SatDataFeaturesName
 
     RED = 'red'  # visible (wave length 620–670nm)
     NIR = 'nir'  # near infra-red (wave length 841–876nm)
@@ -158,7 +157,7 @@ class SatDataLoader(object):
         self._df_timestamps_firemaps = None
 
         self._layout_layers_reflectance = None
-        self._layout_layers_temperature = None  # TODO property
+        self._layout_layers_temperature = None
         self._layout_layers_firemaps = None  # TODO property
 
         self.__rs_rows_satadata = -1
@@ -1191,7 +1190,7 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         if not isinstance(np_satdata, _np.ndarray):
-            err_msg = ''  # TODO error message
+            err_msg = f'unsupported type of argument #2: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
         len_ds = len(ds_satdata)
@@ -1218,7 +1217,7 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         if not isinstance(np_satdata, _np.ndarray):
-            err_msg = ''  # TODO error message
+            err_msg = f'unsupported type of argument #2: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
         if not isinstance(layout_layers, dict):
@@ -1260,7 +1259,7 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         if not isinstance(np_satdata, _np.ndarray):
-            err_msg = ''
+            err_msg = f'unsupported type of argument #2: {type(np_satdata)}, this argument must be a numpy array.'
             raise TypeError(err_msg)
 
         if not isinstance(layout_layers, dict):
@@ -1278,7 +1277,7 @@ class SatDataLoader(object):
                 ds_satdata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
             )
 
-    def __loadSatData_REFLETANCE(self) -> None:  # TODO fix name
+    def __loadSatData_REFLETANCE(self) -> None:  # TODO fix name -> __loadSatData_REFLECTANCE
 
         rows, cols, _, len_features = self.shape_satdata
         len_timestamps = len(self.selected_timestamps_satdata)
@@ -1295,7 +1294,7 @@ class SatDataLoader(object):
                 ds_satdata=self._ds_satdata_reflectance,
                 np_satdata=self._np_satdata[idx, :, :],
                 layout_layers=self._layout_layers_reflectance,
-                nfeatures=7
+                nfeatures=nfeatures
             )
 
         # scale pixel values using MODIS09 scale factor (0.0001) for reflectance
@@ -1331,9 +1330,10 @@ class SatDataLoader(object):
         if self._np_satdata is not None: return
 
         # TODO comment
+        # TODO try-except
         self.__allocSatDataBuffer()
 
-        # TODO comment
+        # conditions
         cnd_reflectance = (self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE and
                            self._ds_satdata_reflectance is not None)
         cnd_temperature = (self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE and
@@ -1538,7 +1538,7 @@ class SatDataLoader(object):
 
         if cnd_reflectance:
             # TODO try-except
-            if not self._ds_satdata_reflectance: self.__loadGeoTIFF_DATASETS_REFLECTANCE()
+            if not self._ds_satdata_reflectance: self.__loadGeoTIFF_DATASETS_REFLECTANCE() # TODO remove
             self.__rs_cols_satdata = self._ds_satdata_reflectance[0].RasterXSize
 
             if not cnd_reflectance_sel:
@@ -1546,11 +1546,11 @@ class SatDataLoader(object):
                 gc.collect()
         elif cnd_temperature:
             # TODO try-except
-            if not self._ds_satdata_temperature: self.__loadGeoTIFF_DATASETS_TEMPERATURE()
+            if not self._ds_satdata_temperature: self.__loadGeoTIFF_DATASETS_TEMPERATURE()  # TODO remove
             self.__rs_cols_satdata = self._ds_satdata_temperature[0].RasterXSize
 
             if not cnd_temperature_sel:
-                del self._ds_satdata_temperature; self._df_timestamps_temperature = None
+                del self._ds_satdata_temperature; self._df_timestamps_temperature = None  # TODO check
                 gc.collect()
         else:
             err_msg = 'satdata was not provided'

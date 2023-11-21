@@ -49,7 +49,6 @@ class SatDataPreprocessOpt(Enum):
     # ALL?
 
     def __and__(self, other):
-
         if isinstance(other, SatDataPreprocessOpt):
             return SatDataPreprocessOpt(self.value & other.value)
         elif isinstance(other, int):
