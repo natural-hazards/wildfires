@@ -6,6 +6,11 @@ from mlfire.utils.functool import lazy_import
 from mlfire.utils.functool import optional_import
 
 # lazy imports
+_colors = lazy_import('mlfire.utils.colors')
+
+_gdal = lazy_import('osgeo.gdal')
+_osr = lazy_import('osgeo.osr')
+
 _np = lazy_import('numpy')
 _scipy_sparse = lazy_import('scipy.sparse')
 
@@ -92,7 +97,32 @@ def saveDataset(ds: tuple[_np.ndarray], fn: str, file_format: FileFormat = FileF
 def loadArrayHDF5(fn: str, obj_name: str) -> _np.ndarray:
 
     with io_h5py.File(fn, 'r') as hf:
-
         y = _np.array(hf[obj_name][:])
 
     return y
+
+
+def saveGeoTiff(fn_output: str, firemap: _np.ndarray, transform, projection, show_uncharted_pixels=False) -> None:
+
+    rows, cols = firemap.shape
+    Colors = _colors.Colors
+
+    driver = _gdal.GetDriverByName('GTiff')
+
+    options = ('PHOTOMETRIC=RGB', 'PROFILE=GeoTIFF')
+    ds_firemap = driver.Create(fn_output, cols, rows, 3, _gdal.GDT_UInt16, options=options)
+
+    srs = _osr.SpatialReference()
+    srs.ImportFromWkt(projection)
+
+    ds_firemap.SetGeoTransform(transform)
+    ds_firemap.SetProjection(srs.ExportToWkt())
+
+    np_firemap = _np.zeros((rows, cols, 3))
+    np_firemap[firemap == 0, :] = Colors.GRAY_COLOR.value
+    np_firemap[firemap == 1, :] = Colors.RED_COLOR.value
+    np_firemap[_np.isnan(firemap), :] = (0, 0, 0) if show_uncharted_pixels else Colors.GRAY_COLOR.value
+
+    for i in range(3): ds_firemap.GetRasterBand(i + 1).WriteArray(np_firemap[:, :, i])
+    ds_firemap.FlushCache()
+    ds_firemap = None
