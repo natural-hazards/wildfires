@@ -7,7 +7,7 @@ echo $PERMON_SVM_DIR
 DATA_DIR=${TOOLS_DIR}/data/h5/mtbs
 OUTPUT_DIR=${TOOLS_DIR}/output/permonsvm
 
-DS_PREFIX=ak_modis_2004_2005_100km
+DS_PREFIX=ak_modis_2004_2005_13k
 
 FN_TRAIN=${DATA_DIR}/${DS_PREFIX}_labels_training.h5
 FN_TEST=${DATA_DIR}/${DS_PREFIX}_labels_test.h5
