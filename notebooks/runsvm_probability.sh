@@ -4,7 +4,7 @@ TOOLS_DIR=$2
 DATA_DIR=${TOOLS_DIR}/data/h5/mtbs
 OUTPUT_DIR=${TOOLS_DIR}/output/permonsvm
 
-DS_PREFIX=ak_modis_2004_2005_100km
+DS_PREFIX=ak_modis_2004_2005_13k
 
 FN_TRAIN=${DATA_DIR}/${DS_PREFIX}_probability_training.h5
 FN_CALIB=${DATA_DIR}/${DS_PREFIX}_probability_calib.h5
@@ -26,4 +26,3 @@ ${PERMON_SVM_DIR}/src/tutorials/ex5 \
 -svm_threshold 0.50 -tao_view \
 -svm_view_report \
 -f_training_predictions ${FN_TRAIN_PREDICTS} -f_test_predictions ${FN_TEST_PREDICTS}
-
