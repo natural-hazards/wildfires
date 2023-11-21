@@ -1021,7 +1021,7 @@ if __name__ == '__main__':
 
     # TODO set Savitzky Golay filter parameters
 
-    PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
+    PCA_OPS = (FactorOP.CUMULATIVE_EXPLAINED_VARIANCE,)
     PCA_RETAINED_VARIANCE = 0.9  # 10% information could be noisy
 
     # setup of data set loader

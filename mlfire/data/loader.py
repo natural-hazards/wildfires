@@ -503,6 +503,9 @@ class SatDataLoader(object):
         if self.__ds_satdata_reflectance is not None:
             return self.__ds_satdata_reflectance
 
+        cnd_reflectance = self.opt_select_satdata & SatDataSelectOpt.REFLECTANCE == SatDataSelectOpt.REFLECTANCE
+        if ~cnd_reflectance: return None
+
         # TODO try-except
         self.__loadGeoTIFF_DATASETS_REFLECTANCE()
         return self.__ds_satdata_reflectance
@@ -522,7 +525,10 @@ class SatDataLoader(object):
         if self.__ds_satdata_temperature is not None:
             return self.__ds_satdata_temperature
 
-        # try-except
+        cnd_temperature = self.opt_select_satdata & SatDataSelectOpt.TEMPERATURE == SatDataSelectOpt.TEMPERATURE
+        if ~cnd_temperature: return None
+
+        # TODO try-except
         self.__loadGeoTIFF_DATASETS_TEMPERATURE()
         return self.__ds_satdata_temperature
 
