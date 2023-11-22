@@ -1365,7 +1365,7 @@ class SatDataLoader(object):
         if isinstance(rs_ids, int): rs_ids = (rs_ids,)
         # TODO check input
 
-        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize
+        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[0].RasterXSize
         nmaps = len(rs_ids)
 
         np_confidence = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nmaps > 1 \
@@ -1408,18 +1408,19 @@ class SatDataLoader(object):
 
         if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
-        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[1].RasterXSize  # TODO rows, cols as property
+        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[0].RasterXSize  # TODO rows, cols as property
         nmaps = len(rs_ids)
 
         np_severity = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nmaps > 1 \
             else _np.empty(shape=(rows, cols), dtype=_np.float32)
 
         for sr_id, rs_id in enumerate(rs_ids):
-            ds_id, local_rs_id = self._layout_layers_firemaps[rs_id]
             if nmaps > 1:
+                ds_id, local_rs_id = self._layout_layers_firemaps[rs_id]
                 np_severity[:, :, sr_id] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
             else:
-                np_severity[:, :] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
+                local_rs_id = self._layout_layers_firemaps[rs_id]
+                np_severity[:, :] = self._ds_firemaps[0].GetRasterBand(local_rs_id).ReadAsArray()
 
         if nmaps > 1:
             np_uncharted = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=-1)  # MTBSSeverity.NON_MAPPED_AREA.value
@@ -1464,7 +1465,7 @@ class SatDataLoader(object):
             end_idx = self._df_timestamps_firemaps.index[cnd_end_idx][0]
             rs_ids = range(begin_idx, end_idx + 1)
         else:
-            rs_ids = begin_idx
+            rs_ids = (begin_idx,)
 
         if self.opt_select_firemap == FireMapSelectOpt.MTBS:
             np_severity = self._processSeverity_MTBS(rs_ids=rs_ids)

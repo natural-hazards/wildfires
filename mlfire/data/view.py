@@ -133,8 +133,12 @@ class SatDataView(SatDataLoader):
 
         # TODO check input argument
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         # display CIR representation of MODIS input (color infrared - vegetation)
         # https://eos.com/make-an-analysis/color-infrared/
@@ -159,8 +163,12 @@ class SatDataView(SatDataLoader):
 
         # TODO check input argument
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         band_id = start_band_id + ModisReflectanceSpectralBands.BLUE.value - 1
         ref_blue = ds_satimg.GetRasterBand(band_id).ReadAsArray() / 1e4
@@ -203,8 +211,12 @@ class SatDataView(SatDataLoader):
 
         # TODO check input argument
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
 
@@ -237,8 +249,12 @@ class SatDataView(SatDataLoader):
 
     def __getSatelliteImageArray_MODIS_NATURAL_COLOR(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray()
 
@@ -259,10 +275,14 @@ class SatDataView(SatDataLoader):
     def __getSatelliteImageArray_NDVI(self, img_id: int) -> _np.ndarray:
 
         # lazy imports
-        plt = lazy_import('matplotlib.pylab')
+        plt = lazy_import('matplotlib.pylab')  # TODO remove
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         # computing Normalized Difference Vegetation Index (NDVI)
         ref_red = ds_satimg.GetRasterBand(start_band_id).ReadAsArray() / 1e4
@@ -291,8 +311,12 @@ class SatDataView(SatDataLoader):
 
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR1(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         # https://eos.com/make-an-analysis/vegetation-analysis/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR1.value - 1
@@ -313,8 +337,12 @@ class SatDataView(SatDataLoader):
 
     def __getSatelliteImageArray_MODIS_SHORTWAVE_INFRARED_SWIR2(self, img_id: int) -> _np.ndarray:
 
-        id_ds, start_band_id = self._layout_layers_reflectance[img_id]
-        ds_satimg = self._ds_satdata_reflectance[id_ds]
+        if len(self._ds_satdata_reflectance) > 1:  # TODO is there another value
+            id_ds, start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[id_ds]
+        else:
+            start_band_id = self._layout_layers_reflectance[img_id]
+            ds_satimg = self._ds_satdata_reflectance[0]
 
         # https://eos.com/make-an-analysis/shortwave-infrared/
         band_id = start_band_id + ModisReflectanceSpectralBands.SWIR2.value - 1
