@@ -102,27 +102,57 @@ def loadArrayHDF5(fn: str, obj_name: str) -> _np.ndarray:
     return y
 
 
-def saveGeoTiff(fn_output: str, firemap: _np.ndarray, transform, projection, show_uncharted_pixels=False) -> None:
+def saveGeoTiff(fn_output: str, firemap: _np.ndarray, firemap_test: _np.ndarray, transform, projection,
+                show_uncharted_pixels=False, reproject: bool = True) -> None:
 
-    rows, cols = firemap.shape
+    # TODO horizontal split
+
+    rows_train, cols = firemap.shape
+    rows_test, cols = firemap_test.shape
+
     Colors = _colors.Colors
 
+    # create geotif data set
     driver = _gdal.GetDriverByName('GTiff')
 
     options = ('PHOTOMETRIC=RGB', 'PROFILE=GeoTIFF')
-    ds_firemap = driver.Create(fn_output, cols, rows, 3, _gdal.GDT_UInt16, options=options)
+    ds_firemap = driver.Create(fn_output, cols, rows_train + rows_test, 3, _gdal.GDT_UInt16, options=options)
 
     srs = _osr.SpatialReference()
     srs.ImportFromWkt(projection)
 
-    ds_firemap.SetGeoTransform(transform)
-    ds_firemap.SetProjection(srs.ExportToWkt())
+    # define colors
+    BACKGROUD_COLOR_1 = Colors.GRAY_COLOR.value
+    BACKGROUD_COLOR_2 = Colors.WHITE_COLOR.value
+    BACKGROUD_COLOR_TRAIN = [int(0.5 * BACKGROUD_COLOR_2[i] + 0.5 * Colors.GREEN_COLOR.value[i]) for i in range(3)]
 
-    np_firemap = _np.zeros((rows, cols, 3))
-    np_firemap[firemap == 0, :] = Colors.GRAY_COLOR.value
-    np_firemap[firemap == 1, :] = Colors.RED_COLOR.value
-    np_firemap[_np.isnan(firemap), :] = (0, 0, 0) if show_uncharted_pixels else Colors.GRAY_COLOR.value
+    # numpy array
+    np_firemap = _np.empty((rows_train + rows_test, cols, 3))
+    np_firemap[:] = BACKGROUD_COLOR_1
+
+    # training
+    np_firemap[:rows_train, :][firemap == 0, :] = BACKGROUD_COLOR_TRAIN
+    np_firemap[:rows_train, :][firemap == 1, :] = Colors.RED_COLOR.value
+    np_firemap[:rows_train, :][_np.isnan(firemap), :] = (0, 0, 0) if show_uncharted_pixels else BACKGROUD_COLOR_TRAIN
+
+    # TODO validation data set
+
+    # test
+    np_firemap[rows_train:, :][firemap_test == 0, :] = Colors.GRAY_COLOR.value
+    np_firemap[rows_train:, :][firemap_test == 1, :] = Colors.RED_COLOR.value
+    np_firemap[rows_train:, :][_np.isnan(firemap_test), :] = (0, 0, 0) if show_uncharted_pixels else Colors.GRAY_COLOR.value
 
     for i in range(3): ds_firemap.GetRasterBand(i + 1).WriteArray(np_firemap[:, :, i])
+
+    ds_firemap.SetGeoTransform(transform)
+    ds_firemap.SetProjection(srs.ExportToWkt())
     ds_firemap.FlushCache()
     ds_firemap = None
+
+    # reproject for Google Earth
+    if reproject:
+        kwargs = {'format': 'GTiff', 'dstSRS': 'EPSG:4326', 'dstAlpha': True}
+        ds_firemap = _gdal.Warp(fn_output, fn_output, **kwargs)
+        ds_firemap.FlushCache()
+        ds_firemap = None
+
