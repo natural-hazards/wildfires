@@ -78,7 +78,7 @@ if __name__ == '__main__':
         lst_firemaps=lst_firemaps,
         lst_satdata_reflectance=lst_satdata,
         # selection of modis collection
-        opt_select_satdata=SatDataSelectOpt.REFLECTANCE,
+        opt_select_satdata=SatDataSelectOpt.ALL,
         # fire maps
         opt_select_firemap=FIREMAP_COLLECTION,
         mtbs_min_severity=MTBSSeverity.LOW,
