@@ -1,24 +1,17 @@
-PERMON_SVM_DIR=$1
-PETSC_ARCH=$2
-TOOLS_DIR=$3
+#!/bin/bash --login
 
-echo $PERMON_SVM_DIR
+PERMONSVM_BIN=$1
 
-DATA_DIR=${TOOLS_DIR}/data/h5/mtbs
-OUTPUT_DIR=${TOOLS_DIR}/output/permonsvm
+FN_TRAIN=$2
+FN_TEST=$3
 
-DS_PREFIX=ak_modis_2004_2005_100km
-
-FN_TRAIN=${DATA_DIR}/${DS_PREFIX}_labels_training.h5
-FN_TEST=${DATA_DIR}/${DS_PREFIX}_labels_test.h5
-
-FN_TRAIN_PREDICTS=${OUTPUT_DIR}/${DS_PREFIX}_training_labels_predictions.h5
-FN_TEST_PREDICTS=${OUTPUT_DIR}/${DS_PREFIX}_test_labels_predictions.h5
+FN_TRAIN_PREDICTS=$4
+FN_TEST_PREDICTS=$5
 
 LOSS_TYPE=L1
 MAT_TYPE=dense
 
-${PERMON_SVM_DIR}/${PETSC_ARCH}/bin/permonsvmfile \
+${PERMONSVM_BIN} \
 -fllop_trace \
 -f_training ${FN_TRAIN} -Xt_training_mat_type ${MAT_TYPE} \
 -f_test ${FN_TEST} -Xt_test_mat_type ${MAT_TYPE} \

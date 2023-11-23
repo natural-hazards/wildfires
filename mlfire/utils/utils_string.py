@@ -12,19 +12,19 @@ def getRandomString(length: int) -> str:
     return result_str
 
 
-def band2date_reflectance(band_name) -> datetime.datetime.date:
+def satdata_dsc2date(rs_dsc) -> datetime.datetime.date:
+
+    str_date = re.match(r'\d{4}_\d{2}_\d{2}', rs_dsc).group(0)
+    return datetime.datetime.strptime(str_date, '%Y_%m_%d').date()
+
+
+def band2date_firecci(band_name) -> datetime.datetime.date:  # TODO rename
 
     str_date = re.match(r'\d{4}_\d{2}_\d{2}', band_name).group(0)
     return datetime.datetime.strptime(str_date, '%Y_%m_%d').date()
 
 
-def band2date_firecci(band_name) -> datetime.datetime.date:
-
-    str_date = re.match(r'\d{4}_\d{2}_\d{2}', band_name).group(0)
-    return datetime.datetime.strptime(str_date, '%Y_%m_%d').date()
-
-
-def band2date_mtbs(band_name) -> datetime.datetime.date:
+def band2date_mtbs(band_name) -> datetime.datetime.date:  # TODO rename
 
     str_date = re.search(r'\d{4}', band_name).group(0)
     return datetime.datetime.strptime(str_date, '%Y').date()

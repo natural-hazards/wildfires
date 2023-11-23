@@ -1,1244 +1,1052 @@
-# TODO rename like pix_ts.py (not use spatial information)
 
 import gc
-import os
 
 from enum import Enum
 from typing import Union
 
-import numpy as np
+# TODO comment
+from mlfire.earthengine.collections import MTBSRegion, MTBSSeverity
 
-from mlfire.data.view import DatasetView, FireLabelsViewOpt, SatImgViewOpt
-from mlfire.earthengine.collections import ModisCollection
-from mlfire.earthengine.collections import FireLabelsCollection
-from mlfire.earthengine.collections import MTBSSeverity, MTBSRegion
-from mlfire.features.pca import FactorOP
+from mlfire.data.fuze import VegetationIndexSelectOpt, LIST_VEGETATION_SELECT_OPT
+from mlfire.data.loader import FireMapSelectOpt, SatDataSelectOpt
+from mlfire.data.view import SatImgViewOpt, FireMapsViewOpt
+
+from mlfire.data.fuze import SatDataFuze
+from mlfire.data.view import SatDataView
+
+from mlfire.features.pca import TransformPCA, FactorOP  # TODO rename module mlfire.extractors
+from mlfire.features.pca import LIST_PCA_FACTOR_OPT
 
 # utils imports
+from mlfire.utils.const import LIST_STRINGS, LIST_NDARRAYS
+
+from mlfire.utils.time import elapsed_timer
 from mlfire.utils.functool import lazy_import
 
 # lazy imports
 _np = lazy_import('numpy')
+_sk_model_selection = lazy_import('sklearn.model_selection')
+
+_scipy_stats = lazy_import('scipy.stats')
+_scipy_signal = lazy_import('scipy.signal')
 
 
-class DatasetSplitOpt(Enum):
+class SatDataSplitOpt(Enum):
 
     SHUFFLE_SPLIT = 0
     IMG_HORIZONTAL_SPLIT = 1
     IMG_VERTICAL_SPLIT = 2
 
 
-class DatasetTransformOP(Enum):
+class SatDataPreprocessOpt(Enum):
 
     NONE = 0
     STANDARTIZE_ZSCORE = 1
     PCA = 2
-    PCA_PER_BAND = 4
+    PCA_PER_BAND = 4  # TODO rename PCA_PER_FEATURE and set 3
     SAVITZKY_GOLAY = 8
-    NOT_PROCESS_UNCHARTED_PIXELS = 16
+    NOT_PROCESS_UNCHARTED_PIXELS = 16  # TODO rename
+    # ALL?
+
+    def __and__(self, other):
+        if isinstance(other, SatDataPreprocessOpt):
+            return SatDataPreprocessOpt(self.value & other.value)
+        elif isinstance(other, int):
+            return SatDataPreprocessOpt(self.value & other)
+        else:
+            err_msg = f'unsuported operand type(s) for &: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+
+    def __or__(self, other):  # TODO remove?
+
+        if isinstance(other, SatDataPreprocessOpt):
+            return SatDataPreprocessOpt(self.value | other.value)
+        elif isinstance(other, int):
+            return SatDataPreprocessOpt(self.value | other)
+        else:
+            err_msg = f'unsuported operand type(s) for |: {type(self)} and {type(other)}'
+            raise TypeError(err_msg)
+
+    def __eq__(self, other):
+
+        if isinstance(other, SatDataPreprocessOpt):
+            return self.value == other.value
+        elif isinstance(other, int):
+            return self.value == other
+        else:
+            return False
 
 
-class VegetationIndex(Enum):
-
-    NONE = 0
-    EVI = 2
-    EVI2 = 4
-    NDVI = 8
+# defines
+LIST_PREPROCESS_SATDATA_OPT = Union[
+    None, SatDataPreprocessOpt, tuple[SatDataPreprocessOpt, ...], list[SatDataPreprocessOpt, ...]
+]
 
 
-class DataAdapterTS(DatasetView):
+class SatDataAdapterTS(SatDataFuze, SatDataView):
 
     def __init__(self,
-                 lst_satimgs: Union[tuple[str], list[str]],
-                 lst_labels: Union[tuple[str], list[str]],
-                 ds_start_date: lazy_import('datetime').date = None,
-                 ds_end_date: lazy_import('datetime').date = None,
-                 # transformer options
-                 ds_split_opt: DatasetSplitOpt = DatasetSplitOpt.SHUFFLE_SPLIT,
-                 test_ratio: float = 0.33,
-                 val_ratio: float = 0.,
-                 # add vegetation index
-                 vegetation_index: Union[tuple[VegetationIndex], list[VegetationIndex]] = (VegetationIndex.NONE,),
-                 # transformation operation
-                 transform_ops: Union[tuple[DatasetTransformOP], list[DatasetTransformOP]] = (DatasetTransformOP.NONE,),
+                 lst_firemaps: LIST_STRINGS,
+                 # lst_firemaps_test = None
+                 lst_satdata_reflectance: LIST_STRINGS = None,
+                 # lst_satdata_reflectance_test = None
+                 lst_satdata_temperature: LIST_STRINGS = None,
+                 # lst_satdata_temperature_test = None
+                 # TODO comment
+                 opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
+                 # TODO comment
+                 opt_select_satdata: Union[SatDataSelectOpt, list[SatDataSelectOpt]] = SatDataSelectOpt.ALL,
+                 # TODO comment
+                 select_timestamps: Union[list, tuple, None] = None,
+                 # TODO comment
+                 cci_confidence_level: int = 70,
+                 # TODO comment
+                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
+                 mtbs_min_severity: MTBSSeverity = MTBSSeverity.LOW,
+                 # TODO comment
+                 lst_vegetation_add: LIST_VEGETATION_SELECT_OPT = (VegetationIndexSelectOpt.NONE,),  # TODO rename
+                 # TODO comment
+                 opt_split_satdata: SatDataSplitOpt = SatDataSplitOpt.SHUFFLE_SPLIT,
+                 test_ratio: float = .33,
+                 val_ratio: float = .0,
+                 # TODO comment
+                 opt_preprocess_satdata: LIST_PREPROCESS_SATDATA_OPT = (SatDataPreprocessOpt.STANDARTIZE_ZSCORE,),
+                 # TODO comment
                  savgol_polyorder: int = 1,
                  savgol_winlen: int = 5,
-                 pca_nfactors: int = 2,
-                 pca_ops: list[FactorOP] = (FactorOP.USER_SET,),
+                 # TODO comment
+                 opt_pca_factor: LIST_PCA_FACTOR_OPT = (FactorOP.USER_SET,),  # TODO rename
                  pca_retained_variance: float = 0.95,
-                 # view options
-                 modis_collection: ModisCollection = ModisCollection.REFLECTANCE,
-                 label_collection: FireLabelsCollection = FireLabelsCollection.MTBS,
-                 cci_confidence_level: int = 70,
-                 mtbs_severity_from: MTBSSeverity = MTBSSeverity.LOW,
-                 mtbs_region: MTBSRegion = MTBSRegion.ALASKA,
-                 ndvi_view_threshold: float = None,
-                 satimg_view_opt: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
-                 labels_view_opt: FireLabelsViewOpt = FireLabelsViewOpt.LABEL) -> None:
+                 pca_nfactors: int = 2,
+                 # view
+                 ndvi_view_threshold: Union[float, None] = None,
+                 # TODO comment
+                 view_opt_satdata: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
+                 view_opt_firemap: FireMapsViewOpt = FireMapsViewOpt.LABEL,
+                 # TODO comment
+                 estimate_time: bool = True,
+                 random_state: int = 42):
 
-        super().__init__(
-            lst_satimgs=lst_satimgs,
-            lst_labels=lst_labels,
-            modis_collection=modis_collection,
-            label_collection=label_collection,
-            cci_confidence_level=cci_confidence_level,
-            mtbs_severity_from=mtbs_severity_from,
-            mtbs_region=mtbs_region,
+        SatDataView.__init__(
+            self,
+            lst_firemaps=None,
             ndvi_view_threshold=ndvi_view_threshold,
-            satimg_view_opt=satimg_view_opt,
-            labels_view_opt=labels_view_opt
+            view_opt_satdata=view_opt_satdata,
+            view_opt_firemap=view_opt_firemap
         )
 
-        self._ds_start_date = None
-        self.ds_start_date = ds_start_date
+        SatDataFuze.__init__(
+            self,
+            lst_firemaps=lst_firemaps,
+            lst_satdata_reflectance=lst_satdata_reflectance,
+            lst_satdata_temperature=lst_satdata_temperature,
+            opt_select_firemap=opt_select_firemap,
+            opt_select_satdata=opt_select_satdata,
+            select_timestamps=select_timestamps,
+            cci_confidence_level=cci_confidence_level,
+            mtbs_region=mtbs_region,
+            mtbs_min_severity=mtbs_min_severity,
+            lst_vegetation_add=lst_vegetation_add,
+            estimate_time=estimate_time
+        )
 
-        self._ds_end_date = None
-        self.ds_end_date = ds_end_date
+        self.__lst_satdata = None
+        self.__lst_firemaps = None
 
-        # transformation options
+        self._ds_training = None
+        self._ds_test = None
+        self._ds_val = None
 
-        self._train_test_val_opt = None
-        self.train_test_val_opt = ds_split_opt
+        # TODO comment
 
-        self._lst_transform_ops = None
-        self._transform_ops = DatasetTransformOP.NONE.value
-        self.transform_ops = transform_ops
+        self.__lst_preprocess_satdata = None; self.__satdata_opt = -1
+        self.opt_preprocess_satdata = opt_preprocess_satdata
 
-        # vegetation index
-
-        self._lst_vegetation_index = None
-        self._vi_ops = VegetationIndex.NONE.value
-        self.vegetation_index = vegetation_index
-
-        # Savitzky-Golay filter properties
-
-        self._savgol_polyorder = None
+        self.__savgol_polyorder = None
         self.savgol_polyorder = savgol_polyorder
 
-        self._savgol_winlen = None
+        self.__savgol_winlen = None
         self.savgol_winlen = savgol_winlen
 
-        # principal component properties
+        # TODO comment
 
-        self._pca_nfactors = 0
-        self.pca_nfactors = pca_nfactors
+        self.__lst_pca_ops = None
+        self.__pca_ops = 0
+        self.opt_pca_factor = opt_pca_factor
 
-        self._lst_pca_ops = None
-        self._pca_ops = 0
-        self.pca_ops = pca_ops
-
-        self._pca_retained_variance = None
+        self.__pca_retained_variance = None
         self.pca_retained_variance = pca_retained_variance
 
-        self._lst_extractors_pca = []
+        self.__pca_nfactors = -1
 
-        # test data set options
+        self.__pca_nfactors_user = None
+        self.pca_nfactors_user = pca_nfactors
 
-        self._test_ratio = None
+        self.__lst_extractors = None
+
+        # TODO comment
+
+        self.__opt_split_satdata = None
+        self.opt_split_satdata = opt_split_satdata
+
+        self.__test_ratio = None
         self.test_ratio = test_ratio
 
-        # validation data set options
-
-        self._val_ratio = None
+        self.__val_ratio = None
         self.val_ratio = val_ratio
 
-    def _reset(self):
+        self.__random_state = None
+        self.random_state = random_state
 
-        super()._reset()
-
-        if hasattr(self, '_lst_extractors_pca'):
-            del self._lst_extractors_pca; self._lst_extractors_pca = []
-            gc.collect()  # invoke garbage collector
-
-    # properties
     @property
-    def train_test_val_opt(self) -> DatasetSplitOpt:
+    def opt_preprocess_satdata(self) -> tuple[SatDataPreprocessOpt]:
 
-        return self._train_test_val_opt
+        return self.__lst_preprocess_satdata
 
-    @train_test_val_opt.setter
-    def train_test_val_opt(self, flg: DatasetSplitOpt) -> None:
+    @opt_preprocess_satdata.setter
+    def opt_preprocess_satdata(self, opt: LIST_PREPROCESS_SATDATA_OPT):
+        # check type of input argument
+        if opt is None: return
 
-        if flg == self._train_test_val_opt:
+        cnd_check = isinstance(opt, tuple) | isinstance(opt, list)
+        cnd_check = cnd_check & isinstance(opt[0], SatDataPreprocessOpt)
+        cnd_check = cnd_check | isinstance(opt, SatDataPreprocessOpt)
+
+        if not cnd_check:
+            err_msg = f'unsupported input type: {type(opt)}'
+            raise TypeError(err_msg)
+
+        self._reset()
+
+        if isinstance(opt, SatDataPreprocessOpt):
+            self.__satdata_opt = opt.value
+            self.__lst_preprocess_satdata = (opt,)
+        else:
+            self.__satdata_opt = 0
+            self.__lst_preprocess_satdata = tuple(opt)
+            for op in opt: self.__satdata_opt |= op.value
+
+    @property
+    def opt_split_satdata(self) -> SatDataSplitOpt:
+
+        return self.__opt_split_satdata
+
+    @opt_split_satdata.setter
+    def opt_split_satdata(self, op: SatDataSplitOpt) -> None:
+
+        if self.__opt_split_satdata == op:
             return
 
         self._reset()
-        self._train_test_val_opt = flg
+        self.__opt_split_satdata = op
 
     @property
     def test_ratio(self) -> float:
 
-        return self._test_ratio
+        return self.__test_ratio
 
     @test_ratio.setter
     def test_ratio(self, val: float) -> None:
 
-        if self._test_ratio == val:
+        if self.__test_ratio == val:
             return
 
         self._reset()
-        self._test_ratio = val
+        self.__test_ratio = val
 
     @property
     def val_ratio(self) -> float:
 
-        return self._val_ratio
+        return self.__val_ratio
 
     @val_ratio.setter
     def val_ratio(self, val: float) -> None:
 
-        if self._val_ratio == val:
+        if self.__val_ratio == val:
             return
 
         self._reset()
-        self._val_ratio = val
+        self.__val_ratio = val
 
     @property
-    def ds_start_date(self) -> lazy_import('datetime').date:
+    def random_state(self) -> int:
 
-        return self._ds_start_date
+        return self.__random_state
 
-    @ds_start_date.setter
-    def ds_start_date(self, val_date: lazy_import('datetime').date) -> None:
+    @random_state.setter
+    def random_state(self, state: int) -> None:
 
-        if self._ds_start_date == val_date:
-            return
-
-        # clean up
-        del self._ds_training; self._ds_training = None
-        del self._ds_test; self._ds_test = None
-        gc.collect()
-
-        self._ds_start_date = val_date
-
-    @property
-    def ds_end_date(self) -> lazy_import('datetime').date:
-
-        return self._ds_end_date
-
-    @ds_end_date.setter
-    def ds_end_date(self, val_date: lazy_import('datetime').date) -> None:
-
-        if self._ds_end_date == val_date:
-            return
-
-        # clean up
-        del self._ds_training; self._ds_training = None
-        del self._ds_test; self._ds_test = None
-        gc.collect()
-
-        self._ds_end_date = val_date
-
-    """
-    Vegetation index options
-    """
-
-    @property
-    def vegetation_index(self) -> Union[list[VegetationIndex], tuple[VegetationIndex]]:
-
-        return self._lst_vegetation_index
-
-    @vegetation_index.setter
-    def vegetation_index(self, lst_vi: Union[list[VegetationIndex], tuple[VegetationIndex]]) -> None:
-
-        if self.vegetation_index == lst_vi:
+        if self.__random_state == state:
             return
 
         self._reset()
-
-        self._vi_ops = 0
-        self._lst_vegetation_index = lst_vi
-        for op in lst_vi: self._vi_ops |= op.value
-
-    """
-    Transform options
-    """
-
-    @property
-    def transform_ops(self) -> list[DatasetTransformOP]:
-
-        return self._lst_transform_ops
-
-    @transform_ops.setter
-    def transform_ops(self, lst_ops: list[DatasetTransformOP]) -> None:
-
-        if self._lst_transform_ops == lst_ops:
-            return
-
-        self._reset()
-
-        self._transform_ops = 0
-        self._lst_transform_ops = lst_ops
-        for op in lst_ops: self._transform_ops |= op.value
+        self.__random_state = state
 
     @property
     def savgol_polyorder(self) -> int:
 
-        return self._savgol_polyorder
+        return self.__savgol_polyorder
 
     @savgol_polyorder.setter
     def savgol_polyorder(self, order: int) -> None:
 
-        if self._savgol_polyorder == order:
+        if self.__savgol_polyorder == order:
             return
 
         self._reset()
-        self._savgol_polyorder = order
+        self.__savgol_polyorder = order
 
     @property
     def savgol_winlen(self) -> int:
 
-        return self._savgol_winlen
+        return self.__savgol_winlen
 
     @savgol_winlen.setter
     def savgol_winlen(self, winlen: int) -> None:
 
-        if self._savgol_winlen == winlen:
+        if self.__savgol_winlen == winlen:
             return
 
         self._reset()
-        self._savgol_winlen = winlen
+        self.__savgol_winlen = winlen
+
+    @property
+    def opt_pca_factor(self) -> tuple[FactorOP]:
+
+        return self.__lst_pca_ops
+
+    @opt_pca_factor.setter
+    def opt_pca_factor(self, opt: LIST_PCA_FACTOR_OPT) -> None:
+        # TODO is this necessary or move this implementation to PCA
+
+        # check type of input argument
+        if opt is None: return
+
+        cnd_check = isinstance(opt, tuple) | isinstance(opt, list)
+        cnd_check = cnd_check & isinstance(opt[0], FactorOP)
+        cnd_check = cnd_check | isinstance(opt, FactorOP)
+
+        if not cnd_check:
+            err_msg = f'unsupported input type: {type(opt)}'
+            raise TypeError(err_msg)
+
+        cnd_not_list = isinstance(opt, FactorOP)
+        if cnd_not_list & ((opt,) == self.__lst_pca_ops):
+            return
+        elif opt == self.__lst_pca_ops:
+            return
+
+        self._reset()
+
+        if cnd_not_list:
+            self.__pca_ops = opt.value
+            self.__lst_pca_ops = (opt,)
+        else:
+            self.__pca_ops = 0
+            self.__lst_pca_ops = tuple(opt)
+            for op in opt: self.__pca_ops |= op.value   # TODO fix later
+
+    @property
+    def pca_nfactors_user(self) -> int:
+
+        return self.__pca_nfactors_user
+
+    @pca_nfactors_user.setter
+    def pca_nfactors_user(self, n: int) -> None:  # TODO rename input argument to val
+        # TODO check type of input argument
+        if self.__pca_nfactors_user == n:
+            return
+
+        self._reset()
+        self.__pca_nfactors_user = n
 
     @property
     def pca_nfactors(self) -> int:
 
-        return self._pca_nfactors
-
-    @pca_nfactors.setter
-    def pca_nfactors(self, n) -> None:
-
-        if self._pca_nfactors == n:
-            return
-
-        self._reset()
-        self._pca_nfactors = n
+        return self.__pca_nfactors
 
     @property
     def pca_retained_variance(self) -> float:
 
-        return self._pca_retained_variance
+        return self.__pca_retained_variance
 
     @pca_retained_variance.setter
     def pca_retained_variance(self, val: float) -> None:
-
-        if val == self._pca_retained_variance:
+        # TODO check type of input argument
+        if val == self.__pca_retained_variance:
             return
 
         self._reset()
-        self._pca_retained_variance = val
+        self.__pca_retained_variance = val
 
-    @property
-    def pca_ops(self) -> list[FactorOP]:
+    def _reset(self) -> None:
 
-        return self._lst_pca_ops
+        SatDataFuze._reset(self)
 
-    @pca_ops.setter
-    def pca_ops(self, lst_ops: list[FactorOP]) -> None:
+        if hasattr(self, '__lst_satdata'): del self.__lst_satdata; self.__lst_satdata = None
+        if hasattr(self, '__lst_firemaps'): del self.__lst_firemaps; self.__lst_firemaps = None
 
-        if self._lst_pca_ops == lst_ops:
-            return
+        if hasattr(self, '_ds_training'): del self._ds_training; self._ds_training = None
+        if hasattr(self, '_ds_test'): del self._ds_test; self._ds_test = None
+        if hasattr(self, '_ds_val'): del self._ds_val; self._ds_val = None
 
-        self._reset()
+        if hasattr(self, '__lst_extractors'): del self.__lst_extractors; self.__lst_extractors = None
 
-        self._lst_pca_ops = lst_ops
-        self._pca_ops = 0
-        # set ops flag
-        for op in lst_ops: self._pca_ops |= op.value
-
-    # load labels
-
-    def __loadLabels_MTBS(self) -> _np.ndarray:
-
-        datetime = lazy_import('datetime')
-
-        # TODO check start and end date
-
-        start_label_date = datetime.date(year=self.ds_start_date.year, month=1, day=1)
-        start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
-
-        if self.ds_start_date != self.ds_end_date:
-
-            end_label_date = datetime.date(year=self.ds_end_date.year, month=1, day=1)
-            end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
-            id_bands = range(start_label_index, end_label_index + 1)
-
-        else:
-
-            id_bands = start_label_index
-
-        # get fire severity
-        rs_severity = self._readFireSeverity_MTBS(id_bands=id_bands)
-
-        # convert severity to labels
-        c1 = rs_severity >= self.mtbs_severity_from.value; c2 = rs_severity <= MTBSSeverity.HIGH.value
-        label = _np.logical_and(c1, c2).astype(_np.float32)
-        # set not observed pixels
-        label[rs_severity == MTBSSeverity.NON_MAPPED_AREA.value] = _np.nan
-
-        return label
-
-    def __loadLabels_CCI(self) -> _np.ndarray:
-
-        datetime = lazy_import('datetime')
-
-        # TODO check start and end date
-
-        start_label_date = datetime.date(year=self.ds_start_date.year, month=self.ds_start_date.month, day=1)
-        start_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == start_label_date][0])
-
-        if self.ds_start_date != self.ds_end_date:
-
-            end_label_date = datetime.date(year=self.ds_end_date.year, month=self.ds_end_date.month, day=1)
-            end_label_index = int(self._df_dates_labels.index[self._df_dates_labels['Date'] == end_label_date][0])
-            id_bands = range(start_label_index, end_label_index + 1)
-
-        else:
-
-            id_bands = start_label_index
-
-        # get fire confidence level
-        rs_cl, rs_flags = self._readFireConfidenceLevel_CCI(id_bands=id_bands)
-
-        # convert severity to labels
-        labels = (rs_cl >= self.cci_confidence_level).astype(_np.float32)
-        # set not observed pixels
-        PIXEL_NOT_OBSERVED = -1
-        labels[rs_flags == PIXEL_NOT_OBSERVED] = _np.nan
-
-        del rs_cl, rs_flags
-        gc.collect()
-
-        return labels
-
-    def __loadLabels(self) -> _np.ndarray:
-
-        if self.label_collection == FireLabelsCollection.MTBS:
-            return self.__loadLabels_MTBS()
-        elif self.label_collection == FireLabelsCollection.CCI:
-            return self.__loadLabels_CCI()
-        else:
-            raise NotImplementedError
-
-    def __loadSatImg_REFLECTANCE_ALL_BANDS(self) -> _np.ndarray:
-
-        len_ds = len(self._ds_satimgs)
-
-        if len_ds > 1:
-
-            rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
-            nrasters = self._ds_satimgs[0].RasterCount
-
-            for id_img in range(1, len_ds):
-
-                tmp_img = self._ds_satimgs[id_img]
-
-                if rows != tmp_img.RasterYSize or cols != tmp_img.RasterXSize:
-                    raise RuntimeError('Inconsistent shape among sources!')
-
-                nrasters += tmp_img.RasterCount
-
-            # allocate an empty array
-            satimg_ts = _np.empty(shape=(rows, cols, nrasters), dtype=_np.float32)
-            rstart = rend = 0
-
-            for id_img in range(len_ds):
-
-                gc.collect()  # invoke garbage collector
-
-                rend += self._ds_satimgs[id_img].RasterCount
-
-                tmp_img = self._ds_satimgs[id_img].ReadAsArray()
-                satimg_ts[:, :, rstart:rend] = _np.moveaxis(tmp_img, 0, -1)
-
-                rstart = rend
-
-        else:
-
-            satimg_ts = self._ds_satimgs[0].ReadAsArray()
-            satimg_ts = _np.moveaxis(satimg_ts, 0, -1)
-            satimg_ts = satimg_ts.astype(_np.float32)
-
-        return satimg_ts
-
-    def __loadSatImg_REFLECTANCE_SELECTED_RANGE(self, start_id_img: int, end_id_img: int) -> _np.ndarray:
-
-        NBANDS_MODIS = 7
-        rgn = range(start_id_img, end_id_img + 1)
-
-        rows = self._ds_satimgs[0].RasterYSize; cols = self._ds_satimgs[0].RasterXSize
-        nbands = NBANDS_MODIS * len(rgn)
-
-        satimg_ts = _np.empty(shape=(rows, cols, nbands), dtype=_np.float32)
-        band_pos = 0
-
-        for id_img in rgn:
-
-            id_img, start_id_band = self._map_start_satimgs[id_img]
-            satimg = self._ds_satimgs[id_img]
-
-            for id_band in range(0, NBANDS_MODIS):
-
-                satimg_ts[:, :, band_pos] = satimg.GetRasterBand(start_id_band + id_band).ReadAsArray()
-                band_pos += 1
-
-        # invoke garbage collector
-        gc.collect()
-
-        return satimg_ts
-
-    def __loadSatImg_REFLECTANCE(self) -> _np.ndarray:
-
-        start_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_start_date][0]
-        end_img_id = self._df_dates_satimgs.index[self._df_dates_satimgs['Date'] == self.ds_end_date][0]
-
-        if end_img_id - start_img_id + 1 == len(self._df_dates_satimgs['Date']):
-            satimg_ts = self.__loadSatImg_REFLECTANCE_ALL_BANDS()
-        else:
-            satimg_ts = self.__loadSatImg_REFLECTANCE_SELECTED_RANGE(start_id_img=start_img_id, end_id_img=end_img_id)
-
-        # scale pixel values using MODIS scale factor (0.0001)
-        # see https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MOD09A1
-        satimg_ts /= 1e4
-
-        # TODO #bands related to MODIS as constant
-        self._nfeatures_ts = 7
-
-        return satimg_ts
-
-    def __loadSatImg_TS(self) -> _np.ndarray:
-
-        start_date = self.ds_start_date
-        if start_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('Start date does not correspond any band!')
-
-        end_date = self.ds_end_date
-        if end_date not in self._df_dates_satimgs['Date'].values: raise AttributeError('End date does not correspond any band!')
-
-        if self.modis_collection == ModisCollection.REFLECTANCE:
-            return self.__loadSatImg_REFLECTANCE()
-        else:
-            raise NotImplementedError
-
-    """
-    Preprocessing 
-    """
-
-    def __transformTimeseries_STANDARTIZE_ZSCORE(self, ts_imgs: _np.ndarray) -> _np.ndarray:
-
-        stats = lazy_import('scipy.stats')
-
-        NFEATURES_TS = self._nfeatures_ts  # TODO implement for additional indexes such as NDVI and LST
-
-        for band_id in range(NFEATURES_TS):
-
-            img_band = ts_imgs[:, band_id::NFEATURES_TS]
-
-            # check if standard deviation is greater than 0
-            std_band = _np.std(img_band)
-            if std_band == 0.: continue
-
-            ts_imgs[:, band_id::NFEATURES_TS] = stats.zscore(img_band, axis=1)
-
-        return ts_imgs
-
-    def __transformTimeseries(self, ts_imgs: _np.ndarray) -> _np.ndarray:
-
-        utils_time = lazy_import('mlfire.utils.time')
-
-        NFEATURES_TS = self._nfeatures_ts  # implement #features ts as property
-
-        # standardize data to have zero mean and unit standard deviation using z-score
-        if self._transform_ops & DatasetTransformOP.STANDARTIZE_ZSCORE.value == DatasetTransformOP.STANDARTIZE_ZSCORE.value:
-
-            with utils_time.elapsed_timer('Standardize time series pixels using z-score'):
-
-                ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
-
-        if self._transform_ops & DatasetTransformOP.SAVITZKY_GOLAY.value == DatasetTransformOP.SAVITZKY_GOLAY.value:
-
-            scipy_signal = lazy_import('scipy.signal')
-
-            for band_id in range(NFEATURES_TS):
-                # apply Savitzky–Golay filter, parameters are user-specified
-                ts_imgs[:, band_id::NFEATURES_TS] = scipy_signal.savgol_filter(
-                    ts_imgs[:, band_id::NFEATURES_TS],
-                    window_length=self.savgol_winlen,
-                    polyorder=self.savgol_polyorder
-                )
-
-        return ts_imgs
-
-    """
-    Preprocessing (principal component analysis) 
-    """
-
-    def __transformTimeseries_PCA_FIT_PER_BAND(self, ts_imgs: _np.ndarray) -> None:
-
-        # lazy imports
-        features_pca = lazy_import('mlfire.features.pca')
-        copy = lazy_import('copy')
-
-        NFEATURES_TS = self._nfeatures_ts  # TODO as a property
-
-        # build up PCA projection for each band
-
-        lst_extractors = []
-        nlatent_factors_found = 0
-
-        for band_id in range(NFEATURES_TS):
-
-            extractor_pca = features_pca.TransformPCA(
-                train_ds=ts_imgs[:, band_id::NFEATURES_TS],
-                factor_ops=self._lst_pca_ops,
-                nlatent_factors=self.pca_nfactors,
-                retained_variance=self.pca_retained_variance,
-                verbose=True
-            )
-
-            extractor_pca.fit()
-
-            nlatent_factors_found = max(nlatent_factors_found, extractor_pca.nlatent_factors)
-            lst_extractors.append(extractor_pca)
-
-        # refit PCA feature extractors
-
-        for band_id in range(NFEATURES_TS):
-
-            extractor_pca = lst_extractors[band_id]
-
-            # retrain if required
-            if extractor_pca.nlatent_factors < nlatent_factors_found:
-                extractor_pca.nlatent_factors_user = nlatent_factors_found
-
-                # explicitly required number of latent factors
-                if isinstance(self._lst_transform_ops, tuple):
-                    mod_lst_pca_ops = list(self._lst_pca_ops)
-                else:
-                    mod_lst_pca_ops = copy.deepcopy(self._lst_transform_ops)
-                if FactorOP.CUMULATIVE_EXPLAINED_VARIANCE in mod_lst_pca_ops: mod_lst_pca_ops.remove(FactorOP.CUMULATIVE_EXPLAINED_VARIANCE)
-                if FactorOP.USER_SET not in mod_lst_pca_ops: mod_lst_pca_ops.append(FactorOP.USER_SET)
-                extractor_pca.factor_ops = mod_lst_pca_ops
-
-                # retrain extractor
-                extractor_pca.fit()
-
-        self._lst_extractors_pca = lst_extractors
-        self._pca_nfactors = nlatent_factors_found
-
-    def __transformTimeseries_PCA_FIT_ALL_BANDS(self, ts_imgs: _np.ndarray) -> None:
-
-        # lazy imports
-        features_pca = lazy_import('mlfire.features.pca')
-
-        extractor_pca = features_pca.TransformPCA(
-            train_ds=ts_imgs,
-            factor_ops=self._lst_pca_ops,
-            nlatent_factors=self.pca_nfactors,
-            retained_variance=self.pca_retained_variance,
-            verbose=True
-        )
-
-        extractor_pca.fit()
-        self._lst_extractors_pca = [extractor_pca]
-        self._pca_nfactors = extractor_pca.nlatent_factors
-
-    def __transformTimeseries_PCA_FIT(self, ts_imgs: _np.ndarray) -> _np.ndarray:
-
-        utils_time = lazy_import('mlfire.utils.time')
-
-        if DatasetTransformOP.STANDARTIZE_ZSCORE not in self._lst_transform_ops:
-            ts_imgs = self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
-
-        with utils_time.elapsed_timer('Transforming data using PCA'):
-
-            if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
-                return self.__transformTimeseries_PCA_FIT_ALL_BANDS(ts_imgs=ts_imgs)
-            elif self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
-                return self.__transformTimeseries_PCA_FIT_PER_BAND(ts_imgs=ts_imgs)
-            else:
-                raise NotImplementedError
-
-    def __transformTimeseries_PCA_TRANSFORM_PER_BAND(self, ts_imgs: _np.ndarray) -> _np.ndarray:
-
-        NFEATURES_TS = self._nfeatures_ts
-        NFACTORS = self._lst_extractors_pca[0].nlatent_factors
-
-        nsamples = ts_imgs.shape[0]
-        reduced_ts = _np.zeros(shape=(nsamples, NFEATURES_TS * NFACTORS), dtype=ts_imgs.dtype)
-
-        for band_id in range(NFEATURES_TS):
-            transformer_pca = self._lst_extractors_pca[band_id]
-            reduced_ts[:, band_id::NFEATURES_TS] = transformer_pca.transform(ts_imgs[:, band_id::NFEATURES_TS])
-
-        # clean up and invoke garbage collector
-        del ts_imgs; gc.collect()
-
-        return reduced_ts
-
-    def __transformTimeseries_PCA_TRANSFORM_ALL_BANDS(self, ts_imgs: _np.ndarray) -> _np.ndarray:
-
-        transformer_pca = self._lst_extractors_pca[0]
-        reduced_ts = transformer_pca.transform(ts_imgs)
-
-        # clean up and invoke garbage collector
-        del ts_imgs; gc.collect()
-
-        return reduced_ts
-
-    def __transformTimeseries_PCA_TRANSFORM(self, ts_imgs: _np.ndarray, standardize: bool = False) -> _np.ndarray:
-
-        if standardize: self.__transformTimeseries_STANDARTIZE_ZSCORE(ts_imgs=ts_imgs)
-
-        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value:
-            return self.__transformTimeseries_PCA_TRANSFORM_ALL_BANDS(ts_imgs=ts_imgs)
-        elif self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
-            return self.__transformTimeseries_PCA_TRANSFORM_PER_BAND(ts_imgs=ts_imgs)
-        else:
-            raise NotImplementedError
-
-    def __transformTimeseries_PCA(self, ds_imgs: list) -> list:
-
-        FLG_UNCHARTED_PIXS = DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS.value
-        NFEATURES_TS = self._nfeatures_ts
-        nds = len(ds_imgs) // 2
-
-        ts_imgs = ds_imgs[0]; tmp_shape = None
-
-        if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-            tmp_shape = ts_imgs.shape
-            ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
-
-        if self._transform_ops & FLG_UNCHARTED_PIXS == FLG_UNCHARTED_PIXS:
-            labels = ds_imgs[nds]
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
-
-            # fit
-            mask = ~_np.isnan(labels)
-            self.__transformTimeseries_PCA_FIT(ts_imgs[mask, :])
-
-            # transform
-            NFEATURES_TS *= self.pca_nfactors
-            tmp_imgs = np.empty(shape=(ts_imgs.shape[0], NFEATURES_TS), dtype=ts_imgs.dtype); tmp_imgs[:, :] = _np.nan
-
-            tmp_imgs[mask, :] = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs[mask, :])
-            del ts_imgs; gc.collect()  # invoke garbage collector
-
-            ts_imgs = tmp_imgs
-
-            del mask; gc.collect()  # invoke garbage collector
-        else:
-            self.__transformTimeseries_PCA_FIT(ts_imgs)
-            ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs)
-
-        if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-            ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
-
-        ds_imgs[0] = ts_imgs
+        # TODO check if everything is reset
 
         # clean up
-        gc.collect()  # invoke garbage collector
+        gc.collect()
 
-        # transform test and validation data set
-        for id_ds in range(1, len(ds_imgs) // 2):
+    """
+    TODO comment
+    """
 
-            ts_imgs = ds_imgs[id_ds]
+    def __preprocess_STANDARTIZE(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                tmp_shape = ts_imgs.shape
-                ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+        if not isinstance(np_satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(np_satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-            standardize = False if DatasetTransformOP.STANDARTIZE_ZSCORE in self._lst_transform_ops else True
+        if mask is not None:
+            if not isinstance(mask, _np.ndarray):
+                err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+                raise TypeError(err_msg)
+            elif np_satdata.shape[0] != mask.shape[0]:
+                msg = ''  # TODO add error message
+                raise ValueError(msg)
 
-            if self._transform_ops & FLG_UNCHARTED_PIXS == FLG_UNCHARTED_PIXS:
-                labels = ds_imgs[nds + id_ds]
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
+        np_satdata_inner = np_satdata[mask, :] if mask is not None else np_satdata
+        len_features = len(self.features)
 
-                # transform
-                mask = ~_np.isnan(labels)
+        for feature_id in range(len_features):
+            sub_img = np_satdata_inner[:, feature_id::len_features]
 
-                tmp_imgs = np.empty(shape=(ts_imgs.shape[0], NFEATURES_TS), dtype=ts_imgs.dtype)
-                tmp_imgs[:, :] = _np.nan
+            # check if standard deviation is greater than 0
+            std_band = _np.std(sub_img)
+            if std_band == 0.: continue  # TODO add to fire maps as to not process
 
-                tmp_imgs[mask, :] = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs[mask, :])
-                del ts_imgs; gc.collect()  # invoke garbage collector
+            np_satdata_inner[:, feature_id::len_features] = _scipy_stats.zscore(sub_img, axis=1)
 
-                ts_imgs = tmp_imgs
+        if mask is not None:
+            np_satdata[mask, :] = np_satdata_inner; np_satdata[~mask, :] = _np.nan
+        else:
+            np_satdata = np_satdata_inner
 
-                del mask; gc.collect()  # invoke garbage collector
-            else:
-                ts_imgs = self.__transformTimeseries_PCA_TRANSFORM(ts_imgs=ts_imgs, standardize=standardize)
+        return np_satdata
 
-            if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                #
-                ts_imgs = ts_imgs.reshape((tmp_shape[0], tmp_shape[1], ts_imgs.shape[1]))
+    def __preproess_FILTER_SAVITZKY_GOLAY(self, np_satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
-            ds_imgs[id_ds] = ts_imgs
+        if not isinstance(np_satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(np_satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-        return ds_imgs
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-    def __preprocessingSatelliteImages(self, ds_imgs: list) -> list:
+        if mask is not None:
+            if not isinstance(mask, _np.ndarray):
+                err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+                raise TypeError(err_msg)
+            elif np_satdata.shape[0] != mask.shape[0]:
+                msg = ''  # TODO add error message
+                raise ValueError(msg)
 
-        FLG_UNCHARTED_PIXS = DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS.value
-        nds = len(ds_imgs) // 2
+        np_satdata_inner = np_satdata[mask, :] if mask is not None else np_satdata
+        len_features = len(self.features)
 
-        try:
-            for id_ds in range(nds):
+        for feature_id in range(len_features):
+            sub_img = np_satdata_inner[:, feature_id::len_features]
 
-                ts_imgs = ds_imgs[id_ds]; tmp_shape = None
+            # apply Savitzky–Golay filter, parameters are user-defined
+            np_satdata_inner[:, feature_id::len_features] = _scipy_signal.savgol_filter(
+                sub_img,
+                window_length=self.savgol_winlen,
+                polyorder=self.savgol_polyorder
+            )
 
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    # save original shape of series
-                    tmp_shape = ts_imgs.shape
-                    # reshape image to time series related to pixels
-                    ts_imgs = ts_imgs.reshape((-1, tmp_shape[2]))
+        if mask is not None:
+            np_satdata[mask, :] = np_satdata_inner; np_satdata[~mask, :] = _np.nan
+        else:
+            np_satdata = np_satdata_inner
 
-                if self._transform_ops & FLG_UNCHARTED_PIXS == FLG_UNCHARTED_PIXS:
-                    labels = ds_imgs[id_ds + nds]
+        return np_satdata
 
-                    if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT: labels = labels.reshape(-1)
-                    mask = ~_np.isnan(labels)
+    """
+    Dimensionality reduction using principal component analysis (fit projection matrix)
+    """
 
-                    ts_imgs[mask, :] = self.__transformTimeseries(ts_imgs[mask, :])
-                    ts_imgs[~mask, :] = _np.nan
+    def __preprocess_PCA_FIT_ALL_FEATURES(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[TransformPCA]:
 
-                    del mask; gc.collect()  # invoke garbage collector
-                else:
-                    ts_imgs = self.__transformTimeseries(ts_imgs)
+        if self.__lst_extractors is not None: return self.__lst_extractors
 
-                if self.train_test_val_opt != DatasetSplitOpt.SHUFFLE_SPLIT:
-                    # reshape back to series of satellite images
-                    ts_imgs = ts_imgs.reshape(tmp_shape)
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-                ds_imgs[id_ds] = ts_imgs
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-            gc.collect()  # invoke garbage collector
-        except ValueError:
+        # TODO check mask dimension
+
+        if mask is not None: satdata = satdata[mask, :]
+
+        extractor_pca = TransformPCA(
+            train_ds=satdata,
+            factor_ops=self.opt_pca_factor,
+            nlatent_factors=self.pca_nfactors_user,
+            retained_variance=self.pca_retained_variance
+            # verbose=True
+        )
+        extractor_pca.fit()
+
+        return (extractor_pca,)
+
+    def __preprocess_PCA_FIT_PER_FEATURE(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[TransformPCA, ...]:
+
+        if self.__lst_extractors is not None: return self.__lst_extractors
+
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        # TODO check mask dimension
+
+        lst_extractors = []
+        nfactors = 0
+
+        np_satdata_inner = satdata[mask, :] if mask is not None else satdata
+        len_features = len(self.features)
+
+        # transforming initial satellite data using PCA
+        for feature_id in range(len_features):
+
+            sub_img = np_satdata_inner[:, feature_id::len_features]
+
+            extractor_pca = TransformPCA(
+                train_ds=sub_img,
+                factor_ops=self.opt_pca_factor,
+                nlatent_factors=self.pca_nfactors_user,
+                retained_variance=self.pca_retained_variance
+                # verbose=True
+            )
+            extractor_pca.fit()
+
+            # determine max latent factors among features
+            nfactors = max(nfactors, extractor_pca.nlatent_factors)
+            lst_extractors.append(extractor_pca)
+
+        # refit transformation matrix of PCA for max latent factors among features
+        for feature_id in range(len_features):
+            extractor_pca = lst_extractors[feature_id]
+
+            if extractor_pca.nlatent_factors < nfactors:
+                extractor_pca.nlatent_factors_user = nfactors
+
+                mod_opt_pca = list(self.opt_pca_factor)
+                if FactorOP.CUMULATIVE_EXPLAINED_VARIANCE & self.__pca_ops == FactorOP.CUMULATIVE_EXPLAINED_VARIANCE:
+                    mod_opt_pca.remove(FactorOP.CUMULATIVE_EXPLAINED_VARIANCE)
+                if FactorOP.USER_SET & self.__pca_ops != FactorOP.USER_SET:
+                    mod_opt_pca.append(FactorOP.USER_SET)
+
+                extractor_pca.factor_ops = mod_opt_pca
+                extractor_pca.fit()
+
+        # convert list of extractor to tuple
+        return tuple(lst_extractors)
+
+    def __preprocess_PCA_FIT(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[TransformPCA, ...]:
+
+        if self.__lst_extractors is not None: return self.__lst_extractors
+
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        # TODO check mask dimension
+
+        if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
+            return self.__preprocess_PCA_FIT_PER_FEATURE(satdata=satdata, mask=mask)
+        else:
+            return self.__preprocess_PCA_FIT_ALL_FEATURES(satdata=satdata, mask=mask)
+
+    """
+    Dimensionality reduction using principal component analysis (transform data)
+    """
+
+    def __preprocess_PCA_TRANSFORM_PER_FEATURE(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
+
+        if self.__lst_extractors is None:
+            # TODO raise error
             pass
 
-        """
-        Dimensionality reduction using principal component analysis 
-        """
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-        if self._transform_ops & DatasetTransformOP.PCA.value == DatasetTransformOP.PCA.value or \
-                self._transform_ops & DatasetTransformOP.PCA_PER_BAND.value == DatasetTransformOP.PCA_PER_BAND.value:
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-            ds_imgs = self.__transformTimeseries_PCA(ds_imgs=ds_imgs)
+        # TODO check satdata and mask dimension
 
-        return ds_imgs
+        len_px = satdata.shape[0]; len_features = len(self.features)
+        nfactors = self.pca_nfactors
 
-    """
-    Vegetation index
-    """
+        proj_shape = (len_px, nfactors * len_features)
 
-    def __addVegetationIndex_EVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> _np.ndarray:
+        # TODO alloc with mem map
+        proj_satdata = _np.empty(proj_shape, dtype=_np.float32)
+        proj_satdata_inner = proj_satdata[mask, :] if mask is not None else proj_satdata
 
-        NFEATURES_TS = self._nfeatures_ts
+        for feature_id in range(len_features):
+            pca_extractor = self.__lst_extractors[feature_id]
 
-        ee_collection = lazy_import('mlfire.earthengine.collections')
-        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+            sub_img = (satdata[mask, feature_id::len_features] if mask is not None
+                       else satdata[:, feature_id:len_features])
+            proj_satdata_inner[:, feature_id::len_features] = pca_extractor.transform(sub_img)
 
-        ref_blue = ts_imgs[:, :, (ModisReflectanceSpectralBands.BLUE.value - 1)::NFEATURES_TS]
-        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
+        if mask is not None:
+            proj_satdata[mask, :] = proj_satdata_inner
+            proj_satdata[~mask, :] = _np.nan
+        else:
+            proj_satdata[...] = proj_satdata_inner[...]
 
-        _np.seterr(divide='ignore', invalid='ignore')
+        return proj_satdata
 
-        # constants
-        L = 1.; G = 2.5; C1 = 6.; C2 = 7.5
+    def __preprocess_PCA_TRANSFORM_ALL_FEATURES(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
-        evi = G * _np.divide(ref_nir - ref_red, ref_nir + C1 * ref_red - C2 * ref_blue + L)
+        if self.__lst_extractors is None:
+            # TODO raise error
+            pass
 
-        evi_infs = _np.isinf(evi)
-        evi_nans = _np.isnan(evi)
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-        ninfs = _np.count_nonzero(evi_infs)
-        nnans = _np.count_nonzero(evi_nans)
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-        if ninfs > 0:
-            print(f'#inf values = {ninfs} in EVI. The will be removed from data set!')
+        # TODO check satdata and mask dimension
 
-            labels[_np.any(evi_infs, axis=2)] = _np.nan
-            evi = _np.where(evi_infs, _np.nan, evi)
+        len_px = satdata.shape[0]; nfactors = self.pca_nfactors
+        proj_shape = (len_px, nfactors)
 
-        if nnans > 0:
-            print(f'#NaN values = {nnans} in EVI. The will be removed from data set!')
+        # TODO alloc with mem map
+        proj_satdata = _np.empty(proj_shape, dtype=_np.float32)
+        proj_satdata_inner = proj_satdata[mask, :] if mask is not None else proj_satdata
 
-            labels[_np.any(evi_nans, axis=2)] = _np.nan
+        pca_extractor = self.__lst_extractors[0]
 
-        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi, axis=2)
+        sub_img = satdata[mask, :] if mask is not None else satdata
+        proj_satdata_inner[:, :] = pca_extractor.transform(sub_img)
 
-        # clean up and invoke garbage collector
-        del evi; gc.collect()
+        if mask is not None:
+            proj_satdata[mask, :] = proj_satdata_inner
+            proj_satdata[~mask, :] = _np.nan
+        else:
+            proj_satdata[...] = proj_satdata_inner[...]
 
-        self._nfeatures_ts += 1
+        return proj_satdata
 
-        return ts_imgs, labels
+    def __preprocess_PCA_TRANSFORM(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> _np.ndarray:
 
-    def __addVegetationIndex_EVI2(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> [_np.ndarray, _np.ndarray]:
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-        NFEATURES_TS = self._nfeatures_ts
+        if not isinstance(mask, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(mask)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
 
-        ee_collection = lazy_import('mlfire.earthengine.collections')
-        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+        # TODO check satdata and mask dimension
 
-        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
+        if SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND:
+            return self.__preprocess_PCA_TRANSFORM_PER_FEATURE(satdata=satdata, mask=mask)
+        else:
+            return self.__preprocess_PCA_TRANSFORM_ALL_FEATURES(satdata=satdata, mask=mask)
 
-        _np.seterr(divide='ignore', invalid='ignore')
+    def __preprocess_PCA(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> tuple[_np.ndarray, ...]:
 
-        # compute EVI using 2 bands (nir and red)
-        evi2 = 2.5 * _np.divide(ref_nir - ref_red, ref_nir + 2.4 * ref_red + 1)
+        if not (isinstance(lst_satdata, (list, tuple)) and isinstance(lst_satdata[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #1: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
 
-        evi2_infs = _np.isinf(evi2)
-        evi2_nans = _np.isnan(evi2)
+        if not (isinstance(lst_firemaps, (list, tuple)) and isinstance(lst_firemaps[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #2: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
 
-        ninfs = _np.count_nonzero(evi2_infs)
-        nnans = _np.count_nonzero(evi2_nans)
+        # conditions
 
-        if ninfs > 0:
-            print(f'#inf values = {ninfs} in EVI2. The will be removed from data set!')
+        cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
 
-            labels[_np.any(evi2_infs, axis=2)] = _np.nan
-            evi2 = _np.where(evi2_infs, _np.nan, evi2)
+        cnd_no_uncharted = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt
+        cnd_no_uncharted = cnd_no_uncharted == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
 
-        if nnans > 0:
-            print(f'#NaN values = {nnans} in EVI2. The will be removed from data set!')
+        lst_satdata = list(lst_satdata)
+        shape_satdata = mask_satdata = None
 
-            labels[_np.any(evi2_nans, axis=2)] = _np.nan
+        for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
 
-        # add features
-        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), evi2, axis=2)
+            if np_satdata is None: continue
 
-        # clean up and invoke garbage collector
-        del evi2; gc.collect()
+            if cnd_reshape:
+                shape_satdata = np_satdata.shape
+                np_satdata = np_satdata.reshape(-1, shape_satdata[2])
 
-        self._nfeatures_ts += 1
+            if cnd_no_uncharted:
+                np_firemaps = np_firemaps.reshape(-1)
+                mask_satdata = ~_np.isnan(np_firemaps)
 
-        return ts_imgs, labels
+            if id_ds == 0:
+                msg = 'fitting PCA'
+                with elapsed_timer(msg=msg, enable=self.estimate_time):
+                    self.__lst_extractors = self.__preprocess_PCA_FIT(satdata=np_satdata, mask=mask_satdata)
+                    self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors
 
-    def __addVegetationIndex_NDVI(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
+            msg = f'dimensionality reduction (PCA, data set #{id_ds})'
+            with elapsed_timer(msg=msg, enable=self.estimate_time):
+                proj_satdata = self.__preprocess_PCA_TRANSFORM(satdata=np_satdata, mask=mask_satdata)
 
-        NFEATURES_TS = self._nfeatures_ts
+            if cnd_reshape:
+                new_shape = (shape_satdata[0], shape_satdata[1], proj_satdata.shape[1])
+                proj_satdata = proj_satdata.reshape(new_shape)
 
-        ee_collection = lazy_import('mlfire.earthengine.collections')
-        ModisReflectanceSpectralBands = ee_collection.ModisReflectanceSpectralBands
+            lst_satdata[id_ds] = proj_satdata
+            # clean up
+            gc.collect()
 
-        ref_nir = ts_imgs[:, :, (ModisReflectanceSpectralBands.NIR.value - 1)::NFEATURES_TS]
-        ref_red = ts_imgs[:, :, (ModisReflectanceSpectralBands.RED.value - 1)::NFEATURES_TS]
-
-        _np.seterr(divide='ignore', invalid='ignore')
-
-        # compute NDVI
-        ndvi = _np.divide(ref_nir - ref_red, ref_nir + ref_red)
-
-        ndvi_infs = _np.isinf(ndvi)
-        ndvi_nans = _np.isnan(ndvi)
-
-        ninfs = _np.count_nonzero(ndvi_infs)
-        nnans = _np.count_nonzero(ndvi_nans)
-
-        if ninfs > 0:
-            print(f'#inf values = {ninfs} in NDVI. The will be removed from data set!')
-
-            labels[_np.any(ndvi_infs, axis=2)] = _np.nan
-            ndvi = _np.where(ndvi_infs, _np.nan, ndvi)
-
-        if nnans > 0:
-            print(f'#NaN values = {nnans} in NDVI. The will be removed from data set!')
-
-            labels[_np.any(ndvi_nans, axis=2)] = _np.nan
-
-        # add to features
-        ts_imgs = _np.insert(ts_imgs, range(NFEATURES_TS, ts_imgs.shape[2] + 1, NFEATURES_TS), ndvi, axis=2)
-
-        # clean up and invoke garbage collector
-        del ndvi; gc.collect()
-
-        self._nfeatures_ts += 1
-
-        return ts_imgs, labels
-
-    def __addVegetationIndex(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> tuple[_np.ndarray, _np.ndarray]:
-
-        # https://en.wikipedia.org/wiki/Enhanced_vegetation_index
-        # https://lpdaac.usgs.gov/documents/621/MOD13_User_Guide_V61.pdf
-
-        out_ts_imgs = ts_imgs; out_labels = labels
-
-        if self._vi_ops & VegetationIndex.NDVI.value == VegetationIndex.NDVI.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_NDVI(ts_imgs=out_ts_imgs, labels=out_labels)
-
-        if self._vi_ops & VegetationIndex.EVI.value == VegetationIndex.EVI.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_EVI(ts_imgs=out_ts_imgs, labels=labels)
-
-        if self._vi_ops & VegetationIndex.EVI2.value == VegetationIndex.EVI2.value:
-            out_ts_imgs, out_labels = self.__addVegetationIndex_EVI2(ts_imgs=out_ts_imgs, labels=labels)
-
-        return out_ts_imgs, out_labels
+        return tuple(lst_satdata)
 
     """
-    Data set split into training, test, and validation
+    TODO comment
     """
 
-    def __splitDataset_SHUFFLE_SPLIT(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> list:
+    def __preprocess(self, lst_satdata: LIST_NDARRAYS, lst_firemaps: LIST_NDARRAYS) -> LIST_NDARRAYS:
 
-        # lazy import
-        model_selection = lazy_import('sklearn.model_selection')
+        if not (isinstance(lst_satdata, (list, tuple)) and isinstance(lst_satdata[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #1: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
 
-        # convert to 3D (spatial in time) multi-spectral image to time series related to pixels
-        ts_imgs = ts_imgs.reshape((-1, ts_imgs.shape[2]))
-        # reshape labels to be 1D vector
-        labels = labels.reshape(-1)
+        if not (isinstance(lst_firemaps, (list, tuple)) and isinstance(lst_firemaps[0], _np.ndarray)):
+            err_msg = f'unsupported type of argument #2: {type(lst_satdata)}'
+            err_msg = f'{err_msg}, this argument must be a list of numpy arrays.'
+            raise TypeError(err_msg)
+
+        # conditions
+
+        cnd_reshape = self.opt_split_satdata != SatDataSplitOpt.SHUFFLE_SPLIT
+
+        cnd_no_uncharted = SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS & self.__satdata_opt
+        cnd_no_uncharted = cnd_no_uncharted == SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
+
+        cnd_pca = SatDataPreprocessOpt.PCA & self.__satdata_opt == SatDataPreprocessOpt.PCA
+        cnd_pca |= SatDataPreprocessOpt.PCA_PER_BAND & self.__satdata_opt == SatDataPreprocessOpt.PCA_PER_BAND
+
+        cnd_zscore = SatDataPreprocessOpt.STANDARTIZE_ZSCORE & self.__satdata_opt
+        cnd_zscore = cnd_zscore == SatDataPreprocessOpt.STANDARTIZE_ZSCORE
+
+        # satellite data preprocessing
+
+        shape_satdata = None
+        mask_satdata = None
+
+        for id_ds, (np_satdata, np_firemaps) in enumerate(zip(lst_satdata, lst_firemaps)):
+            if np_satdata is None: continue
+
+            if cnd_reshape:
+                shape_satdata = np_satdata.shape
+                np_satdata = np_satdata.reshape(-1, shape_satdata[2])
+
+            if cnd_no_uncharted:
+                np_firemaps = np_firemaps.reshape(-1)
+                mask_satdata = ~_np.isnan(np_firemaps)
+
+            # filtering using Savitzky-golay filter
+            if SatDataPreprocessOpt.SAVITZKY_GOLAY & self.__satdata_opt == SatDataPreprocessOpt.SAVITZKY_GOLAY:
+                msg = 'filtering (Savitzky-Golay)'
+                with elapsed_timer(msg=msg, enable=self.estimate_time):
+                    np_satdata[...] = self.__preproess_FILTER_SAVITZKY_GOLAY(np_satdata=np_satdata, mask=mask_satdata)
+
+            # standardize time series defined for pixels using z-score
+            if cnd_zscore or cnd_pca:
+                msg = 'standardize (z-score)'
+                with elapsed_timer(msg=msg, enable=self.estimate_time):
+                    np_satdata[...] = self.__preprocess_STANDARTIZE(np_satdata=np_satdata, mask=mask_satdata)
+
+            if cnd_reshape: np_satdata = np_satdata.reshape(shape_satdata)
+
+            # copy back
+            lst_satdata[id_ds][...] = np_satdata[...]
+
+        # Global feature extraction using principal component analysis (PCA)
+
+        if cnd_pca:
+            lst_satdata = self.__preprocess_PCA(lst_satdata=lst_satdata, lst_firemaps=lst_firemaps)
+
+        return lst_satdata  # TODO return tuple
+
+    """
+    TODO comment
+    """
+
+    def __splitData_SHUFFLE(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
+
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        # TODO check dimension and fire maps
+
+        satdata = satdata.reshape((-1, satdata.shape[2]))
+        firemaps = firemaps.reshape(-1)
 
         if self.test_ratio > 0.:
-
-            ts_imgs_train, ts_imgs_test, labels_train, labels_test = model_selection.train_test_split(
-                ts_imgs,
-                labels,
+            satdata_train, satdata_test, firemaps_train, firemaps_test = _sk_model_selection.train_test_split(
+                satdata,
+                firemaps,
                 test_size=self.test_ratio,
-                random_state=42
+                random_state=self.random_state
             )
-
         else:
-
-            ts_imgs_train = ts_imgs; labels_train = labels
-            ts_imgs_test = None; labels_test = None
+            satdata_train = satdata; firemaps_train = firemaps
+            satdata_test = None; firemaps_test = None
 
         if self.val_ratio > 0.:
-
-            ts_imgs_train, ts_imgs_val, labels_train, labels_val = model_selection.train_test_split(
-                ts_imgs_train,
-                labels_train,
+            satdata_train, satdata_val, firemaps_train, firemaps_val = _sk_model_selection.train_test_split(
+                satdata,
+                firemaps,
                 test_size=self.val_ratio,
-                random_state=42
+                random_state=self.random_state
             )
-
         else:
+            satdata_val = firemaps_val = None
 
-            ts_imgs_val = labels_val = None
+        satdata = (satdata_train, satdata_test, satdata_val)
+        firemaps = (firemaps_train, firemaps_test, firemaps_val)
 
-        if self.test_ratio > 0. and self.val_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, ts_imgs_val]
-        elif self.test_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_test, labels_train, labels_test]
-        elif self.val_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_val, labels_train, labels_val]
-        else:
-            return [ts_imgs, labels]
+        return satdata, firemaps
 
-    def __splitDataset_HORIZONTAL_SPLIT(self, satimg_ts: _np.ndarray, labels: _np.ndarray) -> list:
+    def __splitData_HORIZONTAL(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
+
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        # TODO check dimension of satdata and fire maps
 
         if self.test_ratio > 0.:
-
-            rows, _, _ = satimg_ts.shape
+            rows, _, _ = satdata.shape
             hi_rows = int(rows * (1. - self.test_ratio))
 
-            satimg_ts_train = satimg_ts[:hi_rows, :, :]; labels_train = labels[:hi_rows, :]
-            satimg_ts_test = satimg_ts[hi_rows:, :, :]; labels_test = labels[hi_rows:, :]
-
+            satdata_train = satdata[:hi_rows, :, :]; firemaps_train = firemaps[:hi_rows, :]
+            satdata_test = satdata[hi_rows:, :, :]; firemaps_test = firemaps[hi_rows:, :]
         else:
-
-            satimg_ts_train = satimg_ts; labels_train = labels
-            satimg_ts_test = None; labels_test = None
+            satdata_train = satdata; firemaps_train = firemaps
+            satdata_test = None; firemaps_test = None
 
         if self.val_ratio > 0.:
-
-            rows, _, _ = satimg_ts_train.shape
+            rows, _, _ = satdata_train.shape
             hi_rows = int(rows * (1. - self.val_ratio))
 
-            satimg_ts_val = satimg_ts_train[hi_rows:, :, :]; labels_val = labels_train[hi_rows:, :]
-            satimg_ts_train = satimg_ts_train[:hi_rows, :, :]; labels_train = labels_train[:hi_rows, :]
-
+            satdata_val = satdata_train[hi_rows:, :, :]; firemaps_val = firemaps_train[hi_rows:, :]
+            satdata_train = satdata_train[:hi_rows, :, :]; firemaps_train = firemaps_train[:hi_rows, :]
         else:
+            satdata_val = firemaps_val = None
 
-            satimg_ts_val = labels_val = None
+        satdata = (satdata_train, satdata_test, satdata_val)
+        firemaps = (firemaps_train, firemaps_test, firemaps_val)
 
-        if self.test_ratio > 0. and self.val_ratio > 0.:
-            return [satimg_ts_train, satimg_ts_test, satimg_ts_val, labels_train, labels_test, labels_val]
-        elif self.test_ratio > 0.:
-            return [satimg_ts_train, satimg_ts_test, labels_train, labels_test]
-        elif self.val_ratio > 0.:
-            return [satimg_ts_train, satimg_ts_val, labels_train, labels_val]
-        else:
-            return [satimg_ts_train, labels_train]
+        return satdata, firemaps
 
-    def __splitDataset_VERTICAL_SPLIT(self, satimg_ts: _np.ndarray, labels: _np.ndarray) -> list:
+    def __splitData_VERTICAL(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
+
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        # TODO check dimension of satdata and fire maps
 
         if self.test_ratio > 0.:
-
-            _, cols, _ = satimg_ts.shape
+            _, cols, _ = satdata.shape
             hi_cols = int(cols * (1. - self.test_ratio))
 
-            ts_imgs_train = satimg_ts[:, :hi_cols, :]; labels_train = labels[:, :hi_cols]
-            ts_imgs_test = satimg_ts[:, hi_cols:, :]; labels_test = labels[:, hi_cols:]
-
+            satdata_train = satdata[:, :hi_cols, :]; firemaps_train = firemaps[:, :hi_cols]
+            satdata_test = satdata[:, hi_cols:, :]; firemaps_test = firemaps[:, hi_cols:]
         else:
-
-            ts_imgs_train = satimg_ts; labels_train = labels
-            ts_imgs_test = None; labels_test = None
+            satdata_train = satdata; firemaps_train = firemaps
+            satdata_test = None; firemaps_test = None
 
         if self.val_ratio > 0.:
-
-            _, cols, _ = ts_imgs_train.shape
+            _, cols, _ = satdata_train.shape
             hi_cols = int(cols * (1. - self.val_ratio))
 
-            ts_imgs_val = ts_imgs_train[:, hi_cols:, :]; labels_val = labels_train[:, hi_cols:]
-            ts_imgs_train = ts_imgs_train[:, :hi_cols, :]; labels_train = labels_train[:, :hi_cols]
-
+            satdata_val = satdata_train[:, hi_cols:, :]; firemaps_val = firemaps_train[:, hi_cols:]
+            satdata_train = satdata_train[:, :hi_cols, :]; firemaps_train = firemaps_train[:, :hi_cols]
         else:
+            satdata_val = firemaps_val = None
 
-            ts_imgs_val = labels_val = None
+        satdata = (satdata_train, satdata_test, satdata_val)
+        firemaps = (firemaps_train, firemaps_test, firemaps_val)
 
-        if self.test_ratio > 0. and self.val_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_test, ts_imgs_val, labels_train, labels_test, labels_val]
-        elif self.test_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_test, labels_train, labels_test]
-        elif self.val_ratio > 0.:
-            return [ts_imgs_train, ts_imgs_val, labels_train, labels_val]
+        return satdata, firemaps
+
+    def __splitData(self, satdata: _np.ndarray, firemaps: _np.ndarray) -> (LIST_NDARRAYS, LIST_NDARRAYS):
+
+        if not isinstance(satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #1: {type(satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(firemaps, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(firemaps)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        # TODO check dimension of satdata and fire maps
+
+        if self.opt_split_satdata == SatDataSplitOpt.SHUFFLE_SPLIT:
+            return self.__splitData_SHUFFLE(satdata=satdata, firemaps=firemaps)
+        elif self.opt_split_satdata == SatDataSplitOpt.IMG_HORIZONTAL_SPLIT:
+            return self.__splitData_HORIZONTAL(satdata=satdata, firemaps=firemaps)
         else:
-            return [ts_imgs_train, labels_train]
+            return self.__splitData_VERTICAL(satdata=satdata, firemaps=firemaps)
 
-    def __splitDataset(self, ts_imgs: _np.ndarray, labels: _np.ndarray) -> list:
+    """
+    TODO comment
+    """
 
-        if self.train_test_val_opt == DatasetSplitOpt.SHUFFLE_SPLIT:
-            ds = self.__splitDataset_SHUFFLE_SPLIT(ts_imgs=ts_imgs, labels=labels)
-        elif self.train_test_val_opt == DatasetSplitOpt.IMG_HORIZONTAL_SPLIT:
-            ds = self.__splitDataset_HORIZONTAL_SPLIT(satimg_ts=ts_imgs, labels=labels)
-        elif self.train_test_val_opt == DatasetSplitOpt.IMG_VERTICAL_SPLIT:
-            ds = self.__splitDataset_VERTICAL_SPLIT(satimg_ts=ts_imgs, labels=labels)
-        else:
-            raise NotImplementedError
+    def createDatasets(self) -> None:
 
-        return ds
+        if self._ds_training is not None: return
 
-    def createDataset(self) -> None:
+        self.fuzeData()  # load and combine satellite data, and load fire maps either
 
-        if self._ds_training:
-            return
+        lst_satdata, lst_firemaps = self.__splitData(satdata=self._np_satdata, firemaps=self._np_firemaps)
+        lst_satdata = self.__preprocess(lst_satdata=lst_satdata, lst_firemaps=lst_firemaps)
 
-        if not self._labels_processed:
-            # processing descriptions of bands related to fire labels and obtain dates from them
-            try:
-                self._processMetaData_LABELS()
-            except IOError or ValueError:
-                raise RuntimeError('Cannot process meta data related to labels!')
+        self._ds_training = (lst_satdata[0], lst_firemaps[0])
+        if self.test_ratio > 0.: self._ds_test = (lst_satdata[1], lst_firemaps[1])
+        if self.val_ratio > 0.: self._ds_val = (lst_satdata[2], lst_firemaps[2])
 
-        if not self._satimgs_processed:
-            # process descriptions of bands related to satellite images and obtain dates from them
-            try:
-                self._processMetaData_SATELLITE_IMG()
-            except IOError or ValueError:
-                raise RuntimeError('Cannot process meta data related to satellite images!')
+        # TODO set list of satellite data and fire maps
 
-        try:
-            labels = self.__loadLabels()
-        except IOError or ValueError or NotImplementedError:
-            raise RuntimeError('Cannot load labels!')
+    def getTrainingDataset(self) -> tuple[_np.ndarray, ...]:
 
-        try:
-            ts_imgs = self.__loadSatImg_TS()
-        except IOError or ValueError or NotImplementedError:
-            raise RuntimeError('Cannot load series of satellite images!')
+        if self._ds_training is None: self.createDatasets()
 
-        if labels.shape != ts_imgs.shape[0:2]:
-            raise RuntimeError('Inconsistent shape between satellite images and labels!')
-
-        # vegetation index
-        if self._vi_ops >= VegetationIndex.NONE.value:
-            ts_imgs, labels = self.__addVegetationIndex(ts_imgs=ts_imgs, labels=labels)
-
-        # TODO fill nan values
-        lst_ds = self.__splitDataset(ts_imgs=ts_imgs, labels=labels)
-
-        lst_ds = self.__preprocessingSatelliteImages(ds_imgs=lst_ds)
-
-        if self.test_ratio > 0 and self.val_ratio > 0:
-
-            self._ds_training = (lst_ds[0], lst_ds[3])
-            self._ds_test = (lst_ds[1], lst_ds[4])
-            self._ds_val = (lst_ds[2], lst_ds[5])
-
-        else:
-
-            self._ds_training = (lst_ds[0], lst_ds[2]) if len(lst_ds) > 2 else tuple(lst_ds)
-
-            if self.test_ratio > 0.:
-                self._ds_test = (lst_ds[1], lst_ds[3])
-            elif self.val_ratio > 0.:
-                self._ds_val = (lst_ds[1], lst_ds[3])
-
-    def getTrainingDataset(self) -> tuple:
-
-        if not self._ds_training: self.createDataset()
         return self._ds_training
 
-    def getTestDataset(self) -> tuple:
+    def getTestDataset(self) -> Union[None, tuple[_np.ndarray, ...]]:
 
-        if not self._ds_test and self.test_ratio > 0.: self.createDataset()
+        if self.test_ratio == 0:
+            # TODO warning
+            return None
+
+        if self._ds_test is None: self.createDatasets()
         return self._ds_test
 
-    def getValidationDataset(self) -> _np.ndarray:
+    def getValDataset(self) -> Union[None, tuple[_np.ndarray, ...]]:
 
-        if not self._ds_val and self.val_ratio > 0.: self.createDataset()
+        if self.val_ratio == 0:
+            # TODO warning
+            return None
+
+        if self._ds_val is None: self.createDatasets()
         return self._ds_val
 
 
-# use cases
 if __name__ == '__main__':
 
+    _os = lazy_import('os')
+
     VAR_DATA_DIR = 'data/tifs'
-    VAR_PREFIX_IMG = 'ak_reflec_january_december_{}_100km'
 
-    # VAR_LABEL_COLLECTION = FireLabelsCollection.MTBS
-    VAR_LABEL_COLLECTION = FireLabelsCollection.CCI
-    VAR_STR_LABEL_COLLECTION = VAR_LABEL_COLLECTION.name.lower()
+    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
+    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_100km'
+    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_100km'
 
-    VAR_DS_SPLIT_OPT = DatasetSplitOpt.IMG_VERTICAL_SPLIT
-    VAR_TEST_RATIO = 1. / 3.  # split data set to training and test sets in ratio 2 : 1
-    VAR_VALIDATION_RATIO = 1. / 3.  # split training data set to new training and validation data sets in ratio 2 : 1
-
-    VAR_TRANSFORM_OPS = [DatasetTransformOP.PCA_PER_BAND, DatasetTransformOP.NOT_PROCESS_UNCHARTED_PIXELS]
-    VAR_PCA_OPS = [FactorOP.CUMULATIVE_EXPLAINED_VARIANCE]
-
-    VAR_LST_SATIMGS = []
-    VAR_LST_LABELS = []
-
-    VAR_CCI_CONFIDENCE_LEVEL = 70
+    VAR_LST_REFLECTANCE = []
+    VAR_LST_TEMPERATURE = []
+    VAR_LST_FIREMAPS = []
 
     for year in range(2004, 2006):
+        VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
+        VAR_PREFIX_IMG_TEMPERATURE_YEAR = VAR_PREFIX_IMG_TEMPERATURE.format(year)
 
-        PREFIX_IMG_YEAR = VAR_PREFIX_IMG.format(year)
+        VAR_PREFIX_IMG_FIREMAPS_YEAR = VAR_PREFIX_IMG_FIREMAPS.format(year)
 
-        VAR_FN_SATIMG = os.path.join(VAR_DATA_DIR, '{}_epsg3338_area_0.tif'.format(PREFIX_IMG_YEAR))
-        VAR_LST_SATIMGS.append(VAR_FN_SATIMG)
+        fn_satimg_reflec = f'{VAR_PREFIX_IMG_REFLECTANCE_YEAR}_epsg3338_area_0.tif'
+        fn_satimg_reflec = _os.path.join(VAR_DATA_DIR, fn_satimg_reflec)
+        VAR_LST_REFLECTANCE.append(fn_satimg_reflec)
 
-        VAR_FN_LABELS = '{}_epsg3338_area_0_{}_labels.tif'.format(PREFIX_IMG_YEAR, VAR_STR_LABEL_COLLECTION)
-        VAR_FN_LABELS = os.path.join(VAR_DATA_DIR, VAR_FN_LABELS)
-        VAR_LST_LABELS.append(VAR_FN_LABELS)
+        fn_satimg_temperature = f'{VAR_PREFIX_IMG_TEMPERATURE_YEAR}_epsg3338_area_0.tif'
+        fn_satimg_temperature = _os.path.join(VAR_DATA_DIR, fn_satimg_temperature)
+        VAR_LST_TEMPERATURE.append(fn_satimg_temperature)
 
-    adapter_ts = DataAdapterTS(
-        lst_satimgs=VAR_LST_SATIMGS,
-        lst_labels=VAR_LST_LABELS,
-        label_collection=VAR_LABEL_COLLECTION,
-        mtbs_severity_from=MTBSSeverity.LOW,
-        cci_confidence_level=VAR_CCI_CONFIDENCE_LEVEL,
-        # transformation options
-        transform_ops=VAR_TRANSFORM_OPS,
-        pca_ops=VAR_PCA_OPS,
-        # data set split options
-        ds_split_opt=VAR_DS_SPLIT_OPT,
-        test_ratio=VAR_TEST_RATIO,
-        val_ratio=VAR_VALIDATION_RATIO
+        fn_labels_mtbs = '{}_epsg3338_area_0_mtbs_labels.tif'.format(VAR_PREFIX_IMG_FIREMAPS_YEAR)
+        fn_labels_mtbs = _os.path.join(VAR_DATA_DIR, fn_labels_mtbs)
+        VAR_LST_FIREMAPS.append(fn_labels_mtbs)
+
+    # transform ops
+    TRANSFORM_OPS = (
+        SatDataPreprocessOpt.STANDARTIZE_ZSCORE,
+        SatDataPreprocessOpt.SAVITZKY_GOLAY,
+        SatDataPreprocessOpt.PCA,
+        SatDataPreprocessOpt.NOT_PROCESS_UNCHARTED_PIXELS
     )
 
-    # set dates
-    VAR_INDEX_BEGIN_DATE = 0
-    VAR_INDEX_END_DATE = -1
+    # TODO set Savitzky Golay filter parameters
 
-    print(adapter_ts.satimg_dates)
+    PCA_OPS = (FactorOP.CUMULATIVE_EXPLAINED_VARIANCE,)
+    PCA_RETAINED_VARIANCE = 0.9  # 10% information could be noisy
 
-    VAR_START_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_BEGIN_DATE]['Date']
-    adapter_ts.ds_start_date = VAR_START_DATE
-    VAR_END_DATE = adapter_ts.satimg_dates.iloc[VAR_INDEX_END_DATE]['Date']
-    adapter_ts.ds_end_date = VAR_END_DATE
+    # setup of data set loader
+    dataset_loader = SatDataAdapterTS(
+        lst_firemaps=VAR_LST_FIREMAPS,
+        lst_satdata_reflectance=VAR_LST_REFLECTANCE,
+        lst_satdata_temperature=VAR_LST_TEMPERATURE,
+        opt_split_satdata=SatDataSplitOpt.IMG_HORIZONTAL_SPLIT,
+        lst_vegetation_add=(VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI),
+        opt_select_satdata=SatDataSelectOpt.ALL,
+        opt_preprocess_satdata=TRANSFORM_OPS,
+        estimate_time=True
+    )
 
-    adapter_ts.createDataset()
+    print(dataset_loader.timestamps_firemaps)
+    print(dataset_loader.timestamps_satdata)
+
+    VAR_START_DATE = dataset_loader.timestamps_satdata.iloc[0]['Timestamps']
+    VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
+
+    dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
+    print(dataset_loader.shape_satdata)
+
+    dataset_loader.createDatasets()
+    ds_train = dataset_loader.getTrainingDataset()
+
+    # print(ds_train[0].shape)
+    # print(ds_train[0])

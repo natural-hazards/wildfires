@@ -1,6 +1,11 @@
-import ee as earthengine
 
 from enum import Enum
+
+# TODO comment
+from mlfire.utils.functool import constproperty, lazy_import
+
+# lazy import
+_earthengine = lazy_import('ee')
 
 
 class ModisReflectanceSpectralBands(Enum):
@@ -13,20 +18,42 @@ class ModisReflectanceSpectralBands(Enum):
     SWIR2 = 6  # short-wave infra-red (wave length 1628-1652nm)
     SWIR3 = 7  # short-wave infra-red (wave length 2105-2155nm)
 
+    def __add__(self, other) -> int:
+        if not isinstance(other, int):
+            err_msg = ''
+            raise TypeError(err_msg)
+
+        return self.value + other
+
+    def __sub__(self, other) -> int:
+        if not isinstance(other, int):
+            err_msg = ''
+            raise TypeError(err_msg)
+
+        return self.value - other
+
+    def __eq__(self, other):
+        if isinstance(other, int):
+            return self.value == other
+        elif isinstance(other, ModisReflectanceSpectralBands):
+            return self == other
+        else:
+            raise NotImplementedError
+
 
 class ModisCollection(Enum):
 
-    LST = 'MODIS/0061/MOD11A2'  # land surface temperature
+    LST = 'MODIS/061/MOD11A2'  # land surface temperature # TODO rename to LAND_TEMPERATURE
     REFLECTANCE = 'MODIS/061/MOD09A1'  # spectral reflectance bands
 
 
-class FireLabelsCollection(Enum):
+class FireLabelCollection(Enum):  # TODO rename FireMapCollection
 
     CCI = 'ESA/CCI/FireCCI/5_1'
     MTBS = 'USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1'
 
 
-class FireLabelsCollectionID(Enum):
+class FireLabelsCollectionID(Enum):  # TODO rename FireMapCollectionID
 
     CII = 0
     MTBS = 1
@@ -54,6 +81,14 @@ class MTBSRegion(Enum):
     HAWAI = 'HI'
     PUERTO_RICO = 'PR'
 
+    def __str__(self) -> str:
+        return self.value
+
+
+@constproperty
+def NFEATURES_REFLECTANCE() -> int:
+    return 7
+
 
 class EarthEngineFireDatasets(object):
 
@@ -74,8 +109,8 @@ class EarthEngineFireDatasets(object):
 
                 return fn_filter
 
-            ds_fire_cci = earthengine.ImageCollection('ESA/CCI/FireCCI/5_1')
-            date_filter = earthengine.Filter.date(start_date, end_date)
+            ds_fire_cci = _earthengine.ImageCollection('ESA/CCI/FireCCI/5_1')
+            date_filter = _earthengine.Filter.date(start_date, end_date)
 
             ds_fire_cci = ds_fire_cci.filter(date_filter)
             if confidence_level > 0:
@@ -99,8 +134,8 @@ class EarthEngineFireDatasets(object):
 
                 return fn_filter
 
-            ds_fire_mtbs = earthengine.ImageCollection('USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1')
-            date_filer = earthengine.Filter.date(start_date, end_date)
+            ds_fire_mtbs = _earthengine.ImageCollection('USFS/GTAC/MTBS/annual_burn_severity_mosaics/v1')
+            date_filer = _earthengine.Filter.date(start_date, end_date)
 
             ds_fire_mtbs = ds_fire_mtbs.filter(date_filer)
             if severity_from > 0:

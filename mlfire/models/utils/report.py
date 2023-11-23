@@ -80,18 +80,12 @@ def plot_cmat(labels_true: _np.ndarray, labels_pred: _np.ndarray, ax=None) -> No
     cm.plot(ax=ax)
 
 
-def show_report(labels_true: _np.ndarray,
-                labels_pred: _np.ndarray,
-                with_aucroc: bool = False,
-                with_cmat: bool = False,
+def show_report(labels_true: _np.ndarray, labels_pred: _np.ndarray, with_aucroc: bool = False, with_cmat: bool = False,
                 with_scores: bool = False) -> None:
 
-    if with_scores:
-
-        classification_report(labels_true=labels_true, labels_pred=labels_pred)
+    if with_scores: classification_report(labels_true=labels_true, labels_pred=labels_pred)
 
     if with_cmat and with_aucroc:
-
         if with_scores: print('\n')
 
         plt_pylab = lazy_import('matplotlib.pylab')
@@ -99,7 +93,7 @@ def show_report(labels_true: _np.ndarray,
 
         plot_aucroc(labels_true=labels_true, labels_pred=labels_pred, ax=axes[0])
         plot_cmat(labels_true=labels_true, labels_pred=labels_pred, ax=axes[1])
-
     elif with_cmat:
-
         plot_cmat(labels_true=labels_true, labels_pred=labels_pred)
+    elif with_aucroc:
+        plot_aucroc(labels_true=labels_true, labels_pred=labels_pred)
