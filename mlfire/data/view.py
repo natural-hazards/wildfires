@@ -453,11 +453,9 @@ class SatDataView(SatDataLoader):
         if with_fire_mask or self.view_opt_firemap == FireMapsViewOpt.LABEL: mask_fires = rs_cl >= self.cci_confidence_level
 
         if self.view_opt_firemap == FireMapsViewOpt.LABEL:
-
             label[mask_fires, :3] = colors.Colors.RED_COLOR.value
 
         elif self.view_opt_firemap == FireMapsViewOpt.CONFIDENCE_LEVEL:
-
             cmap = lazy_import('mlfire.utils.cmap')
 
             lst_colors = ['#ff0000', '#ff5a00', '#ffff00']
@@ -557,7 +555,7 @@ class SatDataView(SatDataLoader):
             raise AttributeError
 
         if with_uncharted_areas:
-            mask_uncharted = _np.array(rs_severity == MTBSSeverity.NON_MAPPED_AREA.value)
+            mask_uncharted = _np.isnan(rs_severity)
             if len(mask_uncharted) != 0: label[mask_uncharted, :] = 0
 
         # return
@@ -751,8 +749,8 @@ if __name__ == '__main__':
 
     VAR_NDVI_THRESHOLD = 0.5
 
-    VAR_FIREMAP_VIEW_OPT = FireMapsViewOpt.CONFIDENCE_LEVEL if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else FireMapsViewOpt.SEVERITY
-    # VAR_FIREMAP_VIEW_OPT = FireMapsViewOpt.LABEL  # uncomment this line for viewing label instead of confidence level or severity
+    # VAR_FIREMAP_VIEW_OPT = FireMapsViewOpt.CONFIDENCE_LEVEL if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else FireMapsViewOpt.SEVERITY
+    VAR_FIREMAP_VIEW_OPT = FireMapsViewOpt.LABEL  # uncomment this line for viewing label instead of confidence level or severity
 
     VAR_CCI_CONFIDENCE_LEVEL = 70
     VAR_MTBS_MIN_SEVERITY = MTBSSeverity.LOW
@@ -762,7 +760,7 @@ if __name__ == '__main__':
         lst_satdata_reflectance=VAR_LST_REFLECTANCE,
         lst_satdata_temperature=VAR_LST_TEMPERATURE,
         # selection of modis collection
-        opt_select_satdata=SatDataSelectOpt.TEMPERATURE,  # TODO as variable
+        opt_select_satdata=SatDataSelectOpt.REFLECTANCE,  # TODO as variable
         # fire map collection
         opt_select_firemap=VAR_OPT_SELECT_FIREMAP,
         # TODO comment
@@ -776,16 +774,15 @@ if __name__ == '__main__':
         estimate_time=True
     )
 
-    #
-    # print('#ts = {}'.format(dataset_view.len_ts_satdata))
-    # print('#firemaps = {}'.format(dataset_view.len_ts_firemaps))
+    print(f'#ts = {dataset_view.shape_satdata[-2]}')
+    print(f'#firemaps = {dataset_view.shape_firemap[-1]}')
 
     print(dataset_view.timestamps_satdata)
     print(dataset_view.timestamps_firemaps)
 
     dataset_view.showFireMap(18 if VAR_OPT_SELECT_FIREMAP == FireMapSelectOpt.CCI else 1)
-    dataset_view.view_opt_satdata = VAR_SATDATA_VIEW_OPT
 
+    dataset_view.view_opt_satdata = VAR_SATDATA_VIEW_OPT
     dataset_view.showSatData(70)
     dataset_view.showSatDataWithFireMap(70)
 

@@ -1403,29 +1403,35 @@ class SatDataLoader(object):
 
     def _processSeverity_MTBS(self, rs_ids) -> _np.ndarray:
 
-        if isinstance(rs_ids, int): rs_ids = [rs_ids]
+        if isinstance(rs_ids, int): rs_ids = (rs_ids,)
         # TODO check input
 
         if not self._firemaps_processed: self._processMetaData_FIREMAPS()
 
-        rows = self._ds_firemaps[0].RasterYSize; cols = self._ds_firemaps[0].RasterXSize  # TODO rows, cols as property
-        nmaps = len(rs_ids)
+        rows, cols, nmaps = self.shape_firemap
+        nids_input = len(rs_ids)
 
-        np_severity = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nmaps > 1 \
+        np_severity = _np.empty(shape=(rows, cols, nmaps), dtype=_np.float32) if nids_input > 1 \
             else _np.empty(shape=(rows, cols), dtype=_np.float32)
 
         for sr_id, rs_id in enumerate(rs_ids):
             if nmaps > 1:
                 ds_id, local_rs_id = self._layout_layers_firemaps[rs_id]
+            else:
+                local_rs_id = self._layout_layers_firemaps[rs_id]; ds_id = 0
+
+            if nids_input > 1:
                 np_severity[:, :, sr_id] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
             else:
-                local_rs_id = self._layout_layers_firemaps[rs_id]
-                np_severity[:, :] = self._ds_firemaps[0].GetRasterBand(local_rs_id).ReadAsArray()
+                np_severity[:, :] = self._ds_firemaps[ds_id].GetRasterBand(local_rs_id).ReadAsArray()
 
-        if nmaps > 1:
+        if nids_input > 1:
+            # TODO use eq
             np_uncharted = _np.any(np_severity == MTBSSeverity.NON_MAPPED_AREA.value, axis=-1)  # MTBSSeverity.NON_MAPPED_AREA.value
             np_severity_agg = _np.max(np_severity, axis=-1)  # TODO mean
-            np_severity = np_severity_agg; gc.collect()  # clean up
+            np_severity = np_severity_agg
+            # clean up
+            gc.collect()
         else:
             np_uncharted = np_severity == MTBSSeverity.NON_MAPPED_AREA.value  # TODO use __eq__
 
