@@ -75,6 +75,7 @@ class SatDataFuze(SatDataLoader):
                  lst_firemaps: LIST_STRINGS,
                  lst_satdata_reflectance: LIST_STRINGS = None,
                  lst_satdata_temperature: LIST_STRINGS = None,
+                 user_satdata_mask: _np.ndarray = None,
                  # TODO comment
                  opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
                  # TODO comment
@@ -97,6 +98,7 @@ class SatDataFuze(SatDataLoader):
             lst_firemaps=lst_firemaps,
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
+            user_satdata_mask=user_satdata_mask,
             opt_select_firemap=opt_select_firemap,
             opt_select_satdata=opt_select_satdata,
             select_timestamps=select_timestamps,

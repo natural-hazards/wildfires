@@ -130,6 +130,7 @@ class SatDataLoader(object):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
+                 user_satdata_mask: _np.ndarray = None,
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -160,6 +161,8 @@ class SatDataLoader(object):
         self._layout_layers_temperature = None
         self._layout_layers_firemaps = None  # TODO property
 
+        self.__user_satdata_mask = None
+
         self.__rs_rows_satadata = -1
         self.__rs_cols_satdata = -1
 
@@ -187,6 +190,9 @@ class SatDataLoader(object):
 
         self.__opt_select_satdata = None
         self.opt_select_satdata = opt_select_satdata
+
+        self.__user_satdata_mask = None
+        self.user_satdata_mask = user_satdata_mask
 
         self._satdata_processed = False  # TODO set as private
 
@@ -314,6 +320,26 @@ class SatDataLoader(object):
 
         self._reset()  # clean up
         self.__lst_satdata_temperature = lst_fn
+
+    @property
+    def user_satdata_mask(self) -> _np.ndarray:
+
+        return self.__user_satdata_mask
+
+    @user_satdata_mask.setter
+    def user_satdata_mask(self, mask: _np.ndarray) -> None:
+
+        if mask is None: return
+
+        # TODO check input type
+
+        # TODO improve
+        if self.__user_satdata_mask is not None and self.__user_satdata_mask.shape == mask.shape:
+            if (self.__user_satdata_mask & mask).all():
+                return
+
+        self._reset()
+        self.__user_satdata_mask = mask
 
     """
     Timestamps - reflectance, land surface temperature, and firemaps for wildfire localization
@@ -1546,6 +1572,10 @@ class SatDataLoader(object):
             c1 = np_severity >= self.mtbs_min_severity.value; c2 = np_severity <= MTBSSeverity.HIGH.value
             uncharted = _np.isnan(np_severity)  # TODO rename
 
+            # combine with user defined binary mask
+            if self.user_satdata_mask is not None:
+                uncharted = _np.logical_or(uncharted, ~self.user_satdata_mask.astype(bool))
+
             self._np_firemaps = _np.logical_and(c1, c2).astype(_np.float32)
             self._np_firemaps[uncharted] = _np.nan
 
@@ -1561,6 +1591,10 @@ class SatDataLoader(object):
 
             # clean up
             del np_confidence; gc.collect()
+
+        # combine
+        if self.user_satdata_mask is not None:
+            self._np_firemaps[~self.user_satdata_mask] = _np.nan
 
     """
     Shape (satellite data) 

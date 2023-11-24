@@ -92,6 +92,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  # lst_satdata_reflectance_test = None
                  lst_satdata_temperature: LIST_STRINGS = None,
                  # lst_satdata_temperature_test = None
+                 # user defined mask
+                 user_satdata_mask: _np.ndarray = None,
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -140,6 +142,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             lst_firemaps=lst_firemaps,
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
+            user_satdata_mask=user_satdata_mask,
             opt_select_firemap=opt_select_firemap,
             opt_select_satdata=opt_select_satdata,
             select_timestamps=select_timestamps,
@@ -1045,7 +1048,7 @@ if __name__ == '__main__':
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
     # dataset_loader.selected_timestamps = ((0, 45), (50, 70))
-    dataset_loader.selected_timestamps = (0, 45)  # ((0, 45), (50, 70))
+    dataset_loader.selected_timestamps = (15, 35)  # ((0, 45), (50, 70))
 
     print(dataset_loader.shape_satdata)
 
