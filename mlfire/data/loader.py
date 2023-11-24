@@ -1217,8 +1217,10 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def __loadSatData_FOR_SELECTED_TIMESTAMPS(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray,
-                                              layout_layers: dict, nfeatures: int) -> _np.ndarray:
+    def __loadSatData_FOR_SELECTED_TIMESTAMPS_LIST(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray,
+                                                   layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        # TODO use self.shape_selected_satdata instead of nfeatures
 
         if not isinstance(ds_satdata, list) and not isinstance(ds_satdata[0], _gdal.Dataset):
             err_msg = ''  # TODO error message
@@ -1229,11 +1231,11 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         if not isinstance(layout_layers, dict):
-            err_msg = ''  # TODO error message
+            err_msg = f'unsupported type of argument #3: {type(layout_layers)}, this argument must be a dictionary.'
             raise TypeError(err_msg)
 
         if not isinstance(nfeatures, int):
-            err_msg = ''
+            err_msg = f'unsupported type of argument #4: {type(nfeatures)}, this argument must be an integer.'
             raise TypeError(err_msg)
 
         lst_ds_ids = self.selected_timestamps_satdata['Image ID'].unique()
@@ -1261,6 +1263,67 @@ class SatDataLoader(object):
                             pos += 1
 
         return np_satdata
+
+    # TODO rename
+    def __loadSatData_FOR_SELECTED_TIMESTAMPS_DATASET(self, ds_satdata: _gdal.Dataset, np_satdata: _np.ndarray,
+                                                      layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        if not isinstance(ds_satdata, list) and not isinstance(ds_satdata, _gdal.Dataset):
+            err_msg = f'unsupported type of argument #2: {type(ds_satdata)}, this argument must be a gdal dataset.'
+            raise TypeError(err_msg)
+
+        if not isinstance(np_satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(np_satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(layout_layers, dict):
+            err_msg = f'unsupported type of argument #3: {type(layout_layers)}, this argument must be a dictionary.'
+            raise TypeError(err_msg)
+
+        if not isinstance(nfeatures, int):
+            err_msg = f'unsupported type of argument #4: {type(nfeatures)}, this argument must be an integer.'
+            raise TypeError(err_msg)
+
+        timestamps = _pd.to_datetime(self.selected_timestamps_satdata['Timestamps'])
+        pos = 0
+
+        years = timestamps.dt.year.unique()
+        for y in years:
+            range_days = _pd.date_range(start=f'01/01/{y}', end=f'12/31/{y}', freq='8D')
+            img_year = timestamps[timestamps.dt.year == y]
+
+            if img_year.equals(range_days):
+                rend = pos + ds_satdata.RasterCount
+                np_satdata[pos:rend, :, :] = ds_satdata.ReadAsArray()
+            else:
+                for i in img_year.index:
+                    rs_id_start = layout_layers[i]
+                    img_ds = ds_satdata
+                    for feature_id in range(nfeatures):
+                        np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
+                        pos += 1
+
+        return np_satdata
+
+    def __loadSatData_FOR_SELECTED_TIMESTAMPS(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray,
+                                              layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        # TODO check inputs
+
+        if len(ds_satdata) > 1:
+            return self.__loadSatData_FOR_SELECTED_TIMESTAMPS_LIST(
+                ds_satdata=ds_satdata,
+                np_satdata=np_satdata,
+                layout_layers=layout_layers,
+                nfeatures=nfeatures
+            )
+        else:
+            return self.__loadSatData_FOR_SELECTED_TIMESTAMPS_DATASET(
+                ds_satdata=ds_satdata[0],
+                np_satdata=np_satdata,
+                layout_layers=layout_layers,
+                nfeatures=nfeatures
+            )
 
     def _loadSatData_IMPL(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
 
