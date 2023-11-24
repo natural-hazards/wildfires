@@ -92,6 +92,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  # lst_satdata_reflectance_test = None
                  lst_satdata_temperature: LIST_STRINGS = None,
                  # lst_satdata_temperature_test = None
+                 # user defined mask
+                 user_satdata_mask: _np.ndarray = None,
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -140,6 +142,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
             lst_firemaps=lst_firemaps,
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
+            user_satdata_mask=user_satdata_mask,
             opt_select_firemap=opt_select_firemap,
             opt_select_satdata=opt_select_satdata,
             select_timestamps=select_timestamps,
@@ -985,15 +988,15 @@ if __name__ == '__main__':
 
     VAR_DATA_DIR = 'data/tifs'
 
-    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
-    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_100km'
-    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_100km'
+    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_13k'
+    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_13k'
+    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_13k'
 
     VAR_LST_REFLECTANCE = []
     VAR_LST_TEMPERATURE = []
     VAR_LST_FIREMAPS = []
 
-    for year in range(2004, 2006):
+    for year in range(2004, 2005):
         VAR_PREFIX_IMG_REFLECTANCE_YEAR = VAR_PREFIX_IMG_REFLECTANCE.format(year)
         VAR_PREFIX_IMG_TEMPERATURE_YEAR = VAR_PREFIX_IMG_TEMPERATURE.format(year)
 
@@ -1013,6 +1016,7 @@ if __name__ == '__main__':
 
     # transform ops
     TRANSFORM_OPS = (
+        # SatDataPreprocessOpt.NONE,
         SatDataPreprocessOpt.STANDARTIZE_ZSCORE,
         SatDataPreprocessOpt.SAVITZKY_GOLAY,
         SatDataPreprocessOpt.PCA,
@@ -1033,7 +1037,7 @@ if __name__ == '__main__':
         lst_vegetation_add=(VegetationIndexSelectOpt.EVI, VegetationIndexSelectOpt.EVI2, VegetationIndexSelectOpt.NDVI),
         opt_select_satdata=SatDataSelectOpt.ALL,
         opt_preprocess_satdata=TRANSFORM_OPS,
-        estimate_time=True
+        estimate_time=True,
     )
 
     print(dataset_loader.timestamps_firemaps)
@@ -1043,10 +1047,13 @@ if __name__ == '__main__':
     VAR_END_DATE = dataset_loader.timestamps_satdata.iloc[-1]['Timestamps']
 
     dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
+    # dataset_loader.selected_timestamps = ((0, 45), (50, 70))
+    dataset_loader.selected_timestamps = (15, 35)  # ((0, 45), (50, 70))
+
     print(dataset_loader.shape_satdata)
 
     dataset_loader.createDatasets()
     ds_train = dataset_loader.getTrainingDataset()
 
-    # print(ds_train[0].shape)
-    # print(ds_train[0])
+    print(dataset_loader.shape_selected_satdata)
+    print(ds_train[0].shape)

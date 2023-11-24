@@ -130,6 +130,7 @@ class SatDataLoader(object):
                  lst_firemaps: Union[tuple[str], list[str], None],
                  lst_satdata_reflectance: Union[tuple[str], list[str], None] = None,
                  lst_satdata_temperature: Union[tuple[str], list[str], None] = None,
+                 user_satdata_mask: _np.ndarray = None,
                  # TODO comment
                  opt_select_firemap: FireMapSelectOpt = FireMapSelectOpt.MTBS,
                  # TODO comment
@@ -160,6 +161,8 @@ class SatDataLoader(object):
         self._layout_layers_temperature = None
         self._layout_layers_firemaps = None  # TODO property
 
+        self.__user_satdata_mask = None
+
         self.__rs_rows_satadata = -1
         self.__rs_cols_satdata = -1
 
@@ -175,6 +178,8 @@ class SatDataLoader(object):
         self.__shape_satdata = None
         self.__shape_firemaps = None
 
+        self.__shape_selected_satdata = None
+
         # properties sources - reflectance and land surface temperature
 
         self.__lst_satdata_reflectance = None
@@ -185,6 +190,9 @@ class SatDataLoader(object):
 
         self.__opt_select_satdata = None
         self.opt_select_satdata = opt_select_satdata
+
+        self.__user_satdata_mask = None
+        self.user_satdata_mask = user_satdata_mask
 
         self._satdata_processed = False  # TODO set as private
 
@@ -312,6 +320,26 @@ class SatDataLoader(object):
 
         self._reset()  # clean up
         self.__lst_satdata_temperature = lst_fn
+
+    @property
+    def user_satdata_mask(self) -> _np.ndarray:
+
+        return self.__user_satdata_mask
+
+    @user_satdata_mask.setter
+    def user_satdata_mask(self, mask: _np.ndarray) -> None:
+
+        if mask is None: return
+
+        # TODO check input type
+
+        # TODO improve
+        if self.__user_satdata_mask is not None and self.__user_satdata_mask.shape == mask.shape:
+            if (self.__user_satdata_mask & mask).all():
+                return
+
+        self._reset()
+        self.__user_satdata_mask = mask
 
     """
     Timestamps - reflectance, land surface temperature, and firemaps for wildfire localization
@@ -1215,8 +1243,10 @@ class SatDataLoader(object):
 
         return np_satdata
 
-    def __loadSatData_FOR_SELECTED_TIMESTAMPS(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray,
-                                              layout_layers: dict, nfeatures: int) -> _np.ndarray:
+    def __loadSatData_FOR_SELECTED_TIMESTAMPS_LIST(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray,
+                                                   layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        # TODO use self.shape_selected_satdata instead of nfeatures
 
         if not isinstance(ds_satdata, list) and not isinstance(ds_satdata[0], _gdal.Dataset):
             err_msg = ''  # TODO error message
@@ -1227,11 +1257,11 @@ class SatDataLoader(object):
             raise TypeError(err_msg)
 
         if not isinstance(layout_layers, dict):
-            err_msg = ''  # TODO error message
+            err_msg = f'unsupported type of argument #3: {type(layout_layers)}, this argument must be a dictionary.'
             raise TypeError(err_msg)
 
         if not isinstance(nfeatures, int):
-            err_msg = ''
+            err_msg = f'unsupported type of argument #4: {type(nfeatures)}, this argument must be an integer.'
             raise TypeError(err_msg)
 
         lst_ds_ids = self.selected_timestamps_satdata['Image ID'].unique()
@@ -1258,6 +1288,73 @@ class SatDataLoader(object):
                             np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
                             pos += 1
 
+        return np_satdata
+
+    # TODO rename
+    def __loadSatData_FOR_SELECTED_TIMESTAMPS_DATASET(self, ds_satdata: _gdal.Dataset, np_satdata: _np.ndarray,
+                                                      layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        if not isinstance(ds_satdata, list) and not isinstance(ds_satdata, _gdal.Dataset):
+            err_msg = f'unsupported type of argument #2: {type(ds_satdata)}, this argument must be a gdal dataset.'
+            raise TypeError(err_msg)
+
+        if not isinstance(np_satdata, _np.ndarray):
+            err_msg = f'unsupported type of argument #2: {type(np_satdata)}, this argument must be a numpy array.'
+            raise TypeError(err_msg)
+
+        if not isinstance(layout_layers, dict):
+            err_msg = f'unsupported type of argument #3: {type(layout_layers)}, this argument must be a dictionary.'
+            raise TypeError(err_msg)
+
+        if not isinstance(nfeatures, int):
+            err_msg = f'unsupported type of argument #4: {type(nfeatures)}, this argument must be an integer.'
+            raise TypeError(err_msg)
+
+        timestamps = _pd.to_datetime(self.selected_timestamps_satdata['Timestamps'])
+        pos = 0
+
+        img_ds = ds_satdata.ReadAsArray()
+        years = timestamps.dt.year.unique()
+
+        for y in years:
+            range_days = _pd.date_range(start=f'01/01/{y}', end=f'12/31/{y}', freq='8D')
+            img_year = timestamps[timestamps.dt.year == y]
+
+            if img_year.equals(range_days):
+                # rend = pos + ds_satdata.RasterCount
+                # np_satdata[pos:rend, :, :] = ds_satdata.ReadAsArray()
+                raise NotImplementedError
+            else:
+                for i in img_year.index:
+                    rs_id_start = layout_layers[i]
+                    # img_ds = ds_satdata
+                    for feature_id in range(nfeatures):
+                        # np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
+                        np_satdata[pos, :, :] = img_ds[rs_id_start - 1 + feature_id, :, :]
+                        pos += 1
+
+        return np_satdata
+
+    def __loadSatData_FOR_SELECTED_TIMESTAMPS(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray,
+                                              layout_layers: dict, nfeatures: int) -> _np.ndarray:
+
+        # TODO check inputs
+
+        if len(ds_satdata) > 1:
+            return self.__loadSatData_FOR_SELECTED_TIMESTAMPS_LIST(
+                ds_satdata=ds_satdata,
+                np_satdata=np_satdata,
+                layout_layers=layout_layers,
+                nfeatures=nfeatures
+            )
+        else:
+            return self.__loadSatData_FOR_SELECTED_TIMESTAMPS_DATASET(
+                ds_satdata=ds_satdata[0],
+                np_satdata=np_satdata,
+                layout_layers=layout_layers,
+                nfeatures=nfeatures
+            )
+
     def _loadSatData_IMPL(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
 
         if not isinstance(ds_satdata, list) and not isinstance(ds_satdata[0], _gdal.Dataset):
@@ -1283,11 +1380,9 @@ class SatDataLoader(object):
                 ds_satdata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
             )
 
-    def __loadSatData_REFLETANCE(self) -> None:  # TODO fix name -> __loadSatData_REFLECTANCE
+    def __loadSatData_REFLETANCE(self) -> None:
 
-        rows, cols, _, len_features = self.shape_satdata
-        len_timestamps = len(self.selected_timestamps_satdata)
-
+        rows, cols, len_timestamps, len_features = self.shape_selected_satdata
         nfeatures = int(_NFEATURES_REFLECTANCE)
 
         idx = list(itertools.chain(
@@ -1481,6 +1576,10 @@ class SatDataLoader(object):
             c1 = np_severity >= self.mtbs_min_severity.value; c2 = np_severity <= MTBSSeverity.HIGH.value
             uncharted = _np.isnan(np_severity)  # TODO rename
 
+            # combine with user defined binary mask
+            if self.user_satdata_mask is not None:
+                uncharted = _np.logical_or(uncharted, ~self.user_satdata_mask.astype(bool))
+
             self._np_firemaps = _np.logical_and(c1, c2).astype(_np.float32)
             self._np_firemaps[uncharted] = _np.nan
 
@@ -1496,6 +1595,10 @@ class SatDataLoader(object):
 
             # clean up
             del np_confidence; gc.collect()
+
+        # combine
+        if self.user_satdata_mask is not None:
+            self._np_firemaps[~self.user_satdata_mask] = _np.nan
 
     """
     Shape (satellite data) 
@@ -1619,6 +1722,17 @@ class SatDataLoader(object):
         return self.__shape_satdata
 
     # TODO shape_selected_satdata
+    @property
+    def shape_selected_satdata(self) -> tuple[int, ...]:
+
+        if self.__shape_selected_satdata is not None: return self.__shape_selected_satdata
+
+        rows, cols, _, _ = self.shape_satdata
+        len_ts = len(self.selected_timestamps_satdata)
+        len_features = len(self.features)
+
+        self.__shape_selected_satdata = (rows, cols, len_ts, len_features)
+        return self.__shape_selected_satdata
 
     """
     Shape (fire maps) 
@@ -1660,9 +1774,9 @@ if __name__ == '__main__':
 
     VAR_DATA_DIR = 'data/tifs'
 
-    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
-    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_100km'
-    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_100km'
+    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_13k'
+    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_13k'
+    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_13k'
 
     VAR_LST_REFLECTANCE = []
     VAR_LST_TEMPERATURE = []
@@ -1707,10 +1821,11 @@ if __name__ == '__main__':
     # dataset_loader.selected_timestamps = (VAR_START_IDX, VAR_END_IDX)
     # dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
-    # print(dataset_loader.timestamps_firemaps)
-
+    print(dataset_loader.timestamps_firemaps)
     print(dataset_loader.timestamps_satdata)
+
     print(dataset_loader.selected_timestamps_satdata)
+    print(dataset_loader.shape_satdata)
 
     dataset_loader.loadSatData()
 

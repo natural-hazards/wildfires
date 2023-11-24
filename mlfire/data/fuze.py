@@ -75,6 +75,7 @@ class SatDataFuze(SatDataLoader):
                  lst_firemaps: LIST_STRINGS,
                  lst_satdata_reflectance: LIST_STRINGS = None,
                  lst_satdata_temperature: LIST_STRINGS = None,
+                 user_satdata_mask: _np.ndarray = None,
                  # TODO comment
                  opt_select_satdata: SatDataSelectOpt = SatDataSelectOpt.ALL,
                  # TODO comment
@@ -97,6 +98,7 @@ class SatDataFuze(SatDataLoader):
             lst_firemaps=lst_firemaps,
             lst_satdata_reflectance=lst_satdata_reflectance,
             lst_satdata_temperature=lst_satdata_temperature,
+            user_satdata_mask=user_satdata_mask,
             opt_select_firemap=opt_select_firemap,
             opt_select_satdata=opt_select_satdata,
             select_timestamps=select_timestamps,
@@ -292,6 +294,8 @@ class SatDataFuze(SatDataLoader):
                 # TODO raise error
                 pass
 
+            # TODO use selected_timestamps_satdata
+            # TODO check if number of features is right
             len_timestamps = len(self.selected_timestamps_satdata); nfeatures = int(_NFEATURES_REFLECTANCE)
             rows, cols, _, _ = self.shape_satdata
 
@@ -313,7 +317,7 @@ class SatDataFuze(SatDataLoader):
 
             np_reflec = _np.moveaxis(np_reflec, 0, -1); np_reflec *= 1e-4
         else:
-            _, _, len_timestamps, len_features = self.shape_satdata
+            _, _, len_timestamps, len_features = self.shape_selected_satdata
             end_selection = int(_NFEATURES_REFLECTANCE)
 
             # TODO comment
@@ -323,15 +327,18 @@ class SatDataFuze(SatDataLoader):
 
             np_reflec = self._np_satdata[:, :, idx]
 
-        # TODO use satdata_shape and improve implementation
         idx_start = 0
         if cnd_reflectance_sel: idx_start += _NFEATURES_REFLECTANCE
         if cnd_temperature_sel: idx_start += 1
 
-        step_ts = idx_start
-        if VegetationIndexSelectOpt.EVI & self.__vi_ops == VegetationIndexSelectOpt.EVI: step_ts += 1
-        if VegetationIndexSelectOpt.EVI2 & self.__vi_ops == VegetationIndexSelectOpt.EVI2: step_ts += 1
-        if VegetationIndexSelectOpt.NDVI & self.__vi_ops == VegetationIndexSelectOpt.NDVI: step_ts += 1
+        step_ts = self.shape_selected_satdata[-1]
+        # TODO clean up below
+        # if VegetationIndexSelectOpt.EVI & self.__vi_ops == VegetationIndexSelectOpt.EVI: step_ts += 1
+        # if VegetationIndexSelectOpt.EVI2 & self.__vi_ops == VegetationIndexSelectOpt.EVI2: step_ts += 1
+        # if VegetationIndexSelectOpt.NDVI & self.__vi_ops == VegetationIndexSelectOpt.NDVI: step_ts += 1
+
+        # print(self.shape_selected_satdata[-1])
+        # print(step_ts)
 
         if VegetationIndexSelectOpt.EVI & self.__vi_ops == VegetationIndexSelectOpt.EVI:
             out_evi = self._np_satdata[:, :, idx_start::step_ts]
