@@ -1260,6 +1260,8 @@ class SatDataLoader(object):
                             np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
                             pos += 1
 
+        return np_satdata
+
     def _loadSatData_IMPL(self, ds_satdata: list[_gdal.Dataset, ...], np_satdata: _np.ndarray, layout_layers: dict, nfeatures: int) -> _np.ndarray:
 
         if not isinstance(ds_satdata, list) and not isinstance(ds_satdata[0], _gdal.Dataset):
@@ -1285,11 +1287,9 @@ class SatDataLoader(object):
                 ds_satdata=ds_satdata, np_satdata=np_satdata, layout_layers=layout_layers, nfeatures=nfeatures
             )
 
-    def __loadSatData_REFLETANCE(self) -> None:  # TODO fix name -> __loadSatData_REFLECTANCE
+    def __loadSatData_REFLETANCE(self) -> None:
 
-        rows, cols, _, len_features = self.shape_satdata
-        len_timestamps = len(self.selected_timestamps_satdata)
-
+        rows, cols, len_timestamps, len_features = self.shape_selected_satdata
         nfeatures = int(_NFEATURES_REFLECTANCE)
 
         idx = list(itertools.chain(
