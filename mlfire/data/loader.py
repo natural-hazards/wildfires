@@ -1313,20 +1313,24 @@ class SatDataLoader(object):
         timestamps = _pd.to_datetime(self.selected_timestamps_satdata['Timestamps'])
         pos = 0
 
+        img_ds = ds_satdata.ReadAsArray()
         years = timestamps.dt.year.unique()
+
         for y in years:
             range_days = _pd.date_range(start=f'01/01/{y}', end=f'12/31/{y}', freq='8D')
             img_year = timestamps[timestamps.dt.year == y]
 
             if img_year.equals(range_days):
-                rend = pos + ds_satdata.RasterCount
-                np_satdata[pos:rend, :, :] = ds_satdata.ReadAsArray()
+                # rend = pos + ds_satdata.RasterCount
+                # np_satdata[pos:rend, :, :] = ds_satdata.ReadAsArray()
+                raise NotImplementedError
             else:
                 for i in img_year.index:
                     rs_id_start = layout_layers[i]
-                    img_ds = ds_satdata
+                    # img_ds = ds_satdata
                     for feature_id in range(nfeatures):
-                        np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
+                        # np_satdata[pos, :, :] = img_ds.GetRasterBand(rs_id_start + feature_id).ReadAsArray()
+                        np_satdata[pos, :, :] = img_ds[rs_id_start - 1 + feature_id, :, :]
                         pos += 1
 
         return np_satdata
