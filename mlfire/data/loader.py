@@ -175,6 +175,8 @@ class SatDataLoader(object):
         self.__shape_satdata = None
         self.__shape_firemaps = None
 
+        self.__shape_selected_satdata = None
+
         # properties sources - reflectance and land surface temperature
 
         self.__lst_satdata_reflectance = None
@@ -1619,6 +1621,17 @@ class SatDataLoader(object):
         return self.__shape_satdata
 
     # TODO shape_selected_satdata
+    @property
+    def shape_selected_satdata(self) -> tuple[int, ...]:
+
+        if self.__shape_selected_satdata is not None: return self.__shape_selected_satdata
+
+        rows, cols, _, _ = self.shape_satdata
+        len_ts = len(self.selected_timestamps_satdata)
+        len_features = len(self.features)
+
+        self.__shape_selected_satdata = (rows, cols, len_ts, len_features)
+        return self.__shape_selected_satdata
 
     """
     Shape (fire maps) 
@@ -1660,9 +1673,9 @@ if __name__ == '__main__':
 
     VAR_DATA_DIR = 'data/tifs'
 
-    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_100km'
-    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_100km'
-    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_100km'
+    VAR_PREFIX_IMG_REFLECTANCE = 'ak_reflec_january_december_{}_13k'
+    VAR_PREFIX_IMG_TEMPERATURE = 'ak_lst_january_december_{}_13k'
+    VAR_PREFIX_IMG_FIREMAPS = 'ak_january_december_{}_13k'
 
     VAR_LST_REFLECTANCE = []
     VAR_LST_TEMPERATURE = []
@@ -1707,10 +1720,11 @@ if __name__ == '__main__':
     # dataset_loader.selected_timestamps = (VAR_START_IDX, VAR_END_IDX)
     # dataset_loader.selected_timestamps = (VAR_START_DATE, VAR_END_DATE)
 
-    # print(dataset_loader.timestamps_firemaps)
-
+    print(dataset_loader.timestamps_firemaps)
     print(dataset_loader.timestamps_satdata)
+
     print(dataset_loader.selected_timestamps_satdata)
+    print(dataset_loader.shape_satdata)
 
     dataset_loader.loadSatData()
 
