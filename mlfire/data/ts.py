@@ -76,6 +76,10 @@ class SatDataPreprocessOpt(Enum):
         else:
             return False
 
+    def __hash__(self) -> int:
+
+        return id(self)
+
 
 # defines
 LIST_PREPROCESS_SATDATA_OPT = Union[
