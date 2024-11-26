@@ -14,14 +14,15 @@ from mlfire.data.view import SatImgViewOpt, FireMapsViewOpt
 from mlfire.data.fuze import SatDataFuze
 from mlfire.data.view import SatDataView
 
-from mlfire.features.pca import TransformPCA, FactorOP  # TODO rename module mlfire.extractors
+from mlfire.features.pca import ExtractorPCA, FactorOP  # TODO rename module mlfire.extractors
 from mlfire.features.pca import LIST_PCA_FACTOR_OPT
 
 # utils imports
 from mlfire.utils.const import LIST_STRINGS, LIST_NDARRAYS
 
-from mlfire.utils.time import elapsed_timer
+from mlfire.utils.device import Device
 from mlfire.utils.functool import lazy_import
+from mlfire.utils.time import elapsed_timer
 
 # lazy imports
 _np = lazy_import('numpy')
@@ -76,6 +77,9 @@ class SatDataPreprocessOpt(Enum):
         else:
             return False
 
+    def __hash__(self) -> int:
+        return id(self)
+
 
 # defines
 LIST_PREPROCESS_SATDATA_OPT = Union[
@@ -125,6 +129,8 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                  # TODO comment
                  view_opt_satdata: SatImgViewOpt = SatImgViewOpt.NATURAL_COLOR,
                  view_opt_firemap: FireMapsViewOpt = FireMapsViewOpt.LABEL,
+                 # TODO comment
+                 device: Device = Device.CPU,
                  # TODO comment
                  estimate_time: bool = True,
                  random_state: int = 42):
@@ -198,6 +204,9 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
         self.__val_ratio = None
         self.val_ratio = val_ratio
 
+        self.__device = None
+        self.device = device
+
         self.__random_state = None
         self.random_state = random_state
 
@@ -270,6 +279,18 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         self._reset()
         self.__val_ratio = val
+
+    @property
+    def device(self) -> Device:
+        return self.__device
+
+    @device.setter
+    def device(self, dev: Device) -> None:
+        if self.__device == dev:
+            return
+
+        self._reset()
+        self.__device = dev
 
     @property
     def random_state(self) -> int:
@@ -479,7 +500,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
     Dimensionality reduction using principal component analysis (fit projection matrix)
     """
 
-    def __preprocess_PCA_FIT_ALL_FEATURES(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[TransformPCA]:
+    def __preprocess_PCA_FIT_ALL_FEATURES(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[ExtractorPCA]:
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -495,18 +516,19 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
         if mask is not None: satdata = satdata[mask, :]
 
-        extractor_pca = TransformPCA(
-            train_ds=satdata,
-            factor_ops=self.opt_pca_factor,
-            nlatent_factors=self.pca_nfactors_user,
-            retained_variance=self.pca_retained_variance
+        extractor_pca = ExtractorPCA(
+            ds=satdata,
+            opt_factor=self.opt_pca_factor,
+            nfactors=self.pca_nfactors_user,
+            retained_variance=self.pca_retained_variance,
+            device=self.device
             # verbose=True
         )
         extractor_pca.fit()
 
         return (extractor_pca,)
 
-    def __preprocess_PCA_FIT_PER_FEATURE(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[TransformPCA, ...]:
+    def __preprocess_PCA_FIT_PER_FEATURE(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[ExtractorPCA, ...]:
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -531,25 +553,26 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
 
             sub_img = np_satdata_inner[:, feature_id::len_features]
 
-            extractor_pca = TransformPCA(
-                train_ds=sub_img,
-                factor_ops=self.opt_pca_factor,
-                nlatent_factors=self.pca_nfactors_user,
-                retained_variance=self.pca_retained_variance
+            extractor_pca = ExtractorPCA(
+                ds=sub_img,
+                opt_factor=self.opt_pca_factor,
+                nfactors=self.pca_nfactors_user,
+                retained_variance=self.pca_retained_variance,
+                device=self.device
                 # verbose=True
             )
             extractor_pca.fit()
 
             # determine max latent factors among features
-            nfactors = max(nfactors, extractor_pca.nlatent_factors)
+            nfactors = max(nfactors, extractor_pca.nfactors)
             lst_extractors.append(extractor_pca)
 
         # refit transformation matrix of PCA for max latent factors among features
         for feature_id in range(len_features):
             extractor_pca = lst_extractors[feature_id]
 
-            if extractor_pca.nlatent_factors < nfactors:
-                extractor_pca.nlatent_factors_user = nfactors
+            if extractor_pca.nfactors < nfactors:
+                extractor_pca.nfactors_user = nfactors
 
                 mod_opt_pca = list(self.opt_pca_factor)
                 if FactorOP.CUMULATIVE_EXPLAINED_VARIANCE & self.__pca_ops == FactorOP.CUMULATIVE_EXPLAINED_VARIANCE:
@@ -557,13 +580,13 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 if FactorOP.USER_SET & self.__pca_ops != FactorOP.USER_SET:
                     mod_opt_pca.append(FactorOP.USER_SET)
 
-                extractor_pca.factor_ops = mod_opt_pca
+                extractor_pca.opt_factor = mod_opt_pca
                 extractor_pca.fit()
 
         # convert list of extractor to tuple
         return tuple(lst_extractors)
 
-    def __preprocess_PCA_FIT(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[TransformPCA, ...]:
+    def __preprocess_PCA_FIT(self, satdata: _np.ndarray, mask: _np.ndarray = None) -> tuple[ExtractorPCA, ...]:
 
         if self.__lst_extractors is not None: return self.__lst_extractors
 
@@ -717,7 +740,7 @@ class SatDataAdapterTS(SatDataFuze, SatDataView):
                 msg = 'fitting PCA'
                 with elapsed_timer(msg=msg, enable=self.estimate_time):
                     self.__lst_extractors = self.__preprocess_PCA_FIT(satdata=np_satdata, mask=mask_satdata)
-                    self.__pca_nfactors = self.__lst_extractors[0].nlatent_factors
+                    self.__pca_nfactors = self.__lst_extractors[0].nfactors
 
             msg = f'dimensionality reduction (PCA, data set #{id_ds})'
             with elapsed_timer(msg=msg, enable=self.estimate_time):

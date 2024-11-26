@@ -60,6 +60,9 @@ class SatDataSelectOpt(Enum):
     def __str__(self) -> str:
         return self.name.lower()
 
+    def __hash__(self):
+        return id(self)
+
 
 class SatDataFeatures(Enum):  # TODO or rename SatDataFeaturesName
 

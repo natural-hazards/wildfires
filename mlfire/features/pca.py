@@ -1,14 +1,19 @@
 
-from enum import Enum
+from enum import Enum, auto
 from typing import Union
 
 # utils
-from mlfire.utils.functool import lazy_import
+from mlfire.utils.device import Device
+from mlfire.utils.functool import lazy_import, optional_import
 
 # lazy imports
 _np = lazy_import('numpy')
 _stats = lazy_import('scipy.stats')
 _sklearn_decomposition = lazy_import('sklearn.decomposition')
+
+# optional imports
+_cuml_common = optional_import('cuml.common')
+_rapids_decomposition = optional_import('cuml.decomposition.pca')
 
 
 class FactorOP(Enum):  # TODO rename
@@ -42,80 +47,74 @@ LIST_PCA_FACTOR_OPT = Union[
 ]
 
 
-class TransformPCA(object):  # TODO rename -> ExtractorPCA
+class ExtractorPCA(object):
 
     def __init__(self,
-                 train_ds: _np.ndarray,  # rename init ds
-                 nlatent_factors: int = 2,
-                 factor_ops: LIST_PCA_FACTOR_OPT = (FactorOP.USER_SET,),
+                 ds: _np.ndarray,
+                 opt_factor: LIST_PCA_FACTOR_OPT = (FactorOP.USER_SET,),
+                 nfactors: int = 2,
                  retained_variance: float = 0.95,
-                 verbose: bool = True) -> None:
+                 device: Device = Device.CPU,
+                 verbose: bool = True,
+                 random_state: int = 42) -> None:
 
-        self._pca = None
+        self.__pca = None
 
-        # training data set
-        self._ds = train_ds
-        self.training_dataset = train_ds
+        # initial data set
+        self.__ds = None
+        self.initial_ds = ds
 
-        # latent factor properties
-        self._user_nlatent_factors = nlatent_factors
-        self._nlatent_factors = -1
+        self.__lst_factor_ops = None
+        self.__factor_ops = 0
+        self.opt_factor = opt_factor
 
-        self._lst_factor_ops = None
-        self._factor_ops = 0
-        self.factor_ops = factor_ops
+        # TODO comment
+        self.__user_nfactors = nfactors
+        self.__factors = -1
 
-        # set significance level for Bartlett test
-        self._retained_variance = None
+        # TODO comment
+        self.__retained_variance = None
         self.retained_variance = retained_variance
 
+        # device
+        self.__device = None
+        self.device = device
+
+        # random state
+        self.__random_state = None
+        self.random_state = random_state
+
         # verbose
-        self._verbose = False # change to estimate time
+        self.__verbose = False   # TODO change to estimate time
         self.verbose = verbose
 
-        self._is_trained = False
+        self.__is_trained = False
+
+    def __del__(self):
+        del self.__pca
 
     @property
-    def training_dataset(self) -> _np.ndarray:
+    def initial_ds(self) -> _np.ndarray:
+        return self.__ds
 
-        return self._ds
-
-    @training_dataset.setter
-    def training_dataset(self, ds: _np.ndarray) -> None:
-
-        if self._ds is not None and (self._ds == ds).all():
+    @initial_ds.setter
+    def initial_ds(self, ds: _np.ndarray) -> None:
+        if self.__ds is not None and (self.__ds == ds).all():
             return
 
         self.__reset()
-        self._ds = ds
+        self.__ds = ds
 
     @property
-    def nlatent_factors_user(self) -> int:
+    def opt_factor(self) -> tuple[FactorOP, ...]:
+        return self.__lst_factor_ops
 
-        return self._user_nlatent_factors
-
-    @nlatent_factors_user.setter
-    def nlatent_factors_user(self, n: int) -> None:
-
-        if self._user_nlatent_factors == n:
-            return
-
-        self.__reset()
-
-        self._user_nlatent_factors = n
-        self._is_trained = False
-
-    @property
-    def factor_ops(self) -> list[FactorOP]:
-
-        return self._lst_factor_ops
-
-    @factor_ops.setter
-    def factor_ops(self, ops: list[FactorOP]):
+    @opt_factor.setter
+    def opt_factor(self, ops: LIST_PCA_FACTOR_OPT):
 
         # TODO reimplement
 
-        if self._lst_factor_ops == ops:
+        if self.__lst_factor_ops == ops:
             return
 
         self.__reset()
@@ -123,98 +122,145 @@ class TransformPCA(object):  # TODO rename -> ExtractorPCA
         flg = 0
         for op in ops: flg |= op.value
 
-        self._lst_factor_ops = ops
-        self._factor_ops = flg
+        self.__lst_factor_ops = ops
+        self.__factor_ops = flg
 
-        self._is_trained = False
-
-    @property
-    def explained_variance_ratio(self) -> _np.ndarray:
-
-        if self._pca is None:
-            raise RuntimeError('PCA trasformation is not performed!')
-
-        return self._pca.explained_variance_ratio_
+        self.__is_trained = False
 
     @property
-    def nlatent_factors(self) -> int:
+    def nfactors_user(self) -> int:
 
-        if not self._is_trained:
-            self.fit()
+        return self.__user_nfactors
 
-        return self._nlatent_factors
+    @nfactors_user.setter
+    def nfactors_user(self, n: int) -> None:
 
-    @property
-    def retained_variance(self) -> float:
-
-        return self._retained_variance
-
-    @retained_variance.setter
-    def retained_variance(self, val: float) -> None:
-
-        if self._retained_variance == val:
+        if self.__user_nfactors == n:
             return
 
         self.__reset()
-        self._retained_variance = val
+
+        self.__user_nfactors = n
+        self.__is_trained = False
+
+    @property
+    def nfactors(self) -> int:
+
+        if not self.__is_trained:
+            self.fit()
+
+        return self.__factors
+
+    @property
+    def retained_variance(self) -> float:
+        return self.__retained_variance
+
+    @retained_variance.setter
+    def retained_variance(self, val: float) -> None:
+        if self.__retained_variance == val:
+            return
+
+        self.__reset()
+        self.__retained_variance = val
+
+    @property
+    def explained_variance_ratio(self) -> _np.ndarray:
+        if self.__pca is None:
+            raise RuntimeError('PCA trasformation is not performed!')
+        return self.__pca.explained_variance_ratio_
+
+    @property
+    def device(self) -> Device:
+        return self.__device
+
+    @device.setter
+    def device(self, dev: Device) -> None:
+        if self.__device == dev:
+            return
+
+        self.__reset()
+        self.__device = dev
+
+    @property
+    def random_state(self) -> int:
+        return self.__random_state
+
+    @random_state.setter
+    def random_state(self, state) -> None:
+
+        if self.__random_state == state:
+            return
+
+        self.__reset()
+        self.__random_state = state
 
     @property
     def verbose(self) -> bool:
-
-        return self._verbose
+        return self.__verbose
 
     @verbose.setter
     def verbose(self, flg: bool) -> None:
 
-        self._verbose = flg
+        self.__verbose = flg
 
     def __reset(self):
-
-        del self._pca; self._pca = None
-        self._is_trained = False
+        del self.__pca; self.__pca = None
+        self.__is_trained = False
 
     def __estimateLatentFactors(self) -> None:
 
-        if self._pca is None:
+        if self.__pca is None:
             raise RuntimeError('PCA trasformation is not performed!')
 
-        var_ratio = self._pca.explained_variance_ratio_
+        var_ratio = self.__pca.explained_variance_ratio_
         cumsum_var_ratio = _np.cumsum(var_ratio)
-        self._nlatent_factors = _np.argmax(cumsum_var_ratio >= self.retained_variance)
+        self.__factors = _np.argmax(cumsum_var_ratio >= self.retained_variance)
 
         # if self.verbose:
-        msg = f'PCA, found {self._nlatent_factors} latent factor'
-        if self._nlatent_factors > 1: msg = f'{msg}s'
+        msg = f'PCA, found {self.__factors} latent factor'
+        if self.__factors > 1: msg = f'{msg}s'
         msg = f'{msg} using cumulative explained variance'
       
         print(msg)
 
     def fit(self) -> None:
 
-        if self._is_trained:
+        if self.__is_trained:
             return
 
-        if self.training_dataset is None:
+        if self.initial_ds is None:
             raise RuntimeError('Training data set is not specified!')
 
-        # fit data transformation
-        n_components = self.nlatent_factors_user if self._factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value else None
+        # TODO comment
+        nfactors = self.nfactors_user if self.__factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value else None
 
-        self._pca = _sklearn_decomposition.PCA(n_components=n_components, svd_solver='auto', random_state=42)
-        self._pca.fit(self.training_dataset)
+        if self.device == Device.GPU:
+            _cuml_common.logger.set_level(0)
+            self.__pca = _rapids_decomposition.PCA(
+                n_components=nfactors,
+                svd_solver='auto',
+                random_state=self.random_state
+            )
+        else:
+            self.__pca = _sklearn_decomposition.PCA(
+                n_components=nfactors,
+                svd_solver='auto',
+                random_state=self.random_state
+            )
 
-        if self._factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value:
-            self._nlatent_factors = self.nlatent_factors_user
+        # TODO comment
+        self.__pca.fit(self.initial_ds)
+
+        if self.__factor_ops & FactorOP.USER_SET.value == FactorOP.USER_SET.value:
+            self.__factors = self.nfactors_user
         else:
             self.__estimateLatentFactors()
 
-        self._is_trained = True
+        self.__is_trained = True
 
-    def fit_transform(self, ds):
-
+    def fit_transform(self, ds: _np.ndarray):
         self.fit()
         return self.transform(ds)
 
-    def transform(self, ds):
-
-        return self._pca.transform(ds)[:, :self._nlatent_factors]
+    def transform(self, ds: _np.ndarray):
+        return self.__pca.transform(ds)[:, :self.__factors]

@@ -1,36 +1,32 @@
 from mlfire.utils.functool import lazy_import
 
+# lazy imports
+_colors = lazy_import('mlfire.utils.colors')
+_cmap = lazy_import('mlfire.utils.cmap')
 _np = lazy_import('numpy')
-
+_plt = lazy_import('matplotlib.pyplot')
 
 def imshow(src: _np.ndarray,
            ax=None,
            title: str = None,
            figsize: tuple = None,
            tight_layout: bool = True,
-           show: bool = False) -> None:
-
-    plt = lazy_import('matplotlib.pyplot')
+           show: bool = False,
+           interpolation: str = 'antialiased') -> None:
 
     if ax is not None:
-
-        ax.imshow(src)
+        ax.imshow(src, interpolation=interpolation)
         ax.axis('off')
         if title is not None: ax.set_title(title)
-
     else:
+        if figsize is not None: _plt.rcParams['figure.figsize'] = figsize
 
-        if figsize is not None: plt.rcParams['figure.figsize'] = figsize
+        _plt.imshow(src, interpolation=interpolation)
+        _plt.axis('off')
+        if title is not None: _plt.title(title)
 
-        plt.imshow(src)
-        plt.axis('off')
-        if title is not None: plt.title(title)
-
-    if tight_layout:
-        plt.tight_layout()
-
-    if show:
-        plt.show()
+    if tight_layout: _plt.tight_layout()
+    if show: _plt.show()
 
 
 def labelshow(labels: _np.ndarray,
@@ -41,18 +37,30 @@ def labelshow(labels: _np.ndarray,
               tight_layout: bool = True,
               show: bool = False) -> None:
 
-    # lazy imports
-    colors = lazy_import('mlfire.utils.colors')
-
     label_rendered = _np.empty(shape=labels.shape + (3,), dtype=_np.uint8)
 
-    label_rendered[:] = colors.Colors.GRAY_COLOR.value
-    label_rendered[labels == 1, :] = colors.Colors.RED_COLOR.value
+    label_rendered[:] = _colors.Colors.GRAY_COLOR.value
+    label_rendered[labels == 1, :] = _colors.Colors.RED_COLOR.value
 
     # show uncharted pixels
     if with_uncharted_areas: label_rendered[_np.isnan(labels), :] = 0
 
     imshow(label_rendered, ax=ax, title=title, figsize=figsize, tight_layout=tight_layout, show=show)
+
+
+def labelsave(labels: _np.ndarray,
+              with_uncharted_areas: bool = False,
+              fn: str = 'image.png') -> None:
+
+    label_rendered = _np.empty(shape=labels.shape + (3,), dtype=_np.uint8)
+
+    label_rendered[:] = _colors.Colors.GRAY_COLOR.value
+    label_rendered[labels == 1, :] = _colors.Colors.RED_COLOR.value
+
+    # show uncharted pixels
+    if with_uncharted_areas: label_rendered[_np.isnan(labels), :] = 0
+
+    _plt.imsave(fn, label_rendered)
 
 
 def labelshow_prob(labels: _np.ndarray,
